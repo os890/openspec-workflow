@@ -1,0 +1,87 @@
+%%{init: {"theme": "default", "flowchart": {"subGraphTitleMargin": {"top": 4, "bottom": 10}}}}%%
+flowchart LR
+    %% Spec-driven ticket workflow with OpenSpec and AI agents (setup-independent, horizontal)
+
+    subgraph PLAN["Plan"]
+        direction TB
+        RM[("Roadmap<br/>order and dependencies")]
+        BL[("Backlog<br/>draft proposals")]
+        RM --- BL
+    end
+
+    subgraph SPECIFY["Specify"]
+        direction TB
+        SP["Draft → change, just in time<br/>design · spec deltas<br/>tasks with acceptance criteria"]
+    end
+
+    subgraph BUILD["Build"]
+        direction TB
+        IM["Implement with tests<br/>tick tasks once verified"]
+        QG1{"Quality gate"}
+        IM --> QG1
+        QG1 -- red --> IM
+    end
+
+    subgraph ACCEPT["Accept"]
+        direction TB
+        AC{{"Acceptance check<br/>fresh agent, read-only"}}
+        UP["Update spec + design<br/>to accepted behaviour"]
+        AC -- "deviation" --> UP --> AC
+    end
+
+    subgraph REVIEW["Review"]
+        direction TB
+        RV{{"Review the diff<br/>fresh agent"}}
+        VA{{"Validate findings<br/>another fresh agent"}}
+        FX["Fix high-value,<br/>low-effort findings"]
+        RV --> VA --> FX
+    end
+
+    subgraph DOCUMENT["Document"]
+        direction TB
+        DO{{"Docs + diagrams<br/>fresh agents, if affected"}}
+        QG2{"Quality gate"}
+        DO --> QG2
+    end
+
+    subgraph CLOSE["Close"]
+        direction TB
+        AR["Archive the change<br/>one ticket = one commit"]
+        SPECS[("Living specs")]
+        AR ==> SPECS
+    end
+
+    PL[("Parking lot<br/>deferred minors, known issues")]
+
+    BL ==>|"next ticket"| SP
+    SP --> IM
+    QG1 -- green --> AC
+    AC -- "gap: fix now" --> IM
+    AC -- done --> RV
+    FX --> DO
+    QG2 -- red --> FX
+    QG2 -- green --> AR
+    AR ==>|"next ticket"| BL
+
+    FX -. "behaviour change → follow-up" .-> RM
+    FX -. minor .-> PL
+    AC -. "rest, by Pareto" .-> PL
+    PL -. "triage every milestone" .-> BL
+
+    classDef store fill:#eef0f7,stroke:#8d91aa,color:#23253f
+    classDef step fill:#ffffff,stroke:#4f57d6,color:#23253f
+    classDef gate fill:#fdf1e1,stroke:#e0861a,color:#23253f
+    classDef agent fill:#ebecfc,stroke:#4f57d6,color:#23253f,stroke-dasharray:4 3
+    classDef done fill:#e3f5ec,stroke:#1f9d68,color:#23253f
+    class RM,BL,SPECS,PL store
+    class SP,IM,UP,FX step
+    class QG1,QG2 gate
+    class AC,RV,VA,DO agent
+    class AR done
+    style PLAN fill:#f7f8fc,stroke:#c9cce0,color:#23253f
+    style SPECIFY fill:#fbfbfe,stroke:#c9cce0,color:#23253f
+    style BUILD fill:#fbfbfe,stroke:#c9cce0,color:#23253f
+    style ACCEPT fill:#fbfbfe,stroke:#c9cce0,color:#23253f
+    style REVIEW fill:#fbfbfe,stroke:#c9cce0,color:#23253f
+    style DOCUMENT fill:#fbfbfe,stroke:#c9cce0,color:#23253f
+    style CLOSE fill:#fbfbfe,stroke:#c9cce0,color:#23253f

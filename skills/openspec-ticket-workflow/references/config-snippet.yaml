@@ -1,0 +1,19 @@
+# Merge into openspec/config.yaml. Replace <quality gate> with the project's single full build command,
+# e.g. "./mvnw verify", "pnpm verify", "make check".
+
+rules:
+  tasks:
+    - Every task states its acceptance criterion as "verify: ..." (a test, command or observable behaviour); spec scenarios are the ticket's acceptance criteria.
+    - Every task group ends with the tests that prove it.
+    - The final task is always "<quality gate> is green".
+
+operations:
+  apply:
+    guidance:
+      - "Ticket workflow, in this order: (1) elaborate the change just in time (continue/ff) if it is still a draft; (2) implement with tests, ticking each task in tasks.md as soon as it is verified; (3) <quality gate> green; (4) acceptance check: a fresh agent runs /openspec-verify-change read-only and reports, per spec scenario, satisfied or not with test evidence and, per task, whether its verify criterion is met; the ticket is not done until every scenario is satisfied with evidence or the deviation is recorded in spec/design via /openspec-update-change; close gaps by Pareto (rest to the parking lot or roadmap candidates); (5) stage the ticket and have a fresh review agent review ONLY the staged diff; (6) have another fresh agent confirm or reject every finding and classify confirmed ones as pareto (high value, low effort: fix now) or minor; (7) fix pareto findings; a finding that changes externally visible behaviour goes through the spec (/openspec-update-change describes the actual behaviour; the improvement becomes a roadmap candidate), items owned by a planned change go to that change's backlog draft, only pure code-quality minors go to the parking lot; (8) if docs are affected, a fresh docs agent updates them and a separate fresh diagram agent updates the diagrams, rendered for validation; (9) <quality gate> green; (10) archive the change and commit the ticket (one commit)."
+      - "Never lower a quality-gate threshold to make a ticket pass."
+      - "Changes are created just in time: future work lives as drafts in openspec/backlog/ and roadmap.md; a change is created (openspec new change + draft as proposal) only when its work starts."
+  archive:
+    guidance:
+      - "Archive a ticket's change in the same commit that completes it, so a later change that modifies the same capability always builds on archived specs."
+      - "The parking-lot change is never archived; triage it at every milestone and promote items to real changes early."

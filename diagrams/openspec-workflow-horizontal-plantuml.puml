@@ -1,0 +1,98 @@
+@startuml openspec-workflow-horizontal-plantuml
+' Spec-driven ticket workflow with OpenSpec and AI agents (setup-independent, horizontal).
+' Same content as openspec-workflow-horizontal.mmd.
+left to right direction
+hide stereotype
+skinparam shadowing false
+skinparam roundCorner 14
+skinparam defaultFontName "Helvetica"
+skinparam defaultFontColor #23253f
+skinparam ArrowColor #555a75
+skinparam ArrowFontColor #61657f
+skinparam ArrowFontSize 11
+skinparam packageStyle rectangle
+skinparam package {
+  BackgroundColor #fbfbfe
+  BorderColor #c9cce0
+  FontStyle bold
+}
+skinparam rectangle {
+  BackgroundColor #ffffff
+  BorderColor #4f57d6
+}
+skinparam rectangle<<gate>> {
+  BackgroundColor #fdf1e1
+  BorderColor #e0861a
+}
+skinparam rectangle<<done>> {
+  BackgroundColor #e3f5ec
+  BorderColor #1f9d68
+}
+skinparam hexagon {
+  BackgroundColor #ebecfc
+  BorderColor #4f57d6
+}
+skinparam database {
+  BackgroundColor #eef0f7
+  BorderColor #8d91aa
+}
+
+package "Plan" {
+  database "Roadmap\norder and dependencies" as RM
+  database "Backlog\ndraft proposals" as BL
+}
+package "Specify" {
+  rectangle "Draft → change, just in time\ndesign · spec deltas\ntasks with acceptance criteria" as SP
+}
+package "Build" {
+  rectangle "Implement with tests\ntick tasks once verified" as IM
+  rectangle "Quality gate" as QG1 <<gate>>
+}
+package "Accept" {
+  hexagon "Acceptance check\nfresh agent, read-only" as AC
+  rectangle "Update spec + design\nto accepted behaviour" as UP
+}
+package "Review" {
+  hexagon "Review the diff\nfresh agent" as RV
+  hexagon "Validate findings\nanother fresh agent" as VA
+  rectangle "Fix high-value,\nlow-effort findings" as FX
+}
+package "Document" {
+  hexagon "Docs + diagrams\nfresh agents, if affected" as DO
+  rectangle "Quality gate" as QG2 <<gate>>
+}
+package "Close" {
+  rectangle "Archive the change\none ticket = one commit" as AR <<done>>
+  database "Living specs" as SPECS
+}
+database "Parking lot\ndeferred minors, known issues" as PL
+
+RM -- BL
+BL -[thickness=2]-> SP : next ticket
+SP --> IM
+IM --> QG1
+QG1 -[norank]-> IM : red
+QG1 --> AC : green
+AC -[norank]-> IM : gap: fix now
+AC --> UP : deviation
+UP -[norank]-> AC
+AC --> RV : done
+RV --> VA
+VA --> FX
+FX --> DO
+DO --> QG2
+QG2 -[norank]-> FX : red
+QG2 --> AR : green
+AR -[thickness=2]-> SPECS
+AR -[thickness=2,norank]-> BL : next ticket
+
+FX .[norank].> RM : behaviour change\n→ follow-up
+FX ..> PL : minor
+AC ..> PL : rest, by Pareto
+PL .[norank].> BL : triage every\nmilestone
+
+legend right
+  rectangle = step · orange = quality gate · hexagon = fresh agent
+  cylinder = carries work between tickets · dotted = deferred findings
+endlegend
+@enduml

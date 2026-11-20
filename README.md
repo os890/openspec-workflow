@@ -1,0 +1,173 @@
+# OpenSpec ticket workflow
+
+A reusable way to build software ticket by ticket with [OpenSpec](https://github.com/Fission-AI/OpenSpec) and
+AI coding agents, from a draft in the backlog to an archived change and one commit. It does not depend on a
+language, build tool or agent product: the **quality gate** is your project's full build, and a **fresh agent**
+is any new session or sub-agent that has not seen the implementation.
+
+The repository contains:
+
+- the workflow as diagrams ([Mermaid](diagrams/openspec-workflow.mmd), horizontal in
+  [Mermaid](diagrams/openspec-workflow-horizontal.mmd) and [PlantUML](diagrams/openspec-workflow-horizontal-plantuml.puml),
+  each rendered to SVG and PNG),
+- an agent skill, [`openspec-ticket-workflow`](skills/openspec-ticket-workflow/SKILL.md), that runs a ticket
+  through the workflow and sets it up in a new project.
+
+## The workflow
+
+```mermaid
+%%{init: {"flowchart": {"subGraphTitleMargin": {"top": 4, "bottom": 10}}}}%%
+flowchart TD
+    %% Spec-driven ticket workflow with OpenSpec and AI agents (setup-independent)
+
+    subgraph PLAN["Plan"]
+        RM[("Roadmap<br/>order and dependencies")]
+        BL[("Backlog<br/>draft proposals")]
+        RM --- BL
+    end
+
+    BL ==>|"next ticket,<br/>prerequisites done"| SP
+
+    subgraph SPECIFY["Specify"]
+        SP["Turn the draft into a change, just in time<br/>design · spec deltas with scenarios<br/>tasks with acceptance criteria"]
+    end
+
+    subgraph BUILD["Build"]
+        IM["Implement with tests<br/>tick each task once verified"]
+        QG1{"Quality gate<br/>full build"}
+    end
+
+    subgraph ACCEPT["Accept"]
+        AC{{"Acceptance check<br/>fresh agent, read-only<br/>every scenario and criterion has evidence"}}
+        UP["Update spec and design<br/>to the accepted behaviour"]
+    end
+
+    subgraph REVIEW["Review"]
+        RV{{"Review the diff<br/>fresh agent"}}
+        VA{{"Validate the findings<br/>another fresh agent"}}
+        FX["Fix high-value, low-effort findings"]
+    end
+
+    subgraph DOCUMENT["Document"]
+        DO{{"Docs and diagrams<br/>fresh agents, only if affected"}}
+        QG2{"Quality gate<br/>full build"}
+    end
+
+    subgraph CLOSE["Close"]
+        AR["Archive the change<br/>one ticket = one commit"]
+    end
+
+    SPECS[("Living specs<br/>source of truth for the next change")]
+    PL[("Parking lot<br/>deferred minors, known issues")]
+
+    SP --> IM --> QG1
+    QG1 -- red --> IM
+    QG1 -- green --> AC
+    AC -- "gap: fix now" --> IM
+    AC -- "deviation: accept" --> UP --> AC
+    AC -- done --> RV --> VA --> FX --> DO --> QG2
+    QG2 -- red --> FX
+    QG2 -- green --> AR
+    AR ==> SPECS
+    AR ==>|"next ticket"| BL
+
+    FX -. "behaviour change:<br/>follow-up on the roadmap" .-> RM
+    FX -. "minor" .-> PL
+    AC -. "rest, by Pareto" .-> PL
+    PL -. "triage every milestone" .-> BL
+
+    classDef store fill:#eef0f7,stroke:#8d91aa,color:#23253f
+    classDef step fill:#ffffff,stroke:#4f57d6,color:#23253f
+    classDef gate fill:#fdf1e1,stroke:#e0861a,color:#23253f
+    classDef agent fill:#ebecfc,stroke:#4f57d6,color:#23253f,stroke-dasharray:4 3
+    classDef done fill:#e3f5ec,stroke:#1f9d68,color:#23253f
+    class RM,BL,SPECS,PL store
+    class SP,IM,UP,FX step
+    class QG1,QG2 gate
+    class AC,RV,VA,DO agent
+    class AR done
+    style PLAN fill:#f7f8fc,stroke:#c9cce0,color:#23253f
+    style SPECIFY fill:#fbfbfe,stroke:#c9cce0,color:#23253f
+    style BUILD fill:#fbfbfe,stroke:#c9cce0,color:#23253f
+    style ACCEPT fill:#fbfbfe,stroke:#c9cce0,color:#23253f
+    style REVIEW fill:#fbfbfe,stroke:#c9cce0,color:#23253f
+    style DOCUMENT fill:#fbfbfe,stroke:#c9cce0,color:#23253f
+    style CLOSE fill:#fbfbfe,stroke:#c9cce0,color:#23253f
+```
+
+Legend: rectangles are steps, diamonds are gates, dashed hexagons are fresh agents, cylinders carry work from one
+ticket to the next. Dotted arrows show where deferred findings go.
+
+Horizontal versions for slides and wide pages:
+[Mermaid SVG](diagrams/openspec-workflow-horizontal.svg) ·
+[Mermaid PNG](diagrams/openspec-workflow-horizontal.png) ·
+[PlantUML SVG](diagrams/openspec-workflow-horizontal-plantuml.svg) ·
+[PlantUML PNG](diagrams/openspec-workflow-horizontal-plantuml.png)
+
+## Principles
+
+- **One ticket = one OpenSpec change = one commit.** The change is archived in the commit that completes it, so
+  the next change always builds on up-to-date specs.
+- **Just in time.** Future work waits as short draft proposals in a backlog, ordered by a roadmap. Design, spec
+  deltas and tasks are written when a ticket starts, with what earlier tickets taught you.
+- **Every task says how it is verified.** Spec scenarios are the acceptance criteria; each task names its test,
+  command or observable behaviour (`verify: …`).
+- **Checks are done by fresh agents.** The agent that wrote the code does not accept, review or validate it.
+  Review findings are confirmed by another agent before anyone acts on them.
+- **Pareto.** Fix what is high value and low effort now. A behaviour change becomes a spec update plus a
+  follow-up on the roadmap; minors go to a parking lot that is triaged at every milestone.
+- **The gate never gets weaker.** No threshold is lowered to make a ticket pass.
+
+## Steps and their OpenSpec support
+
+| # | Phase | Step | OpenSpec |
+|---|---|---|---|
+| 1 | Specify | Create the change from its backlog draft; write design, spec deltas, tasks with `verify:` | `openspec new change`, `/openspec-continue-change`, `/openspec-ff-change`, `openspec validate` |
+| 2 | Build | Implement with tests, tick each task once verified | `/openspec-apply-change` |
+| 3 | Build | Quality gate | your build |
+| 4 | Accept | Fresh agent checks every scenario and task criterion against evidence; deviations are recorded | `/openspec-verify-change`, `/openspec-update-change` |
+| 5 | Review | Fresh agent reviews the staged diff only | any agent |
+| 6 | Review | Another fresh agent confirms or rejects each finding, classifies pareto / minor | any agent |
+| 7 | Review | Fix pareto findings; route the rest to spec + roadmap, backlog draft or parking lot | `/openspec-update-change` |
+| 8 | Document | Fresh docs agent and diagram agent, only if docs are affected | any agent |
+| 9 | Document | Quality gate | your build |
+| 10 | Close | Archive the change and commit the ticket | `openspec archive`, `/openspec-archive-change` |
+
+The slash commands are the agent skills that `openspec init` installs; names can differ between OpenSpec versions
+and tools.
+
+## Using the skill
+
+Copy the skill into a project (or into your user-level skills directory):
+
+```sh
+cp -r skills/openspec-ticket-workflow <project>/.claude/skills/      # Claude Code, per project
+cp -r skills/openspec-ticket-workflow ~/.claude/skills/              # Claude Code, all projects
+```
+
+Other agents that read [Agent Skills](https://agentskills.io) (`SKILL.md` with YAML front matter) can use the same
+folder, e.g. under `.agents/skills/`.
+
+Then ask the agent to set the workflow up ("set up the OpenSpec ticket workflow") or to run the next ticket. The
+skill's references hold the pieces it uses:
+
+- [config-snippet.yaml](skills/openspec-ticket-workflow/references/config-snippet.yaml): rules and guidance for
+  `openspec/config.yaml`,
+- [agent-prompts.md](skills/openspec-ticket-workflow/references/agent-prompts.md): prompts for the fresh agents
+  (acceptance check, diff review, findings validation, docs, diagrams),
+- [templates.md](skills/openspec-ticket-workflow/references/templates.md): roadmap, backlog draft and parking lot.
+
+## Rendering the diagrams
+
+The diagrams render in containers, so neither Node nor Java is needed:
+
+```sh
+./render-diagrams.sh
+```
+
+It uses `ghcr.io/mermaid-js/mermaid-cli/mermaid-cli` and `docker.io/plantuml/plantuml` with podman
+(override with `MERMAID_IMAGE` / `PLANTUML_IMAGE`).
+
+## License
+
+[Apache License 2.0](LICENSE)
