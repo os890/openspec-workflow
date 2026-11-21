@@ -273,7 +273,7 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
   - **Session · <ticket>**: every session started from the dashboard is a conversation with its steps and replies.
     Your messages go straight to it; you can end it after the current turn or stop it, and a message to an ended
     session continues it. `claude --resume <session-id>` takes it over in a terminal.
-  - **⌨ Terminal sessions** (its own button in the header, with the number of running sessions; not a chat tab; on
+  - **Terminal sessions** (its own button in the header, a terminal window with a prompt `>_`, with the number of running sessions; not a chat tab; on
     the overview it lists every running session, and one of a followed project opens that project): join a session
     running elsewhere (a terminal, an IDE). On macOS, a session running in Terminal is written to by typing: the server finds
     its tty (`ps`), checks that Claude Code is the foreground process there and that it is not asking something (a

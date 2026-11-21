@@ -1499,7 +1499,8 @@ body.board-max { overflow: hidden; }
 .term-only { margin: 6px 0 2px; font-size: 13px; line-height: 1.5; }
 .term-only .link { margin-left: 4px; }
 .term-setup p { margin: 6px 0 8px; color: var(--muted); line-height: 1.45; }
-#term-btn { position: relative; }
+#term-btn { position: relative; display: inline-flex; align-items: center; }
+.ag-head h2 .ic-term { vertical-align: -2px; margin-right: 4px; }
 #term-btn .tb-n { position: absolute; top: -5px; right: -5px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: var(--st-complete, #2e9d5b); color: #fff; font-size: 10px; line-height: 15px; font-weight: 600; }
 .term-pick { font: inherit; font-size: 13px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
 .msg.me.term-user { opacity: .92; }
@@ -1766,7 +1767,7 @@ body.ag-max { overflow: hidden; }
       <span id="cli"></span>
       <button class="btn" id="agent-btn" type="button" data-chat-btn aria-controls="agent" hidden>Chat</button>
       <button class="btn" id="bg-btn" type="button" aria-label="Sessions in the background" aria-haspopup="true" aria-expanded="false" hidden></button>
-      <button class="btn" id="term-btn" type="button" aria-label="Terminal sessions" aria-controls="agent" title="Sessions running in a terminal or an IDE: join one, follow it live, write to it" hidden>⌨</button>
+      <button class="btn" id="term-btn" type="button" aria-label="Terminal sessions" aria-controls="agent" title="Sessions running in a terminal or an IDE: join one, follow it live, write to it" hidden><svg class="ic-term" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="3"/><path d="M7 9.5l3 2.5-3 2.5M12.5 15h4.5"/></svg></button>
       <button class="btn" id="folder-btn" type="button" aria-label="Open the project folder" title="Open the project folder in the file manager (which one: ⚙ Settings › General)" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg></button>
       <button class="btn" id="git-btn" type="button" aria-label="Git history" aria-controls="githist" title="Git history: the commits, branches and tags, and what each commit changed" hidden>⎇</button>
       <button class="btn" id="menu-btn" type="button" aria-label="Look and settings" aria-haspopup="true" aria-expanded="false" aria-controls="hdr-menu" title="Style, light or dark, settings">☰</button>
@@ -3366,6 +3367,8 @@ document.addEventListener('click', (e) => {
   termViewSave(); renderAgentLive();
 }, true);
 const typedHere = new Set(); // messages typed into a session's terminal from this page (marked in its transcript)
+// the icon of the terminal sessions (header button, panel title): a terminal window with a prompt
+const TERM_SVG = '<svg class="ic-term" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="3"/><path d="M7 9.5l3 2.5-3 2.5M12.5 15h4.5"/></svg>';
 const termLog = new Map(); // session id -> { entries, next (byte offset), cut, err }
 const termSessions = () => (ag.view?.sessions ?? []).filter((x) => !x.dashboardJob && (x.transcript || !x.ended)) // a new session has no transcript until its first prompt.sort((a, b) => b.t - a.t); // the latest on top (ended ones stay readable)
 const termLabel = (x) => `${x.hookless && !x.ended && !x.typeable ? '◌ ' : x.ended ? '' : x.listening || x.listen ? '👂 ' : x.waiting ? '' : '● '}${x.prompt ? `“${x.prompt.replace(/\s+/g, ' ').slice(0, 48)}${x.prompt.length > 48 ? '…' : ''}”` : 'session'} · ${x.ended ? 'ended' : x.waiting ? 'waiting' : 'working'} · ${ago(x.t)} · ${x.sessionId.slice(0, 8)}${x.hookless && !x.ended && !x.typeable ? ' · read-only' : ''}`;
@@ -3613,7 +3616,7 @@ function buildChatHtml(s, c, ph) {
   const term = c?.terminal || ag.convo === 'terminal'; // also before the session list has arrived
   const chips = term ? '' : '<div class="ag-chips" id="ag-chips" role="tablist"></div>'; // ⌨ Terminal sessions is a panel of its own
   return `
-    <div class="ag-head"><h2>${term ? '⌨ Terminal sessions' : 'Chat'}</h2><span class="muted" style="font-size:12.5px">${esc(s.project)}</span>${ag.max ? chips : ''}<button class="link ag-maxbtn" type="button" data-ag-max aria-pressed="${ag.max}" title="${ag.max ? 'Back to the side panel' : 'Use the whole window'}">${ag.max ? '⤡ Restore' : '⤢ Maximize'}</button><button class="link" type="button" data-ag-close>Close ✕</button></div>
+    <div class="ag-head"><h2>${term ? `${TERM_SVG} Terminal sessions` : 'Chat'}</h2><span class="muted" style="font-size:12.5px">${esc(s.project)}</span>${ag.max ? chips : ''}<button class="link ag-maxbtn" type="button" data-ag-max aria-pressed="${ag.max}" title="${ag.max ? 'Back to the side panel' : 'Use the whole window'}">${ag.max ? '⤡ Restore' : '⤢ Maximize'}</button><button class="link" type="button" data-ag-close>Close ✕</button></div>
     ${ag.max ? '' : chips}
     <div class="ag-bar" id="ag-bar"></div>
     <div class="ag-thread" id="ag-thread" aria-live="polite"></div>
@@ -4053,7 +4056,7 @@ function updateAgentBtn() {
   const queued = ag.view?.messages.filter((m) => m.state === 'queued').length ?? 0;
   const html = `${live ? '<span class="dot on"></span>' : ''}Chat${queued ? ` · ${queued} queued` : ''}`;
   const tb = $('term-btn'), running = (ag.view?.sessions ?? []).filter((x) => !x.ended && !x.dashboardJob).length + (PROJECT ? 0 : (ag.view?.elsewhere ?? []).length);
-  if (ag.view) { tb.hidden = false; const th = running ? `⌨<span class="tb-n">${running}</span>` : '⌨'; if (tb.innerHTML !== th) tb.innerHTML = th; tb.setAttribute('aria-expanded', String(ag.open && ag.panel === 'chat' && ag.convo === 'terminal')); tb.title = PROJECT ? 'Sessions running in a terminal or an IDE: join one, follow it live, write to it' : 'All running Claude Code sessions: join one (a session of a project opens that project)'; }
+  if (ag.view) { tb.hidden = false; const th = running ? `${TERM_SVG}<span class="tb-n">${running}</span>` : TERM_SVG; if (tb.innerHTML !== th) tb.innerHTML = th; tb.setAttribute('aria-expanded', String(ag.open && ag.panel === 'chat' && ag.convo === 'terminal')); tb.title = PROJECT ? 'Sessions running in a terminal or an IDE: join one, follow it live, write to it' : 'All running Claude Code sessions: join one (a session of a project opens that project)'; }
   for (const b of document.querySelectorAll('[data-chat-btn]')) { b.hidden = false; if (b.innerHTML !== html) b.innerHTML = html; b.setAttribute('aria-expanded', String(ag.open && ag.panel === 'chat')); }
 }
 
@@ -4407,7 +4410,7 @@ async function renderGeneralSettings() {
 function renderWriteSettings() {
   const on = termView.matrix !== false, me = termView.me ?? 'highlight';
   $('settings').innerHTML = `<div class="set-head"><h2 id="set-title">Settings</h2><button class="link" type="button" data-set-close>Close ✕</button></div>${setTabs()}
-    <p class="ag-note">For writing to a session that runs in a terminal (⌨ Terminal sessions › ✎ Write to it). Kept in this browser.</p>
+    <p class="ag-note">For writing to a session that runs in a terminal (the terminal button › ✎ Write to it). Kept in this browser.</p>
     <label class="set-opt ${on ? 'sel' : ''}"><input type="checkbox" data-wm="matrix" ${on ? 'checked' : ''}><span><b>Falling code while you wait</b><span class="muted"> · green code runs behind the conversation while an answer takes long, and stops when the session is done</span></span></label>
     <label class="set-opt ${on ? '' : 'off'}"><span><b>Start it after</b> <input type="number" min="5" max="600" step="5" data-wm="after" value="${termView.rainAfter ?? 30}" ${on ? '' : 'disabled'} style="width:5em"> seconds</span></label>
     <div class="wm-head"><b>Your messages</b> <span class="muted">· their background in the conversation</span></div>

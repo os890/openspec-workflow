@@ -224,7 +224,7 @@ node tools/openspec-dashboard/server.mjs --agent examples/todo-app
 **Chat** (in the header and on the full-screen board) is a messenger, independent of any ticket. The
 **Assistant** reads the project but never changes it, knows its status and remembers the conversation; **New chat**
 starts over. Every session started from the dashboard becomes a conversation of its own. Sessions running in a
-terminal have a panel of their own, **⌨** (see below). Enter sends, Shift+Enter starts a new line.
+terminal have a panel of their own, behind the terminal button (see below). Enter sends, Shift+Enter starts a new line.
 
 ![Chat next to the full-screen board](images/dashboard-chat.png)
 
@@ -280,7 +280,8 @@ Before the first session:
 
 ### Join a session running in a terminal
 
-**⌨** in the header (next to ⎇) opens **⌨ Terminal sessions**; its badge counts the running sessions. The drop-down
+The terminal button in the header (a terminal window with a prompt, `>_`) opens **Terminal sessions**; its badge
+counts the running sessions. The drop-down
 lists the Claude Code sessions of the project (in a terminal or an IDE), the latest on top, with the last prompt you typed there,
 whether it is working or waiting for input, and when it last did something; ended ones stay in the list for 12
 hours. Pick one to join it: you see what it does, live (your prompts, Claude's replies and its steps). The end of
@@ -293,7 +294,7 @@ The drop-down also lists sessions running in other folders. One in another proje
 **Other projects**: picking it switches to that project and joins the session there. One in a folder the dashboard
 does not follow is under **Session only**: you follow it without a board, roadmap or specs around it, and
 **Onboard it as a project…** opens the onboarding chat for its folder in the overview (or **Follow it as a
-project** when the folder has an `openspec/` already). On the overview, **⌨** lists every running session the same
+project** when the folder has an `openspec/` already). On the overview, the terminal button lists every running session the same
 way.
 
 ![A session in a folder the dashboard does not follow, with the offer to onboard it](images/dashboard-terminal-session-only.png)

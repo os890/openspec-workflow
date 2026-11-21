@@ -222,7 +222,7 @@ What makes it more than a status page:
   and lets Claude check your local containers for a service to reuse (e.g. a running Postgres) before anything is
   installed on the host. Projects you are done with can be **archived** or **unfollowed**, so they cost nothing
   while they rest.
-- **Join a session running in a terminal** (⌨ in the header, also on the overview): pick it from a list of all
+- **Join a session running in a terminal** (the `>_` button in the header, also on the overview): pick it from a list of all
   running Claude Code sessions, follow what it does live (no setup needed), and write to it: in macOS Terminal the
   message is typed right into the session, also while it waits; elsewhere through a hook (one click). While you
   write, it can look like the CLI (terminal colors, steps as `⏺ Bash(…)` / `⎿ output`), offers the chat's quick
