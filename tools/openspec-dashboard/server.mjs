@@ -423,11 +423,13 @@ function mergeTimeline(g, events, changes) {
 
 // ---------------------------------------------------------------- OpenSpec CLI (one call at a time, all projects)
 let cliQueue = Promise.resolve();
-function runCli(cwd, cliArgs, timeout = 60000) {
+function runCli(cwd, cliArgs, { timeout = 120000, onStart } = {}) {
   const job = () => new Promise((resolve, reject) => {
+    onStart?.();
     execFile(CLI, cliArgs, { cwd, timeout, maxBuffer: 16 * 1024 * 1024, env: { ...process.env, NO_COLOR: '1' } },
       (err, stdout, stderr) => {
         if (err?.code === 'ENOENT') return reject(Object.assign(new Error(`${CLI} not found; install OpenSpec or pass --cli=<command>`), { missing: true }));
+        if (err?.killed) return reject(Object.assign(new Error(`\`openspec ${cliArgs[0]}\` took longer than ${timeout / 1000} s and was stopped; if it runs in a container, the container engine may be busy.`), { timedOut: true }));
         if (err && !stdout) return reject(new Error((stderr || err.message).trim().split('\n').slice(-3).join(' ')));
         resolve(stdout);
       });
@@ -465,10 +467,14 @@ function createProject(root, id, historyFile, onChange) {
     if (cliRunning) { cliPending = true; return false; }
     cliRunning = true;
     const t0 = Date.now();
+    Object.assign(cli, { state: 'queued', since: t0 });
+    publish();
+    const onStart = () => { if (cli.state !== 'running') { Object.assign(cli, { state: 'running', since: Date.now() }); publish(); } };
     try {
-      // One retry: when the CLI runs in a container (e.g. a podman wrapper), a start can clash with another session.
-      const run = (a) => runCli(root, a).catch((e) => e.missing ? Promise.reject(e)
-        : new Promise((r) => setTimeout(r, 1500)).then(() => runCli(root, a)));
+      // One retry for a quick failure: when the CLI runs in a container (e.g. a podman wrapper), a start can clash
+      // with another session. A call that timed out is not repeated: it would only add load to a busy engine.
+      const run = (a) => runCli(root, a, { onStart }).catch((e) => e.missing || e.timedOut ? Promise.reject(e)
+        : new Promise((r) => setTimeout(r, 1500)).then(() => runCli(root, a, { onStart })));
       if (!cli.version) cli.version = (await run(['--version'])).trim();
       const v = parseJsonOutput(await run(['validate', '--all', '--json', '--no-interactive']));
       const l = parseJsonOutput(await run(['list', '--json']));
@@ -484,6 +490,7 @@ function createProject(root, id, historyFile, onChange) {
     } finally {
       cli.lastRun = Date.now();
       cli.durationMs = Date.now() - t0;
+      cli.state = 'idle';
       cliRunning = false;
     }
     if (cliPending) { cliPending = false; setTimeout(() => refreshCli().then((ch) => ch && publish()), 500); }
@@ -628,7 +635,7 @@ function createProject(root, id, historyFile, onChange) {
       nextUp: nextUp?.name ?? null,
       totals,
       specs: { validation: specValidation },
-      cli: { available: cli.available, version: cli.version, lastRun: cli.lastRun, durationMs: cli.durationMs, error: cli.error, command: CLI },
+      cli: { available: cli.available, version: cli.version, lastRun: cli.lastRun, durationMs: cli.durationMs, error: cli.error, command: CLI, state: cli.state ?? 'idle', since: cli.since ?? null, nextTry: cli.nextTry ?? null },
       workspace,
       events: history.events.slice(-200).reverse(),
       series: history.series,
@@ -656,10 +663,26 @@ function createProject(root, id, historyFile, onChange) {
     clearTimeout(timer);
     timer = setTimeout(async () => { await publish(); cliDebounced(); }, delay);
   }
-  let cliTimer = null;
+  // The CLI runs only when something under openspec/ changed since its last run (file count, newest mtime, size),
+  // not on every update; after a failure it waits 1, 2, 4 … up to 15 minutes before trying again.
+  let cliTimer = null, cliSig = null, cliBackoff = 0;
+  async function openspecSig() {
+    let n = 0, newest = 0, size = 0;
+    await walk(OPENSPEC, async (p) => { const st = await statOf(p); if (st) { n++; newest = Math.max(newest, st.mtimeMs); size += st.size; } }, { maxFiles: 20000 });
+    return `${n}:${newest}:${size}`;
+  }
   function cliDebounced() {
     clearTimeout(cliTimer);
-    cliTimer = setTimeout(async () => { if (await refreshCli()) await publish(); }, 1500);
+    cliTimer = setTimeout(async () => {
+      if (!cli.available || cliRunning) return;
+      const sig = await openspecSig();
+      if (cli.error ? Date.now() < (cli.nextTry ?? 0) : sig === cliSig) return;
+      if (!(await refreshCli())) return;
+      cliSig = sig;
+      cliBackoff = cli.error ? Math.min(Math.max(cliBackoff * 2, 60e3), 15 * 60e3) : 0;
+      cli.nextTry = cli.error ? Date.now() + cliBackoff : null;
+      await publish();
+    }, 1500);
   }
 
   // The overview: what someone glancing at several projects needs, computed from the full state.
@@ -1756,4 +1779,4 @@ server.listen(PORT, HOST, () => {
   for (const p of projects) console.log(`  ${p.id.padEnd(24)} ${p.root}`);
   if (!opt('no-open') && process.platform === 'darwin') spawn('open', [link], { stdio: 'ignore', detached: true }).unref();
 });
-for (const p of projects) p.refreshCli().then((ran) => ran && p.publish());
+for (const p of projects) p.cliDebounced(); // first CLI run per project; later runs only when openspec/ changed

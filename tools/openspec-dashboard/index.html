@@ -1643,7 +1643,7 @@ async function renderFocus(s, el = $('focus'), forced = null) {
     const texts = await Promise.all(c.specs.files.map((sf) => { const f = c.files.find((x) => x.path === sf.path); return f ? loadFile(f) : ''; }));
     body = c.specs.files.map((sf, k) => `<div class="label" style="margin:${k ? 22 : 0}px 0 6px;color:var(--accent)">${esc(sf.capability)} · ${sf.requirements} requirements · ${sf.scenarios} scenarios</div><div class="md">${md(texts[k])}</div>`).join('');
   } else {
-    if (!c.validation) body = `<div class="empty">${s.cli.available ? 'Waiting for the OpenSpec CLI…' : 'OpenSpec CLI disabled.'}</div>`;
+    if (!c.validation) body = `<div class="empty">${validationPending(c, s.cli)}</div>`;
     else if (c.validation.valid) body = `<div class="empty" style="color:var(--st-complete)">✓ <code>openspec validate ${esc(c.name)}</code> passes.</div>`;
     else body = c.validation.issues.map((i) => `<div class="issue ${esc(i.level)}"><b>${esc(i.level)}</b>${esc(i.message)}</div>`).join('')
       + (c.status === 'proposed' ? '<div class="empty">Expected while the change is proposal-only.</div>' : '');
@@ -1720,6 +1720,19 @@ function renderFeed(s) {
   $('feed').innerHTML = items.join('') || '<li><time></time><span class="what muted">Nothing yet. Checked-off tasks show up here as soon as they happen.</span></li>';
   const w = s.workspace;
   $('burn').innerHTML = burn(s) + (w?.recent?.length ? `<details class="files"><summary>${w.changedLast15m} files written in the last 15 min</summary><ul>${w.recent.slice(0, 10).map((f) => `<li><span class="p" title="${esc(f.path)}"><bdi>${esc(f.path)}</bdi></span><span>${ago(f.mtime)}</span></li>`).join('')}</ul></details>` : '');
+}
+
+// Why a change has no validation result (yet): drafts and archived changes are not validated by the CLI at all.
+function validationPending(c, cli) {
+  if (c.location === 'backlog') return 'Nothing to validate yet: this is a draft in <code>openspec/backlog/</code>, not an OpenSpec change. <code>openspec validate</code> checks it once the change is created.';
+  if (c.status === 'archived') return 'Archived: its spec deltas are part of <code>openspec/specs/</code> now; <code>openspec validate</code> only checks active changes.';
+  if (!cli.available) return 'OpenSpec CLI disabled.';
+  const secs = (t) => `${Math.max(1, Math.round((Date.now() - t) / 1000))} s`;
+  if (cli.state === 'running') return `<span class="ag-spin"></span> <code>openspec validate</code> is running (for ${secs(cli.since)}).`;
+  if (cli.state === 'queued') return `<span class="ag-spin"></span> Waiting for the OpenSpec CLI: its calls run one at a time across all projects (queued ${secs(cli.since)} ago).`;
+  if (cli.error) return `✕ The OpenSpec CLI failed: ${esc(cli.error)}${cli.nextTry ? ` Next try at ${hhmm(cli.nextTry)}, or sooner when a file under <code>openspec/</code> changes.` : ''}`;
+  if (cli.lastRun) return `Not in the result of <code>openspec validate --all</code> (${hhmm(cli.lastRun)}).`;
+  return 'Waiting for the first run of the OpenSpec CLI…';
 }
 
 function burn(s) {
