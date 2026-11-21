@@ -86,7 +86,7 @@ function installMac() {
 <plist version="1.0"><dict>
   <key>CFBundleName</key><string>${name.replace(/[<&]/g, '')}</string>
   <key>CFBundleDisplayName</key><string>${name.replace(/[<&]/g, '')}</string>
-  <key>CFBundleIdentifier</key><string>local.openspec-dashboard.${slug}</string>
+  <key>CFBundleIdentifier</key><string>${bundleId}</string>
   <key>CFBundleExecutable</key><string>launcher</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
@@ -126,14 +126,23 @@ const label = `local.openspec-dashboard.${slug}-${port}`;
 const agentPlist = path.join(os.homedir(), 'Library', 'LaunchAgents', `${label}.plist`);
 const unitFile = path.join(os.homedir(), '.config', 'systemd', 'user', `${slug}-${port}.service`);
 const xml = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// macOS names a process (Activity Monitor, the login items) after the program it runs: the service starts Node.js
+// through a link named after the dashboard, inside the launcher app, which the service is also associated with
+const appDir = path.join(os.homedir(), 'Applications', `${name}.app`);
+const bundleId = `local.openspec-dashboard.${slug}`;
+function namedNode() {
+  const link = path.join(appDir, 'Contents', 'MacOS', name.replace(/\//g, '-'));
+  try { fs.rmSync(link, { force: true }); fs.symlinkSync(nodeBin, link); return link; } catch { return nodeBin; }
+}
 function installService() {
-  const prog = [nodeBin, path.join(HERE, 'server.mjs'), ...args];
+  const prog = [process.platform === 'darwin' ? namedNode() : nodeBin, path.join(HERE, 'server.mjs'), ...args];
   if (process.platform === 'darwin') {
     fs.mkdirSync(path.dirname(agentPlist), { recursive: true });
     fs.writeFileSync(agentPlist, `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>Label</key><string>${label}</string>
+  <key>AssociatedBundleIdentifiers</key><array><string>${xml(bundleId)}</string></array>
   <key>ProgramArguments</key><array>${prog.map((a) => `<string>${xml(a)}</string>`).join('')}</array>
   <key>WorkingDirectory</key><string>${xml(process.cwd())}</string>
   <key>EnvironmentVariables</key><dict><key>PATH</key><string>${xml(process.env.PATH ?? '/usr/bin:/bin')}</string></dict>
