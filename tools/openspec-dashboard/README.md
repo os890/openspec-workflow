@@ -55,8 +55,14 @@ draft per ticket, no application code, nothing committed. When it is done the pr
 onboarded one.
 
 **⚙ Expert mode** in that panel sets the workflow the project starts with: quality gates, what every task is
-checked for, what every change is reviewed for, and the workflow steps, as toggle chips with defaults and your own
-entries (remembered in the browser). They are sent to the brainstorm with the next message when they change, and
+checked for, what every change is reviewed for, the workflow steps, the documentation to keep, the diagram format
+(Mermaid, PlantUML or both; one choice), the container engine (Podman, Docker or none; one choice) and how tools
+and services are run, as toggle chips with defaults and your own entries (remembered in the browser). With "Check
+local containers and images for services to reuse" on, the server adds the list of local containers and images
+(`ps -a` and `images` of the chosen engine; nothing is started) to the message, so Claude suggests reusing e.g. a
+running database instead of installing one; the chat shows it as a 📦 chip with the list as its tooltip, and
+**Create** puts it into the brief as "Local containers" (the setup reuses what was chosen, without copying the list). Once the choices went with a
+message, the panel folds into one line (**Show** opens it again), so the brainstorm keeps its room. They are sent to the brainstorm with the next message when they change, and
 with **Create** as the brief's "Workflow" section; the setup makes them binding in `openspec/config.yaml` (quality
 gate, task rules, review rules, ticket workflow) and CLAUDE.md, and the first ticket sets up the chosen gates.
 

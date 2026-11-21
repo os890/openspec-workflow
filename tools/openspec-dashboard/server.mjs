@@ -1041,7 +1041,8 @@ function createAgent(project) {
       '---',
       '<Markdown brief: purpose and users; scope of the first version; out of scope; conventions; milestone M1 "<title>" with the ordered tickets as `change-name`: goal (depends on …)>',
       '```',
-      'If the user sends workflow details from expert mode (quality gates, task checks, review topics, workflow steps), plan with them: the quality gate command and the first ticket set up those gates, and the brief gets a short "Workflow" section with them.',
+      'If the user sends workflow details from expert mode (quality gates, task checks, review topics, workflow steps, documentation, diagram format, container engine, tools and services), plan with them: the quality gate command and the first ticket set up those gates, the documentation and diagrams are written in the chosen format, tools that are not installed on the host run in containers of the chosen engine, and the brief gets a short "Workflow" section with them.',
+      'If a list of the local containers and images is given, check it for services the project can use (a database, a message broker, a mail catcher, object storage, a local model, …) and suggest reusing one, by its image, instead of installing something on the host or pulling another image; say why it fits. It is a list only: do not start, stop or change containers.',
       'Revise the block when the user asks for changes. If it does not converge, say so plainly and write no block. Answer like in a chat: short, in Markdown, in the language the user writes in.',
     ].join('\n');
   }
@@ -1055,7 +1056,8 @@ function createAgent(project) {
       `Then set up OpenSpec: ${skill}.`,
       USE_CLI ? `The OpenSpec CLI is available as \`${CLI}\`; use non-interactive options.` : 'Use the OpenSpec CLI if it is installed; otherwise write the files by hand.',
       'Write openspec/config.yaml (context, conventions, the quality gate), roadmap.md with the milestone and the tickets of the brief in their order and dependencies, and a backlog draft in openspec/backlog/ for every ticket. There are no specs yet.',
-      'If the brief has a "Workflow" section, make it binding: its quality gates are part of the quality gate command (and the first ticket sets them up), what every task is checked for goes into the rules for tasks, what every change is reviewed for into the rules and guidance for the review of every change, and the workflow steps into the ticket workflow in openspec/config.yaml; repeat them briefly in CLAUDE.md.',
+      'If the brief has a "Local containers" section, it only lists what this machine has: reuse what the brief chose from it (name the image in CLAUDE.md), but do not copy the list into any file.',
+      'If the brief has a "Workflow" section, make it binding (the documentation to keep, the diagram format and the container engine go into CLAUDE.md and the rules in openspec/config.yaml; tools that are not installed on the host run in containers): its quality gates are part of the quality gate command (and the first ticket sets them up), what every task is checked for goes into the rules for tasks, what every change is reviewed for into the rules and guidance for the review of every change, and the workflow steps into the ticket workflow in openspec/config.yaml; repeat them briefly in CLAUDE.md.',
       'Do not write application code: the skeleton is the first ticket. Do not commit: leave every change uncommitted for the user to review.',
       'Nobody can answer permission prompts: if a step needs a permission you do not have, skip it and say so at the end.',
       'End with a short summary: what you created, what the user should check first, and the first ticket to start.',
@@ -1323,6 +1325,22 @@ const rephraseMessages = (text) => [
   { role: 'user', content: `Rewrite this draft as a prompt (same language, nothing important left out):\n<draft>\n${text}\n</draft>` },
 ];
 
+// The local containers and images, as a short list for Claude (expert mode of a new project): which services are
+// there already. Podman prints JSON arrays, Docker one JSON object per line; both are read.
+async function containerInventory(prefer) {
+  const rows = (out) => { const t = String(out ?? '').trim(); if (!t) return []; const a = jsonOf(t, null); return Array.isArray(a) ? a : t.split('\n').map((l) => jsonOf(l, null)).filter(Boolean); };
+  for (const engine of [...new Set([prefer, 'podman', 'docker'].filter((e) => e === 'podman' || e === 'docker'))]) {
+    try {
+      const t = { timeout: 15000 };
+      const [ps, im] = await Promise.all([run(engine, ['ps', '-a', '--format', 'json'], t), run(engine, ['images', '--format', 'json'], t)]);
+      const ports = (p) => (Array.isArray(p) ? p.map((x) => `${x.host_port ?? ''}->${x.container_port ?? ''}`).join(', ') : String(p ?? '')).trim();
+      const cs = rows(ps).slice(0, 40).map((c) => `- ${[].concat(c.Names ?? c.Id ?? '?')[0]} · ${c.Image} · ${c.State}${ports(c.Ports) ? ` · ${ports(c.Ports)}` : ''}`);
+      const is = [...new Set(rows(im).flatMap((i) => i.Names ?? i.RepoTags ?? (i.Repository ? [`${i.Repository}:${i.Tag}`] : [])).filter((n) => n && !n.includes('<none>')))].slice(0, 60).map((n) => `- ${n}`);
+      return { engine, text: `Containers:\n${cs.join('\n') || '- none'}\nImages:\n${is.join('\n') || '- none'}` };
+    } catch { /* next engine */ }
+  }
+  return { engine: 'none', text: 'No container engine (podman or docker) answered.' };
+}
 async function findEngine() {
   if (stt.engine) return stt.engine;
   for (const e of ['podman', 'docker']) { try { await run(e, ['--version'], { timeout: 10000 }); return e; } catch { /* next */ } }
@@ -2099,7 +2117,9 @@ async function discoveryAction(body) {
   if (action === 'newchat' || action === 'create') {
     const parent = expandHome(body.parent);
     if (!body.parent || !fs.statSync(parent, { throwIfNoEntry: false })?.isDirectory()) throw httpError(404, 'Choose an existing folder to create the project in, e.g. ~/code.');
-    if (action === 'newchat') { const r = newChatFor(parent).agent.chat({ text, fresh, mode: 'newproject' }); return { ...r, parent }; }
+    // expert mode "check local containers": the list goes with the message (Claude reads it, it starts nothing)
+    const inv = body.inventory ? await containerInventory(body.engine) : null;
+    if (action === 'newchat') { const r = newChatFor(parent).agent.chat({ text: inv ? `[Local containers and images (${inv.engine}), to check for services the project can use:\n${inv.text}]\n${text}` : text, fresh, mode: 'newproject' }); return { ...r, parent }; }
     const name = String(body.name ?? '').trim();
     if (!/^[a-z0-9][a-z0-9._-]*$/.test(name)) throw httpError(400, 'The folder name must be lower case: letters, digits, ".", "_" or "-".');
     if (!String(body.brief ?? '').trim()) throw httpError(400, 'The brief is empty.');
@@ -2109,8 +2129,9 @@ async function discoveryAction(body) {
     await git(dir, ['init', '-q']);
     let brief = String(body.brief).slice(0, 20000);
     // expert mode: the chosen workflow details go with the brief, as its "Workflow" section
-    const wf = Array.isArray(body.workflow) ? body.workflow.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.replace(/\s+/g, ' ').slice(0, 1000)).slice(0, 8) : [];
+    const wf = Array.isArray(body.workflow) ? body.workflow.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.replace(/\s+/g, ' ').slice(0, 1000)).slice(0, 12) : [];
     if (wf.length) brief += `\n\n## Workflow (chosen in expert mode)\n\n${wf.map((x) => `- ${x}`).join('\n')}\n`;
+    if (inv) brief += `\n\n## Local containers (${inv.engine}, when the project was created)\n\n${inv.text}\n`;
     disc.candidates.unshift({ path: dir, real: dir, name, display: homeDisplay(dir), markers: [], about: brief.split('\n').find((l) => l.trim() && !/^(#|[a-z ]+:)/i.test(l.trim()))?.trim().slice(0, 200) ?? null, lastCommit: null, created: true });
     const job = await scoutFor(dir).agent.onboard({ brief, onDone: () => adopt(dir) });
     overviewChanged();

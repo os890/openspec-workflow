@@ -209,7 +209,9 @@ What makes it more than a status page:
   `CLAUDE.md` or `AGENTS.md`, lets you chat with Claude about whether one is worth it, and sets up OpenSpec there
   in the background (nothing committed). Or **start a new project**: brainstorm it with Claude, and once you agree
   it is created with its roadmap and followed from then on; an **expert mode** sets its quality gates, task checks,
-  review topics and workflow steps up front.
+  review topics, workflow steps, documentation, diagram format (Mermaid by default) and container engine up front,
+  and lets Claude check your local containers for a service to reuse (e.g. a running Postgres) before anything is
+  installed on the host.
 - **Ten styles**, from Flat and Glass to Clay, Paper, Blackboard or a green-screen Terminal.
 
 | Charts | Brainstorming an idea next to the backlog |

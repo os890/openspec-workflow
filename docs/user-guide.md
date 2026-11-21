@@ -304,13 +304,30 @@ defaults; **+ add** takes your own entries:
 - **Reviewed for every change**: e.g. matches the specs, security, error handling, test quality, accessibility,
   API compatibility, migrations;
 - **Workflow steps**: one commit per ticket, acceptance check, diff review with validated findings, docs and
-  diagram updates, parking lot.
+  diagram updates, parking lot;
+- **Documentation**: e.g. a README with setup and usage, CLAUDE.md / AGENTS.md kept current, an architecture
+  overview, decision records (ADRs), an API reference, a user guide, a changelog, diagrams of the architecture and
+  the main flows;
+- **Diagram format** (choose one): Mermaid (the default; GitHub renders it), PlantUML, or both;
+- **Container engine** (choose one): Podman (the default), Docker, or none (install on the host);
+- **Tools and services**: tools that are not installed on the host run in a container; check the local containers
+  and images for services to reuse before installing anything; dev services in a compose file; pinned image
+  versions.
 
 Claude gets them with your next message and plans with them (the first ticket sets up the chosen gates). **Create**
 makes them binding: they go into the project's `openspec/config.yaml` (the quality gate, the rules for tasks, what
-every review covers) and its CLAUDE.md. Your choices are remembered for the next project.
+every review covers, the documentation and the diagram format) and its CLAUDE.md. Your choices are remembered for the
+next project.
+
+With the container check on, the dashboard adds the list of your local containers and images to the message (it
+only lists them; nothing is started), and Claude suggests what fits, e.g. the Postgres that is already running for
+the database and a mail catcher for the e-mails, instead of installing something on the host. The message shows
+📦 for it; hover it to see the list. Once the choices went with a message, the panel folds into one line, so the
+brainstorm has the room again; **Show** opens it.
 
 ![Expert mode for a new project](images/dashboard-new-project-expert.png)
+
+![Claude suggests reusing local containers for the new project](images/dashboard-new-project-containers.png)
 
 ## Styles
 
@@ -349,7 +366,7 @@ http://127.0.0.1:4590/?style=paper&theme=dark.
 | Whiteboard, light | Whiteboard, dark |
 |---|---|
 | ![Whiteboard style, light](images/style-whiteboard-light.png) | ![Whiteboard style, dark](images/style-whiteboard-dark.png) |
-| ![Whiteboard style, board in full screen](images/style-whiteboard-board-light.png) | |
+| ![Whiteboard style, board in full screen, light](images/style-whiteboard-board-light.png) | ![Whiteboard style, board in full screen, dark](images/style-whiteboard-board-dark.png) |
 
 | Blackboard | Blackboard, board in full screen |
 |---|---|

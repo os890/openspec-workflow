@@ -1294,6 +1294,7 @@ body.board-max { overflow: hidden; }
 .disc-path { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .np-row { padding-bottom: 6px; }
 .xp-toggle[aria-pressed="true"] { font-weight: 700; }
+.np-expert-fold { font-size: 12.5px; color: var(--muted); border: 1px dashed var(--line); border-radius: 10px; padding: 6px 10px; margin: 2px 0 8px; }
 .np-expert { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 2px 0 8px; max-height: 42vh; overflow: auto; display: flex; flex-direction: column; gap: 8px; background: var(--surface); }
 .xp-h { font-size: 12px; font-weight: 700; margin-bottom: 4px; } .xp-h .muted { font-weight: 400; }
 .xp-chips { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -1473,8 +1474,9 @@ body.board-max { overflow: hidden; }
 .agent-panel.max .ag-thread { padding-block: 16px; gap: 10px; }
 .agent-panel.max .msg, .agent-panel.max .steps { max-width: 80%; }
 .agent-panel.max .ag-compose { padding-block: 10px 2px; }
-.agent-panel.max .np-expert { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px; max-height: 46vh; }
-.agent-panel.max .np-expert > .ag-note { grid-column: 1 / -1; }
+.agent-panel.max .np-expert { display: block; columns: 3 320px; column-gap: 22px; max-height: 72vh; }
+.agent-panel.max .np-expert > .xp-g { break-inside: avoid; margin-bottom: 12px; }
+.agent-panel.max .np-expert > .ag-note { column-span: all; }
 .agent-panel.max .np-row { flex-wrap: nowrap; }
 .agent-panel.max .np-parent input { max-width: 520px; }
 .agent-panel.max .ag-route { padding-bottom: 8px; }
@@ -3174,7 +3176,10 @@ function reactionsIn(jobs) {
   return m;
 }
 function userMsgHtml(l) {
-  const xw = l.text.match(/^\[Workflow details \(expert mode\): ([^\]]*)\]\n([\s\S]*)$/);
+  // the server puts the list of local containers in front (expert mode, "check local containers"): a chip, the list as its tooltip
+  const inv = l.text.match(/^\[Local containers and images \(([a-z]+)\), [^\n]*\n([\s\S]*?)\]\n([\s\S]*)$/);
+  if (inv) return userMsgHtml({ ...l, text: inv[3] }).replace('<div class="msg me">', `<div class="msg me"><span class="ic-chip" title="${esc(inv[2])}">📦 with the list of local ${esc(inv[1])} containers and images</span>`);
+  const xw =l.text.match(/^\[Workflow details \(expert mode\): ([^\]]*)\]\n([\s\S]*)$/);
   if (xw) return `<div class="msg me"><span class="ic-chip" title="${esc(xw[1])}">⚙ with the workflow details from expert mode</span>${esc(xw[2])}<span class="meta">${hhmm(l.t)}</span></div>`;
   const ic = l.text.match(IC_RE);
   if (ic) return `<div class="msg me"><span class="ic-chip">about the ${esc(ic[1])} · ${esc(title(ic[2]))}</span>${esc(ic[3])}<span class="meta">${hhmm(l.t)}</span></div>`;
@@ -4134,38 +4139,55 @@ function projectMd(text, key) {
 // checked for, what every change is reviewed for, the workflow steps). Toggle chips with defaults, own entries can
 // be added; remembered as the default for the next project. Sent to the brainstorm when they change, and with Create
 // as the brief's "Workflow" section, which the setup writes into openspec/config.yaml and CLAUDE.md.
+const ONE = { one: true }; // a group where exactly one entry is chosen
+const XP_CHECK = 'Check local containers and images for services to reuse before installing anything';
 const EXPERT = [
   ['gates', 'Quality gates', [['Build and unit tests', 1], ['Linting and formatting', 1], ['Type checks / null safety', 1], ['Integration tests against real dependencies', 0], ['End-to-end tests', 0], ['Coverage threshold', 0], ['Mutation testing', 0], ['Architecture rules (module boundaries)', 0], ['Dependency vulnerability scan', 0], ['License check', 0], ['Performance budgets', 0]]],
   ['task', 'Checked for every task', [['A test proves it (the verify criterion)', 1], ['Quality gate green before ticking it', 0], ['No TODOs or commented-out code', 0], ['Docs updated when behaviour changes', 0]]],
   ['review', 'Reviewed for every change', [['Matches the specs and their scenarios', 1], ['Security (input validation, secrets, access)', 1], ['Error handling and logging', 1], ['Test quality (meaningful assertions, not flaky)', 1], ['Readability and maintainability', 1], ['Performance', 0], ['Accessibility', 0], ['API compatibility (no unintended breaking changes)', 0], ['Data migrations and backward compatibility', 0]]],
   ['flow', 'Workflow steps', [['One commit per ticket', 1], ['Acceptance check by a fresh agent', 1], ['Diff review by a fresh agent, findings validated', 1], ['Docs update by a fresh agent', 1], ['Diagram update', 0], ['Parking lot for deferred findings', 1]]],
+  ['docs', 'Documentation', [['README: setup, usage and the quality gate', 1], ['CLAUDE.md / AGENTS.md kept current', 1], ['Architecture overview', 0], ['Decision records (ADRs)', 1], ['API reference (e.g. OpenAPI)', 0], ['User guide', 0], ['Changelog', 0], ['Diagrams of the architecture and the main flows', 1]]],
+  ['diagrams', 'Diagram format', [['Mermaid', 1], ['PlantUML', 0], ['Mermaid and PlantUML', 0]], ONE],
+  ['engine', 'Container engine', [['Podman', 1], ['Docker', 0], ['None: install on the host', 0]], ONE],
+  ['services', 'Tools and services', [['Tools not installed on the host run in a container', 1], [XP_CHECK, 1], ['Dev services (database, mail, …) in a compose file', 0], ['Pinned image versions', 1]]],
 ];
 const xp = (() => {
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem('osd-expert') || 'null'); } catch {}
   const groups = Object.fromEntries(EXPERT.map(([k, , items]) => [k, { on: new Set(saved?.on?.[k] ?? items.filter(([, d]) => d).map(([l]) => l)), custom: saved?.custom?.[k] ?? [] }]));
-  return { open: !!saved?.open, groups, sent: null };
+  return { open: !!saved?.open, groups, sent: null, fold: false }; // fold: on, but shown as one line (after it went with a message)
 })();
 const xpSave = () => { try { localStorage.setItem('osd-expert', JSON.stringify({ open: xp.open, on: Object.fromEntries(Object.entries(xp.groups).map(([k, g]) => [k, [...g.on]])), custom: Object.fromEntries(Object.entries(xp.groups).map(([k, g]) => [k, g.custom])) })); } catch {} };
 function xpSummary() { // what is chosen, per group, as plain lines
   return EXPERT.map(([k, label]) => { const g = xp.groups[k]; const on = [...g.on]; return on.length ? `${label}: ${on.join('; ')}` : null; }).filter(Boolean);
 }
+// with "check local containers" chosen, the server adds the list of local containers and images (of the chosen engine)
+const xpContainers = () => (xp.open && xp.groups.services.on.has(XP_CHECK) ? { inventory: true, engine: /docker/i.test([...xp.groups.engine.on][0] ?? '') ? 'docker' : 'podman' } : {});
 function xpHtml() {
   if (!xp.open) return '';
+  if (xp.fold) {
+    const n = Object.values(xp.groups).reduce((a, g) => a + g.on.size, 0);
+    return `<div class="np-expert-fold">⚙ Expert mode is on: ${n} choices in ${EXPERT.length} groups go with the brainstorm and with Create. <button class="link" type="button" data-xp-unfold>Show</button></div>`;
+  }
   return `<div class="np-expert">${EXPERT.map(([k, label, items]) => {
     const g = xp.groups[k];
     const all = [...items.map(([l]) => l), ...g.custom];
-    return `<div class="xp-g"><div class="xp-h">${esc(label)} <span class="muted">${g.on.size} of ${all.length}</span></div><div class="xp-chips">${all.map((l) => `<button type="button" class="xp-chip" data-xp="${esc(k)}" data-xp-item="${esc(l)}" aria-pressed="${g.on.has(l)}">${esc(l)}</button>`).join('')}<input class="xp-add" data-xp-add="${esc(k)}" placeholder="+ add" spellcheck="false"></div></div>`;
-  }).join('')}<div class="ag-note">Claude gets these with your next message and plans with them; Create writes them into the project's <code>openspec/config.yaml</code> and CLAUDE.md.</div></div>`;
+    const one = EXPERT.find(([x]) => x === k)[3]?.one;
+    return `<div class="xp-g"><div class="xp-h">${esc(label)} <span class="muted">${one ? 'choose one' : `${g.on.size} of ${all.length}`}</span></div><div class="xp-chips">${all.map((l) => `<button type="button" class="xp-chip" data-xp="${esc(k)}" data-xp-item="${esc(l)}" aria-pressed="${g.on.has(l)}">${esc(l)}</button>`).join('')}<input class="xp-add" data-xp-add="${esc(k)}" placeholder="+ add" spellcheck="false"></div></div>`;
+  }).join('')}<div class="ag-note">Claude gets these with your next message and plans with them (with the check of local containers, it also gets the list of your local containers and images); Create writes them into the project's <code>openspec/config.yaml</code> and CLAUDE.md.</div></div>`;
 }
 document.addEventListener('click', (e) => {
   const t = e.target;
-  const tog = t.closest?.('[data-xp-toggle]');
+  const tog = t.closest?.('[data-xp-toggle], [data-xp-unfold]');
   const chip = t.closest?.('[data-xp-item]');
   if (!tog && !chip) return;
   e.stopPropagation();
-  if (tog) xp.open = !xp.open;
-  else { const g = xp.groups[chip.dataset.xp]; g.on.has(chip.dataset.xpItem) ? g.on.delete(chip.dataset.xpItem) : g.on.add(chip.dataset.xpItem); }
+  if (tog) { if (tog.matches('[data-xp-unfold]') || (xp.open && xp.fold)) xp.fold = false; else xp.open = !xp.open; }
+  else {
+    const g = xp.groups[chip.dataset.xp], item = chip.dataset.xpItem;
+    if (EXPERT.find(([k]) => k === chip.dataset.xp)[3]?.one) g.on = new Set([item]); // exactly one
+    else g.on.has(item) ? g.on.delete(item) : g.on.add(item);
+  }
   xpSave(); renderScout();
 }, true);
 document.addEventListener('keydown', (e) => {
@@ -4174,7 +4196,8 @@ document.addEventListener('keydown', (e) => {
   e.preventDefault();
   const v = inp.value.trim();
   const g = xp.groups[inp.dataset.xpAdd];
-  if (v && !g.custom.includes(v) && !EXPERT.find(([k]) => k === inp.dataset.xpAdd)[2].some(([l]) => l === v)) { g.custom.push(v); g.on.add(v); }
+  const grp = EXPERT.find(([k]) => k === inp.dataset.xpAdd);
+  if (v && !g.custom.includes(v) && !grp[2].some(([l]) => l === v)) { g.custom.push(v); if (grp[3]?.one) g.on = new Set([v]); else g.on.add(v); }
   const key = inp.dataset.xpAdd;
   inp.value = ''; xpSave(); renderScout();
   document.querySelector(`[data-xp-add="${CSS.escape(key)}"]`)?.focus(); // ready for the next entry
@@ -4185,7 +4208,7 @@ function renderNewProject() {
   $('sc-title').innerHTML = 'New project<span class="sc-path">brainstorm it, then create it</span>';
   const cr = sc.create;
   morphHtml($('sc-bar'), `<div class="ag-row np-row"><label class="np-parent">Create in <input id="np-parent" value="${esc(sc.parentInput ?? '')}" spellcheck="false" autocomplete="off" ${jobs.length ? 'readonly title="Start a new brainstorm to choose another folder"' : ''}></label>
-      <button class="link xp-toggle" type="button" data-xp-toggle aria-pressed="${xp.open}" title="Quality gates, task checks, review topics and workflow steps for the new project">⚙ Expert mode</button>
+      <button class="link xp-toggle" type="button" data-xp-toggle aria-pressed="${xp.open}" title="Quality gates, task checks, review topics, workflow steps, documentation, diagram format and containers for the new project">⚙ Expert mode</button>
       ${jobs.length ? '<button class="link" type="button" data-np-fresh>New brainstorm</button>' : ''}</div>
     ${xpHtml()}
     ${cr ? `<div class="ag-row np-create"><span class="ag-note">Create</span><code>${esc((sc.parentInput ?? '').replace(/\/$/, ''))}/</code><input id="np-name" value="${esc(cr.name)}" spellcheck="false" autocomplete="off">
@@ -4244,8 +4267,8 @@ async function scoutSend(direct = null) {
       const parentInput = $('np-parent')?.value.trim() || sc.parentInput;
       const sum = xp.open ? xpSummary().join(' · ') : '';
       const withXp = sum && (sc.fresh || sum !== xp.sent) ? `[Workflow details (expert mode): ${sum.replace(/[\]\n]/g, ' ')}]\n${text}` : text;
-      const r = await discPost({ action: 'newchat', parent: parentInput, text: withXp, fresh: sc.fresh });
-      if (sum) xp.sent = sum;
+      const r = await discPost({ action: 'newchat', parent: parentInput, text: withXp, fresh: sc.fresh, ...(withXp !== text ? xpContainers() : {}) });
+      if (sum) { xp.sent = sum; if (!xp.fold) { xp.fold = true; renderScout(); } } // the brainstorm gets the room again
       Object.assign(sc, { parent: r.parent, parentInput, fresh: false });
     } else await discPost({ action: 'chat', path: sc.path, text });
     if (!direct) { ta.value = ''; rx.quote = null; showQuoteChip(); }
@@ -4288,7 +4311,7 @@ document.addEventListener('click', (e) => {
   if (hit.matches('[data-np-go]')) {
     const name = $('np-name')?.value.trim();
     sc.busy = true; sc.note = 'Creating…'; renderScout();
-    return discPost({ action: 'create', parent: sc.parent ?? sc.parentInput, name, brief: sc.create.brief, workflow: xp.open ? xpSummary() : null })
+    return discPost({ action: 'create', parent: sc.parent ?? sc.parentInput, name, brief: sc.create.brief, workflow: xp.open ? xpSummary() : null, ...xpContainers() })
       .then((r) => { sc.busy = false; sc.create = null; openScout(r.path); })
       .catch((err) => { sc.busy = false; sc.note = '✕ ' + err.message; renderScout(); });
   }
