@@ -37,7 +37,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFile, spawn } from 'node:child_process';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import os from 'node:os';
 import { inboxDir, readInbox, queueMessage, recordDelivered, cancelMessage, formatMessages, setListening, listenFile, STOP_TIMEOUT, installHook, findHookRoot } from './agent-hook.mjs';
 
@@ -77,8 +77,8 @@ if (AGENT && !['127.0.0.1', 'localhost', '::1'].includes(HOST)) {
 const STATE_DIR = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state'), 'openspec-dashboard');
 // Local models chosen in the dashboard's settings dialog (⚙); they win over the command-line defaults once saved.
 const SETTINGS_FILE = path.join(STATE_DIR, 'settings.json');
-const settings = { rephrase: { provider: 'auto' }, stt: { provider: 'auto' }, podman: { autostart: [] }, files: { open: '' } };
-try { const f = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); Object.assign(settings.rephrase, f.rephrase); Object.assign(settings.stt, f.stt); Object.assign(settings.podman, f.podman); Object.assign(settings.files, f.files); } catch { /* defaults */ }
+const settings = { rephrase: { provider: 'auto' }, stt: { provider: 'auto' }, podman: { autostart: [] }, files: { open: '' }, terminal: { open: '' }, lan: { on: false, write: false, key: null } };
+try { const f = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); for (const k of Object.keys(settings)) Object.assign(settings[k], f[k]); } catch { /* defaults */ }
 const writeSettings = () => { fs.mkdirSync(STATE_DIR, { recursive: true }); fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2) + '\n'); };
 const WORKSPACE_EXCLUDES = new Set(['.git', 'target', 'node_modules', 'node', '.angular', 'dist', 'coverage',
   '.idea', '.vscode', 'test-results', 'playwright-report', '.mvn', '.gradle', 'build', '.venv', '__pycache__']);
@@ -1271,7 +1271,7 @@ function createAgent(project) {
     if (json === lastJson) return;
     lastJson = json;
     const payload = `event: agent\ndata: ${json}\n\n`;
-    for (const res of project.clients) res.write(payload);
+    for (const res of project.clients) if (!res.osdRO) res.write(payload);
     overviewChanged();
   }
   const changed = (delay = 200) => { clearTimeout(timer); timer = setTimeout(send, delay); };
@@ -2287,7 +2287,8 @@ async function settingsView(fresh) {
     optionsCache = { at: Date.now(), engine, images, sttImages, models: listModels().map((m) => ({ path: m.path, file: m.file, sizeMb: Math.round(m.sizeMb) })), apple: { available: apple.available, reason: apple.reason } };
   }
   const { at, ...options } = optionsCache;
-  return { settings, rephrase: rephraseState(), stt: { available: stt.available, image: stt.image, error: stt.error }, options, flags: { url: RP_URL, image: RP_IMAGE_ARG, model: RP_MODEL_ARG, sttImage: STT_IMAGE_ARG } };
+  const { key, ...lan } = settings.lan;
+  return { settings: { ...settings, lan }, lan: { ...lan, links: settings.lan.on && key ? lanAddresses().map((a) => `http://${a}:${PORT}/pair?k=${key}`) : [], wildcard: WILDCARD }, rephrase: rephraseState(), stt: { available: stt.available, image: stt.image, error: stt.error }, options, flags: { url: RP_URL, image: RP_IMAGE_ARG, model: RP_MODEL_ARG, sttImage: STT_IMAGE_ARG } };
 }
 // "Open folders with" (settings › General): empty for the system's file manager; on macOS an app name
 // (open -a <app> <folder>); or a command with {dir}. It runs without a shell, so a folder name cannot inject anything.
@@ -2337,6 +2338,14 @@ function launch(cmd, args) {
   });
 }
 async function saveSettings(body) {
+  if (body.lan) {
+    const l = body.lan;
+    if (typeof l.on === 'boolean') settings.lan.on = l.on;
+    if (typeof l.write === 'boolean') settings.lan.write = l.write;
+    if (l.newKey || (settings.lan.on && !settings.lan.key)) settings.lan.key = randomBytes(18).toString('base64url'); // a new key unpairs every device
+    writeSettings(); lanSync();
+    return settingsView(false);
+  }
   if (body.files || body.terminal) {
     if (body.files) settings.files = { open: typeof body.files.open === 'string' ? body.files.open.trim().slice(0, 500) : '' };
     if (body.terminal) settings.terminal = { open: typeof body.terminal.open === 'string' ? body.terminal.open.trim().slice(0, 500) : '' };
@@ -3139,10 +3148,72 @@ async function readBody(req, max = 100_000) {
 }
 const AGENT_ACTIONS = { ask: 'ask', chat: 'chat', start: 'start', message: 'message', control: 'control', cancel: 'cancel', listen: 'listen', transcript: 'transcript', hook: 'hook', type: 'type', 'new-session': 'newSession' };
 
-const server = http.createServer(async (req, res) => {
+// ---------------------------------------------------------------- phones and tablets (Settings › Phone and tablet)
+// Off by default. On, the dashboard also listens on this computer's addresses in the local network (same port), and
+// a device has to be paired first: the QR code in the settings is a link with a secret key, which sets a cookie
+// (90 days). A paired device gets the page read-only (no token, no sessions, only the read endpoints below); with
+// "also write" it gets everything a page on this computer gets. A new key unpairs every device. Plain HTTP: meant
+// for a network you trust.
+const WILDCARD = HOST === '0.0.0.0' || HOST === '::';
+const lanServers = new Map(); // address -> server
+// only the local network: addresses of this computer in a private range (10/8, 172.16/12, 192.168/16), never a public
+// one; and only devices in the same subnet as the address they reached
+const ip4 = (a) => String(a ?? '').replace(/^::ffff:/, '').split('.').reduce((n, x) => (n * 256) + (Number(x) & 255), 0) >>> 0;
+const isPrivate4 = (a) => { const n = ip4(a); return (n >>> 24) === 10 || (n >>> 20) === ((172 << 4) | 1) || (n >>> 16) === ((192 << 8) | 168); };
+const lanIfaces = () => Object.values(os.networkInterfaces()).flat().filter((a) => a && a.family === 'IPv4' && !a.internal && isPrivate4(a.address));
+const lanAddresses = () => lanIfaces().map((a) => a.address);
+const sameSubnet = (remote, local) => {
+  if (!/^(::ffff:)?\d+\.\d+\.\d+\.\d+$/.test(String(remote ?? ''))) return false; // IPv6 or unknown: no
+  return lanIfaces().some((i) => (!local || ip4(local) === ip4(i.address)) && ((ip4(remote) & ip4(i.netmask)) >>> 0) === ((ip4(i.address) & ip4(i.netmask)) >>> 0));
+};
+function lanSync() {
+  const want = new Set(settings.lan.on && settings.lan.key ? lanAddresses() : []);
+  for (const [a, srv] of lanServers) if (!want.has(a)) { srv.close(); srv.closeAllConnections?.(); lanServers.delete(a); OWN_HOSTS.delete(`${a}:${PORT}`); }
+  for (const a of want) {
+    if (lanServers.has(a)) continue;
+    OWN_HOSTS.add(`${a}:${PORT}`);
+    if (WILDCARD) { lanServers.set(a, { close() {} }); continue; } // --host=0.0.0.0 listens there already
+    const srv = http.createServer(handle);
+    srv.on('error', (e) => { console.warn(`Phones and tablets: cannot listen on ${a}:${PORT}: ${e.message}`); lanServers.delete(a); OWN_HOSTS.delete(`${a}:${PORT}`); });
+    srv.listen(PORT, a);
+    lanServers.set(a, srv);
+  }
+}
+setInterval(lanSync, 60e3).unref();
+const isLoopback = (a) => /^(127\.|::1$|::ffff:127\.)/.test(String(a ?? ''));
+const cookieOf = (req, name) => (String(req.headers.cookie ?? '').split(/;\s*/).find((c) => c.startsWith(name + '=')) ?? '').slice(name.length + 1);
+const sameSecret = (a, b) => { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && x.length > 0 && timingSafeEqual(x, y); };
+// what a read-only device may ask for (GET only)
+const LAN_READ = new Set(['/', '/index.html', '/events', '/api/projects', '/api/state', '/api/state-at', '/api/file', '/api/timeline', '/api/git/log', '/api/git/commit', '/api/digest', '/manifest.webmanifest', '/logo.svg', '/icon-192.png', '/icon-512.png']);
+const lanPage = (title, text) => `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><body style="font:16px/1.5 system-ui,sans-serif;max-width:30em;margin:12vh auto;padding:0 20px;color:#222"><img src="/logo.svg" width="48" height="48" alt=""><h1 style="font-size:22px">${title}</h1><p>${text}</p></body>`;
+// a request from another device: paired? read-only? (null: answered here)
+function lanGate(req, res, url) {
+  if (isLoopback(req.socket.remoteAddress)) return { remote: false, ro: false };
+  if (WILDCARD && !AGENT && !settings.lan.on) return { remote: true, ro: true }; // --host=0.0.0.0 without --agent: read-only for anyone, as before
+  if (!settings.lan.on || !settings.lan.key || !isPrivate4(req.socket.remoteAddress) || !sameSubnet(req.socket.remoteAddress, WILDCARD ? null : req.socket.localAddress)) { res.writeHead(403); res.end('forbidden'); return null; }
+  if (url.pathname === '/pair') {
+    if (!sameSecret(url.searchParams.get('k') ?? '', settings.lan.key)) { res.writeHead(403, { 'content-type': 'text/html; charset=utf-8' }); res.end(lanPage('This link is not valid (any more)', 'Scan the QR code again: on the computer, ☰ › Settings › Phone and tablet.')); return null; }
+    res.writeHead(302, { location: '/', 'set-cookie': `osd_lan=${settings.lan.key}; Path=/; Max-Age=${90 * 86400}; HttpOnly; SameSite=Lax`, 'cache-control': 'no-store' });
+    res.end(); return null;
+  }
+  const ASSET = ['/logo.svg', '/icon-192.png', '/icon-512.png', '/manifest.webmanifest'].includes(url.pathname);
+  if (!ASSET && !sameSecret(cookieOf(req, 'osd_lan'), settings.lan.key)) {
+    res.writeHead(401, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(lanPage('Pair this device first', 'On the computer the dashboard runs on, open ☰ › Settings › Phone and tablet and scan the QR code with this device (or open the link shown there).'));
+    return null;
+  }
+  const ro = !settings.lan.write;
+  if (ro && (req.method !== 'GET' || !LAN_READ.has(url.pathname))) { res.writeHead(403, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: 'Read-only on this device (Settings › Phone and tablet on the computer allows more).' })); return null; }
+  return { remote: true, ro };
+}
+
+const handle = async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   try {
     if (AGENT && !OWN_HOSTS.has(req.headers.host)) { res.writeHead(403); return res.end('unknown host'); }
+    const gate = lanGate(req, res, url);
+    if (!gate) return;
+    if (gate.remote && url.pathname === '/api/settings' && req.method !== 'GET') { res.writeHead(403); return res.end('only on the computer itself'); }
     // the logo (tab icon, header) and what makes the page installable as an app (Chrome: Install; Safari: Add to Dock)
     const ASSETS = { '/logo.svg': ['logo.svg', 'image/svg+xml'], '/icon-192.png': ['icon-192.png', 'image/png'], '/icon-512.png': ['icon-512.png', 'image/png'] };
     if (ASSETS[url.pathname]) {
@@ -3161,7 +3232,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/' || url.pathname === '/index.html') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
       const html = await fsp.readFile(INDEX, 'utf8');
-      return res.end(AGENT ? html.replace('<meta name="osd-agent" content="">', `<meta name="osd-agent" content="${TOKEN}">`) : html);
+      return res.end(AGENT && !gate.ro ? html.replace('<meta name="osd-agent" content="">', `<meta name="osd-agent" content="${TOKEN}">`) : html);
     }
     if (url.pathname === '/api/podman') {
       if (!AGENT) { res.writeHead(404); return res.end('start the dashboard with --agent'); }
@@ -3283,7 +3354,8 @@ const server = http.createServer(async (req, res) => {
       if (url.searchParams.get('project') && !byId.has(url.searchParams.get('project'))) { res.write('event: gone\ndata: {}\n\n'); return res.end(); } // unfollowed or archived
       const p = projectFor(url);
       res.write(`retry: 2000\nid: ${p.rev}\ndata: ${JSON.stringify({ rev: p.rev, scannedAt: Date.now(), ...p.state })}\n\n`);
-      if (p.agent) res.write(`event: agent\ndata: ${JSON.stringify(p.agent.view())}\n\n`);
+      res.osdRO = gate.ro; // a read-only device gets no sessions
+      if (p.agent && !gate.ro) res.write(`event: agent\ndata: ${JSON.stringify(p.agent.view())}\n\n`);
       p.clients.add(res);
       if ((p.nextScan ?? 0) - Date.now() > 10e3) p.nextScan = Date.now() + Math.min(10e3, (p.scanMs ?? 0) * 20); // opened: scan soon
       req.on('close', () => p.clients.delete(res));
@@ -3314,7 +3386,8 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(500);
     res.end(String(e));
   }
-});
+};
+const server = http.createServer(handle);
 
 for (const p of projects) { await p.scanWorkspace(); await p.publish(); p.start(); p.agent?.startWatching(); }
 if (AGENT) for (const dir of disc.added) if (fs.existsSync(path.join(dir, 'openspec')) && !isParked(fs.realpathSync(dir))) addProject(dir); // onboarded or followed earlier
@@ -3327,5 +3400,7 @@ server.listen(PORT, HOST, () => {
   if (AGENT) console.log(`  Agent: ${CLAUDE} (permission mode ${AGENT_MODE}${AGENT_MODEL ? `, model ${AGENT_MODEL}` : ''})`);
   for (const p of projects) console.log(`  ${p.id.padEnd(24)} ${p.root}`);
   if (!opt('no-open') && process.platform === 'darwin') spawn('open', [link], { stdio: 'ignore', detached: true }).unref();
+  lanSync();
+  if (settings.lan.on) console.log(`  Phones and tablets: ${lanAddresses().map((a) => `http://${a}:${PORT}/`).join(' ') || 'no network address'} (paired devices, ${settings.lan.write ? 'read and write' : 'read-only'})`);
 });
 for (const p of projects) p.cliDebounced(); // first CLI run per project; later runs only when openspec/ changed

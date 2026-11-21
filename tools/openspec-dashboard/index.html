@@ -1375,6 +1375,29 @@ body.board-max { overflow: hidden; }
 .ov-row .warn { color: var(--st-blocked); font-weight: 600; }
 .ov-empty { color: var(--muted); }
 @media (max-width: 720px) { .ov-grid { grid-template-columns: 1fr; } }
+/* settings › Phone and tablet */
+.lan-pair { display: flex; gap: 18px; align-items: flex-start; margin-top: 10px; flex-wrap: wrap; }
+.lan-qr { flex: none; background: #fff; border-radius: 10px; padding: 6px; line-height: 0; border: 1px solid var(--line); }
+.lan-txt { flex: 1 1 260px; min-width: 0; }
+.lan-link { display: block; font-size: 12px; overflow-wrap: anywhere; margin: 4px 0 8px; }
+body.remote #folder-btn, body.remote #hm-install { display: none !important; }
+/* phones: one header row of buttons, panels on the whole screen */
+@media (max-width: 600px) {
+  header.top .wrap { gap: 6px 10px; }
+  header.top h1 { font-size: 20px; }
+  #cli { display: none; }
+  #conn { font-size: 0; padding: 6px 8px; }
+  #conn .dot { margin: 0; }
+  header.top .live { gap: 5px; flex-wrap: wrap; }
+  header.top .live .btn { padding: 6px 9px; }
+  #project { max-width: 34vw; }
+  header.top .live .btn { padding: 6px 8px; }
+  .agent-panel, .gh-panel:not(.travel), .gh-panel.max:not(.travel) { inset: 0; width: auto; border-radius: 0; }
+  [data-ag-split], .agent-panel [data-ag-max], .gh-panel [data-gh-max] { display: none !important; }
+  .tt-bar { padding: 8px 12px; font-size: 12.5px; }
+  .tt-bar .tt-nav { margin-left: 0; }
+  .digest { padding: 14px 14px; }
+}
 /* the daily digest below the projects */
 .digest { padding: 18px 22px; }
 .dg-head { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; margin-bottom: 10px; }
@@ -1859,6 +1882,7 @@ body.ag-max { overflow: hidden; }
   </label>
   <div class="hm-row"><span>Light or dark</span><button class="btn" id="theme" type="button" aria-label="Toggle light or dark theme">◐ Switch</button></div>
   <div class="hm-row" id="hm-install" hidden><span>As an app, with its own icon in the Dock</span><button class="btn primary" id="install-btn" type="button">Install…</button></div>
+  <div class="hm-row" id="hm-lan" hidden><span>On a phone or tablet</span><button class="btn" id="lan-btn" type="button" title="Show the dashboard on a phone or tablet in the same network">QR code…</button></div>
   <div class="hm-row hm-set"><span>Settings</span><button class="btn" id="settings-btn" type="button" aria-label="Settings" title="Settings: local models, Podman, write mode, file manager" hidden>⚙ Open…</button></div>
 </div>
 <div class="bg-pop" id="bg-pop" role="dialog" aria-label="Sessions in the background" hidden></div>
@@ -4558,7 +4582,7 @@ document.addEventListener('click', (e) => {
 // Which model rephrases drafts (a container, a local OpenAI-compatible server such as Ollama or LM Studio, Apple's
 // on-device model on macOS 26, or none) and which image transcribes speech. Saved by the server; applies at once.
 const st = { view: null, busy: false, note: '', test: null, tab: 'models', pm: null, pmNote: '', pmTimer: null, pmAll: false };
-const setTabs = () => `<div class="set-tabs" role="tablist"><button type="button" class="tab" role="tab" data-set-tab="models" aria-selected="${st.tab === 'models'}">Local models</button><button type="button" class="tab" role="tab" data-set-tab="podman" aria-selected="${st.tab === 'podman'}">Podman</button><button type="button" class="tab" role="tab" data-set-tab="write" aria-selected="${st.tab === 'write'}">Write mode</button><button type="button" class="tab" role="tab" data-set-tab="general" aria-selected="${st.tab === 'general'}">General</button></div>`;
+const setTabs = () => `<div class="set-tabs" role="tablist"><button type="button" class="tab" role="tab" data-set-tab="models" aria-selected="${st.tab === 'models'}">Local models</button><button type="button" class="tab" role="tab" data-set-tab="podman" aria-selected="${st.tab === 'podman'}">Podman</button><button type="button" class="tab" role="tab" data-set-tab="write" aria-selected="${st.tab === 'write'}">Write mode</button><button type="button" class="tab" role="tab" data-set-tab="general" aria-selected="${st.tab === 'general'}">General</button><button type="button" class="tab" role="tab" data-set-tab="lan" aria-selected="${st.tab === 'lan'}">Phone &amp; tablet</button></div>`;
 // settings › General: the file manager for the folder button in the header (kept in the dashboard's settings file)
 async function renderGeneralSettings() {
   if (!st.view) { try { st.view = await settingsFetch('GET'); } catch (e) { st.note = '✕ ' + e.message; } }
@@ -4570,6 +4594,137 @@ async function renderGeneralSettings() {
     <p class="ag-note">For <b>＋ New session</b> in the terminal sessions. Empty: on macOS a new Terminal window (the dashboard can write into it), on Linux the first terminal found (x-terminal-emulator, GNOME Terminal, Konsole, …). Anything else: a command with <code>{cmd}</code>, the shell command that starts Claude Code in the project's folder, e.g. <code>wezterm start -- sh -lc {cmd}</code>. Both are kept in the dashboard's settings file.</p>
     <div class="ag-row set-actions"><button class="btn primary" type="button" data-set-fm-save>Save</button><span class="ag-note" id="set-fm-note">${esc(st.fmNote ?? '')}</span></div></div>`;
 }
+// ---- settings › Phone and tablet: the dashboard in the local network, for paired devices (QR code with a secret key)
+// A QR code as SVG (byte mode, error correction M, versions 1-10: up to 213 bytes), after Project Nayuki's encoder
+function qrSvg(text, scale = 6) {
+  const data = [...new TextEncoder().encode(text)];
+  const ECC = [0, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26], BLK = [0, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5];
+  const rawMods = (v) => { let r = (16 * v + 128) * v + 64; if (v >= 2) { const n = Math.floor(v / 7) + 2; r -= (25 * n - 10) * n - 55; if (v >= 7) r -= 36; } return r; };
+  const dataCw = (v) => Math.floor(rawMods(v) / 8) - ECC[v] * BLK[v];
+  let ver = 1;
+  while (ver <= 10 && 4 + (ver < 10 ? 8 : 16) + data.length * 8 > dataCw(ver) * 8) ver++;
+  if (ver > 10) throw new Error('Too long for a QR code here.');
+  const bits = [], put = (val, len) => { for (let i = len - 1; i >= 0; i--) bits.push((val >>> i) & 1); };
+  put(4, 4); put(data.length, ver < 10 ? 8 : 16); for (const b of data) put(b, 8);
+  const cap = dataCw(ver) * 8;
+  put(0, Math.min(4, cap - bits.length)); put(0, (8 - (bits.length % 8)) % 8);
+  for (let pad = 0xec; bits.length < cap; pad ^= 0xec ^ 0x11) put(pad, 8);
+  const bytes = [];
+  for (let i = 0; i < bits.length; i += 8) bytes.push(bits.slice(i, i + 8).reduce((a, b) => (a << 1) | b, 0));
+  // Reed-Solomon error correction per block, then the blocks interleaved
+  const mul = (x, y) => { let z = 0; for (let i = 7; i >= 0; i--) { z = (z << 1) ^ ((z >>> 7) * 0x11d); z ^= ((y >>> i) & 1) * x; } return z; };
+  const ecl = ECC[ver], nb = BLK[ver], raw = Math.floor(rawMods(ver) / 8), nShort = nb - (raw % nb), shortLen = Math.floor(raw / nb);
+  const div = new Array(ecl).fill(0); div[ecl - 1] = 1;
+  for (let i = 0, root = 1; i < ecl; i++, root = mul(root, 2)) for (let j = 0; j < ecl; j++) { div[j] = mul(div[j], root); if (j + 1 < ecl) div[j] ^= div[j + 1]; }
+  const blocks = [];
+  for (let i = 0, k = 0; i < nb; i++) {
+    const dat = bytes.slice(k, k + shortLen - ecl + (i < nShort ? 0 : 1)); k += dat.length;
+    const rem = new Array(ecl).fill(0);
+    for (const b of dat) { const f = b ^ rem.shift(); rem.push(0); div.forEach((c, j) => { rem[j] ^= mul(c, f); }); }
+    if (i < nShort) dat.push(0);
+    blocks.push(dat.concat(rem));
+  }
+  const cw = [];
+  for (let i = 0; i < blocks[0].length; i++) for (let j = 0; j < nb; j++) if (i !== shortLen - ecl || j >= nShort) cw.push(blocks[j][i]);
+  // the matrix: function patterns first
+  const size = ver * 4 + 17, m = [...Array(size)].map(() => new Array(size).fill(false)), fn = [...Array(size)].map(() => new Array(size).fill(false));
+  const set = (x, y, d) => { m[y][x] = d; fn[y][x] = true; };
+  for (let i = 0; i < size; i++) { set(6, i, i % 2 === 0); set(i, 6, i % 2 === 0); }
+  for (const [cx, cy] of [[3, 3], [size - 4, 3], [3, size - 4]]) for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+    const d = Math.max(Math.abs(dx), Math.abs(dy)), x = cx + dx, y = cy + dy;
+    if (x >= 0 && x < size && y >= 0 && y < size) set(x, y, d !== 2 && d !== 4);
+  }
+  if (ver > 1) {
+    const n = Math.floor(ver / 7) + 2, step = Math.ceil((ver * 4 + 4) / (n * 2 - 2)) * 2, pos = [6];
+    for (let p = size - 7; pos.length < n; p -= step) pos.splice(1, 0, p);
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      if ((i === 0 && j === 0) || (i === 0 && j === n - 1) || (i === n - 1 && j === 0)) continue;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) set(pos[i] + dx, pos[j] + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+    }
+  }
+  const format = (mask) => {
+    const d = (0 << 3) | mask; let r = d; // level M = 0
+    for (let i = 0; i < 10; i++) r = (r << 1) ^ ((r >>> 9) * 0x537);
+    const b = ((d << 10) | r) ^ 0x5412, bit = (i) => ((b >>> i) & 1) === 1;
+    for (let i = 0; i <= 5; i++) set(8, i, bit(i));
+    set(8, 7, bit(6)); set(8, 8, bit(7)); set(7, 8, bit(8));
+    for (let i = 9; i < 15; i++) set(14 - i, 8, bit(i));
+    for (let i = 0; i < 8; i++) set(size - 1 - i, 8, bit(i));
+    for (let i = 8; i < 15; i++) set(8, size - 15 + i, bit(i));
+    set(8, size - 8, true);
+  };
+  format(0);
+  if (ver >= 7) {
+    let r = ver; for (let i = 0; i < 12; i++) r = (r << 1) ^ ((r >>> 11) * 0x1f25);
+    const b = (ver << 12) | r;
+    for (let i = 0; i < 18; i++) { const bit = ((b >>> i) & 1) === 1, a = size - 11 + (i % 3), c = Math.floor(i / 3); set(a, c, bit); set(c, a, bit); }
+  }
+  // the codewords in the zigzag
+  let i = 0;
+  for (let right = size - 1; right >= 1; right -= 2) {
+    if (right === 6) right = 5;
+    for (let v = 0; v < size; v++) for (let j = 0; j < 2; j++) {
+      const x = right - j, y = ((right + 1) & 2) === 0 ? size - 1 - v : v;
+      if (!fn[y][x] && i < cw.length * 8) { m[y][x] = ((cw[i >>> 3] >>> (7 - (i & 7))) & 1) === 1; i++; }
+    }
+  }
+  // the mask with the lowest penalty
+  const MASKS = [(x, y) => (x + y) % 2 === 0, (x, y) => y % 2 === 0, (x) => x % 3 === 0, (x, y) => (x + y) % 3 === 0,
+    (x, y) => (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0, (x, y) => ((x * y) % 2) + ((x * y) % 3) === 0,
+    (x, y) => (((x * y) % 2) + ((x * y) % 3)) % 2 === 0, (x, y) => (((x + y) % 2) + ((x * y) % 3)) % 2 === 0];
+  const apply = (k) => { for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (!fn[y][x] && MASKS[k](x, y)) m[y][x] = !m[y][x]; };
+  const penalty = () => {
+    let p = 0, dark = 0;
+    const lines = [];
+    for (let y = 0; y < size; y++) { lines.push(m[y]); lines.push(m.map((row) => row[y])); }
+    for (const l of lines) {
+      for (let x = 0, run = 1; x < size; x++) { if (x > 0 && l[x] === l[x - 1]) { run++; if (run === 5) p += 3; else if (run > 5) p++; } else run = 1; }
+      const s = l.map((d) => (d ? '1' : '0')).join('');
+      for (const pat of ['10111010000', '00001011101']) for (let k = s.indexOf(pat); k >= 0; k = s.indexOf(pat, k + 1)) p += 40;
+    }
+    for (let y = 0; y < size - 1; y++) for (let x = 0; x < size - 1; x++) { const c = m[y][x]; if (c === m[y][x + 1] && c === m[y + 1][x] && c === m[y + 1][x + 1]) p += 3; }
+    for (const row of m) for (const d of row) if (d) dark++;
+    return p + Math.max(0, Math.ceil(Math.abs(dark * 20 - size * size * 10) / (size * size)) - 1) * 10;
+  };
+  let best = 0, bestP = Infinity;
+  for (let k = 0; k < 8; k++) { apply(k); format(k); const p = penalty(); if (p < bestP) { bestP = p; best = k; } apply(k); }
+  apply(best); format(best);
+  const q = 4, n = size + q * 2;
+  let d = '';
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (m[y][x]) d += `M${x + q} ${y + q}h1v1h-1z`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${n} ${n}" width="${n * scale}" height="${n * scale}" shape-rendering="crispEdges"><rect width="${n}" height="${n}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+}
+const REMOTE = !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname); // this page runs on another device
+async function renderLanSettings(fresh) {
+  if (!st.view || fresh) { try { st.view = await settingsFetch('GET'); } catch (e) { st.lanNote = '✕ ' + e.message; } }
+  const l = st.view?.lan ?? { on: false, write: false, links: [] }, link = l.links?.[0];
+  $('settings').innerHTML = `<div class="set-head"><h2 id="set-title">Settings</h2><button class="link" type="button" data-set-close>Close ✕</button></div>${setTabs()}
+    <p class="ag-note">Follow the projects on a phone or tablet in the same network (Wi-Fi): the dashboard also listens on this computer's network address, and a device has to be paired once by scanning the QR code. ${REMOTE ? '<b>Only on the computer itself can this be changed.</b>' : ''}</p>
+    <label class="set-opt ${l.on ? 'sel' : ''}"><input type="checkbox" data-lan="on" ${l.on ? 'checked' : ''} ${REMOTE ? 'disabled' : ''}><span><b>Allow phones and tablets in this network</b><span class="muted"> · off by default</span></span></label>
+    ${[[false, 'Read only', 'board, roadmap, backlog, charts, history and the digest; no chat, no sessions (default)'], [true, 'Read and write', 'also the chat, the terminal sessions (reading and writing to them) and everything else the dashboard can do on this computer']].map(([v, label, desc]) =>
+      `<label class="set-opt ${l.on ? '' : 'off'} ${l.write === v ? 'sel' : ''}"><input type="radio" name="lan-w" data-lan="write" value="${v}" ${l.write === v ? 'checked' : ''} ${!l.on || REMOTE ? 'disabled' : ''}><span><b>${label}</b><span class="muted"> · ${desc}</span></span></label>`).join('')}
+    ${l.on && link ? `<div class="lan-pair"><div class="lan-qr" aria-label="QR code with the pairing link">${qrSvg(link, 5)}</div>
+      <div class="lan-txt"><b>Scan this with the phone or tablet</b><p class="ag-note">It opens the dashboard there and pairs the device for 90 days. Or open the link on it:</p>
+      ${l.links.map((u) => `<code class="lan-link">${esc(u)}</code>`).join('')}
+      <div class="ag-row"><button class="btn" type="button" data-lan-copy>Copy the link</button>${REMOTE ? '' : '<button class="btn" type="button" data-lan-newkey title="Every paired device has to scan the new code">New key (unpairs all devices)</button>'}</div>
+      <p class="ag-note">The link is a key: whoever has it can open the dashboard${l.write ? ' and write to your sessions' : ''}. The connection is plain HTTP, so use it in a network you trust (at home, not in a café). Turning this off closes the network address again.</p></div></div>`
+      : l.on ? '<div class="ag-note warn">This computer has no address in a local network right now.</div>' : ''}
+    ${st.lanNote ? `<div class="ag-note warn">${esc(st.lanNote)}</div>` : ''}`;
+}
+document.addEventListener('change', async (e) => {
+  const k = e.target.dataset?.lan;
+  if (!k) return;
+  st.lanNote = '';
+  try { st.view = await settingsFetch('POST', { lan: k === 'on' ? { on: e.target.checked } : { write: e.target.value === 'true' } }); } catch (err) { st.lanNote = '✕ ' + err.message; }
+  renderLanSettings();
+});
+document.addEventListener('click', async (e) => {
+  if (e.target.closest?.('[data-lan-copy]')) { navigator.clipboard?.writeText(st.view?.lan?.links?.[0] ?? '').catch(() => {}); e.target.textContent = 'Copied'; return; }
+  if (!e.target.closest?.('[data-lan-newkey]')) return;
+  if (!confirm('A new key unpairs every phone and tablet; each has to scan the new code. Go on?')) return;
+  try { st.view = await settingsFetch('POST', { lan: { newKey: true } }); } catch (err) { st.lanNote = '✕ ' + err.message; }
+  renderLanSettings();
+});
 // settings of the write mode of a joined session (kept in this browser, like the text size and the colors)
 function renderWriteSettings() {
   const on = termView.matrix !== false, me = termView.me ?? 'highlight';
@@ -4608,6 +4763,7 @@ async function openSettings(fresh) {
   if (st.tab === 'podman') return openPodman();
   if (st.tab === 'write') return renderWriteSettings();
   if (st.tab === 'general') return renderGeneralSettings();
+  if (st.tab === 'lan') return renderLanSettings();
   st.note = 'Looking for local models…'; renderSettings();
   try { st.view = await settingsFetch('GET', null, fresh); st.form = null; st.note = ''; } catch (e) { st.note = '✕ ' + e.message; }
   renderSettings();
@@ -4634,6 +4790,7 @@ function renderSettings() {
   if (st.tab === 'podman') return renderPodman();
   if (st.tab === 'write') return renderWriteSettings();
   if (st.tab === 'general') return renderGeneralSettings();
+  if (st.tab === 'lan') return renderLanSettings();
   if (!v) { dlg.innerHTML = `<div class="set-head"><h2 id="set-title">Settings</h2><button class="link" type="button" data-set-close>Close ✕</button></div>${setTabs()}<div class="ag-note">${esc(st.note)}</div>`; return; }
   if (!st.form) initSettingsForm(v);
   const f = st.form, o = v.options, now = v.rephrase;
@@ -4774,7 +4931,7 @@ $('settings').addEventListener('click', async (e) => {
   const t = e.target;
   if (t === $('settings') || t.closest('[data-set-close]')) return $('settings').close();
   const tab = t.closest('[data-set-tab]');
-  if (tab) { clearTimeout(st.pmTimer); st.tab = tab.dataset.setTab; return st.tab === 'podman' ? openPodman() : st.tab === 'write' ? renderWriteSettings() : st.tab === 'general' ? renderGeneralSettings() : st.view ? renderSettings() : openSettings(false); }
+  if (tab) { clearTimeout(st.pmTimer); st.tab = tab.dataset.setTab; return st.tab === 'podman' ? openPodman() : st.tab === 'write' ? renderWriteSettings() : st.tab === 'general' ? renderGeneralSettings() : st.tab === 'lan' ? renderLanSettings() : st.view ? renderSettings() : openSettings(false); }
   if (t.closest('[data-set-fm-save]')) {
     try { st.view = await settingsFetch('POST', { files: { open: $('set-fm').value }, terminal: { open: $('set-term').value } }); st.fmNote = '✓ Saved'; } catch (err) { st.fmNote = '✕ ' + err.message; }
     return renderGeneralSettings();
@@ -4812,6 +4969,8 @@ $('settings').addEventListener('click', async (e) => {
   }
 });
 if (AGENT_TOKEN) { $('settings-btn').hidden = false; $('settings-btn').addEventListener('click', () => openSettings(false)); }
+if (AGENT_TOKEN && !REMOTE) { $('hm-lan').hidden = false; $('lan-btn').addEventListener('click', () => { hdrMenu(false); st.tab = 'lan'; openSettings(false); }); }
+if (REMOTE) document.body.classList.add('remote'); // on a phone or tablet: what only makes sense on the computer is hidden
 document.addEventListener('click', (e) => {
   if (!e.target.closest?.('[data-set-open]')) return;
   e.stopPropagation();

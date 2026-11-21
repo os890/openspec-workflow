@@ -33,6 +33,11 @@ Install in the address bar; Safari: File › Add to Dock); add `--service` to `i
 login on and the pinned web app always finds it (macOS LaunchAgent, Linux systemd user service); with the web app
 installed, `install --service --no-app` keeps only the service, without a second app in Launchpad.
 
+Without extra setup it also has: a daily digest on the overview (what moved since the previous working day, what
+is stuck, what is next), and in the git history (⎇) a double-click on a commit or a branch shows the whole board as
+it was there. With `--agent`, ☰ › On a phone or tablet pairs devices in the same network by QR code (off by
+default, read-only unless allowed, private addresses in the computer's subnet only).
+
 ## With `--agent`
 
 Everything runs the user's local Claude Code (`claude -p`, their subscription), only on 127.0.0.1, and every
@@ -48,7 +53,8 @@ folders with a `CLAUDE.md`/`AGENTS.md` (overview › Onboard more projects), new
 expert mode for quality gates, docs, diagrams, containers, branches, version control and license), and the
 **terminal sessions** button (`>_`): every running Claude Code session, followed live; in macOS Terminal the
 dashboard can type messages into it (no setup), **＋ New session** opens a new Terminal window with Claude Code in
-the project and joins it, and a gauge shows how full each session's context is; elsewhere writing needs the hook:
+the project and joins it, a gauge shows how full each session's context is and two sessions can run side by
+side; elsewhere writing needs the hook:
 `node <dash>/agent-hook.mjs install <project>` (then restart that session). Messages from the dashboard reach a
 session in fixed forms; the ticket workflow skill explains them (`openspec-ticket-workflow`,
 `references/dashboard-messages.md`).
@@ -78,6 +84,9 @@ write-mode look, the background list) are kept in the browser.
   projects are listed below the overview.
 - **No Chat / no terminal button**: start with `--agent`; the `claude` command must be on the PATH (or
   `--claude=<command>`).
+- **A phone or tablet cannot open it**: turn it on in Settings › Phone & tablet, pair the device with the QR
+  code, and use the same Wi-Fi (only devices in the computer's subnet, on private addresses, are answered); a
+  firewall may have to allow incoming connections for node.
 - **A new session does not show up**: the new Terminal window may ask whether you trust the folder (once per
   folder); on Linux set the terminal in Settings › General if none is found.
 - **The context gauge shows 200k for a 1M session**: until a session has been larger than 200k, the window comes

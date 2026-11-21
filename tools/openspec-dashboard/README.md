@@ -483,7 +483,18 @@ Only one session started from the dashboard runs per project.
 
 **Safety.** `--agent` only runs on `127.0.0.1`. Every action needs a token that is created at each start and
 only handed to pages served under the dashboard's own address; requests from other origins or host names are
-refused. Questions and the assistant cannot change files. Questions, chats and sessions are listed while the server runs
+refused.
+
+**Phones and tablets** (Settings › Phone & tablet, `lan` in `settings.json`, off by default): turned on, the server
+also listens on the port at each of this computer's IPv4 addresses in a private range (10/8, 172.16/12,
+192.168/16; checked every minute) and adds them to its own host names. A request that does not come from loopback
+has to come from a private address in the subnet of the address it reached (else 403), and carry the cookie
+`osd_lan` with the pairing key (else 401 with a hint); `GET /pair?k=<key>` (the QR code, encoded on the page,
+byte mode, level M) sets it (`HttpOnly`, `SameSite=Lax`, 90 days). Read-only devices get the page without the
+token, no `agent` events on `/events`, and only `GET` of the page, its assets, `/events`, `/api/projects`,
+`/api/state`, `/api/state-at`, `/api/file`, `/api/timeline`, `/api/git/log`, `/api/git/commit` and `/api/digest`
+(else 403); with `write` they get the token like a local page. Settings can only be changed from loopback; a new
+key unpairs every device. Questions and the assistant cannot change files. Questions, chats and sessions are listed while the server runs
 (the conversations themselves stay in Claude Code, so `claude --resume` finds them); an idle chat process ends after
 20 minutes and the next message resumes the same conversation.
 

@@ -97,6 +97,17 @@ well.
  `launcher.mjs stop` ends a dashboard the
 launcher started, `launcher.mjs uninstall` removes the launcher.
 
+**On a phone or tablet.** With `--agent`, **☰ › On a phone or tablet › QR code…** (or **⚙ Settings › Phone &
+tablet**) lets devices in the same network (your Wi-Fi) open the dashboard. It is off by default; turned on, the
+dashboard also listens on this computer's address in the local network, only on private addresses (192.168.x.x,
+10.x.x.x, 172.16–31.x.x, never a public one), and it only answers devices in the same subnet. Each device has to be
+paired once: scan the QR code with it (or open the link shown below the code), and it stays paired for 90 days. A
+paired device is **read only** by default: board, roadmap, backlog, charts, history and the digest, live, with no
+chat and no sessions. **Read and write** gives it everything a page on the computer has, e.g. to follow a session
+in a terminal and answer it from the sofa. **New key** unpairs every device. The page fits a phone: one row of
+buttons in the header, panels on the whole screen. The connection is plain HTTP, so use it in a network you trust;
+the link is a key. Only the computer itself can change these settings.
+
 - **Working on** shows the change in progress and the **current task**, the first unchecked one, with its
   `verify:` criterion. Below it: when the last task was checked off and when a project file was last written, so
   you can tell whether the agent is still busy.
