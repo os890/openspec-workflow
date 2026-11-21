@@ -8,7 +8,8 @@ also needs podman.
 ## 1. Look at the sample
 
 [`examples/todo-app`](../examples/todo-app) is the OpenSpec context of a small todo app in the middle of its first
-milestone. It has no code, only `openspec/`:
+milestone ([`examples/habit-tracker`](../examples/habit-tracker) is a second, smaller one). It has no code, only
+`openspec/`:
 
 | Path | What it shows |
 |---|---|
@@ -91,6 +92,21 @@ Click a card to open its details next to the board; `Esc` closes them. A link to
 `#board:<change>`, e.g. http://127.0.0.1:4590/#board:add-due-dates:
 
 ![Board with the details of a change](images/dashboard-board-details.png)
+
+## Several projects
+
+Pass several projects, or `--scan` a folder, and the dashboard starts with an overview of all of them:
+
+```sh
+node tools/openspec-dashboard/server.mjs --scan=examples
+```
+
+![Overview of two projects](images/dashboard-projects.png)
+
+Each card shows the change being worked on and its current task, the task progress, the mix of statuses (the
+coloured bar), the current milestone, validation problems and when something last happened; the most recently
+active project comes first and the cards update live. Click a card, or pick the project in the header, to open its
+dashboard; **All projects** in the picker returns to the overview.
 
 ## Styles
 

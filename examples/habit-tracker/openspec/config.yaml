@@ -1,0 +1,12 @@
+schema: spec-driven
+
+context: |
+  Product: "Habits" - a mobile-first web app to track daily habits and keep streaks going.
+  Stack: TypeScript, SvelteKit, SQLite. pnpm only. Quality gate: `pnpm verify` (lint, type check, Vitest with
+  coverage thresholds, build, Playwright). One OpenSpec change = one ticket = one commit; deferred items go to
+  the change `parking-lot`.
+
+rules:
+  tasks:
+    - Every task states its acceptance criterion as "verify: ..."; spec scenarios are the acceptance criteria.
+    - The final task is always "`pnpm verify` is green".

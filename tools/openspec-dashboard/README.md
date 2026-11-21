@@ -9,6 +9,22 @@ cd <your project>                                   # the folder that contains o
 node <path-to>/tools/openspec-dashboard/server.mjs  # opens http://127.0.0.1:4590/
 ```
 
+## Several projects
+
+One dashboard can follow several projects. Name them, or let it find every folder with an `openspec/` folder up to
+three levels below a directory:
+
+```sh
+node server.mjs ~/code/shop ~/code/blog            # or --project=<dir>, repeatable
+node server.mjs --scan=~/code                       # every project below ~/code
+```
+
+With more than one project, the start page is an overview: one card per project with the change being worked on,
+its current task and progress, the status mix, the current milestone, validation problems and the last activity,
+most recently active first and updated live. A card (or the project picker in the header) opens that project's
+dashboard; `?project=<id>` in the address links to it directly. Each project keeps its own history, and OpenSpec
+CLI calls for all projects run one at a time.
+
 ## What it shows
 
 - **Current change**: the change being worked on (tasks in progress), otherwise the one waiting to be archived,
@@ -64,13 +80,14 @@ Without a working CLI everything except the validation results still works.
 
 | Option | Default | |
 |---|---|---|
-| `--project=<dir>` | current directory | folder that contains `openspec/` |
+| `<dir>` or `--project=<dir>` | current directory | a folder that contains `openspec/`; repeatable |
+| `--scan=<dir>` | | follow every project up to three levels below `<dir>`; repeatable |
 | `--port=<n>` | `4590` (or `PORT`) | |
 | `--host=<addr>` | `127.0.0.1` | use `0.0.0.0` only on a trusted network |
 | `--cli=<command>` | `openspec` (or `OPENSPEC_CLI`) | bare names are looked up on `PATH` |
 | `--no-cli` | | do not run the OpenSpec CLI |
 | `--parking-lot=<change>` | auto-detected | |
-| `--history=<file>` | `$XDG_STATE_HOME/openspec-dashboard/<project>-<hash>.json` (`~/.local/state/…`) | activity history |
+| `--history=<file-or-dir>` | `$XDG_STATE_HOME/openspec-dashboard/<project>-<hash>.json` (`~/.local/state/…`) | activity history; a directory with several projects |
 | `--no-open` | | do not open the browser (macOS) |
 
 Nine styles, picked in the header: Flat, Glass, Paper, Whiteboard, Notebook and Comic (each in light and dark), Blackboard, Matrix and Terminal (always dark). In the address, `?style=flat|glass|paper|whiteboard|blackboard|notebook|matrix|terminal|comic` and `?theme=light|dark` choose the look (otherwise the header buttons and the
