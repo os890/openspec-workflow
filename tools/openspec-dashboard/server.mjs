@@ -2890,7 +2890,8 @@ const server = http.createServer(async (req, res) => {
       return res.end(JSON.stringify({
         id: '/', name: 'OpenSpec Dashboard', short_name: 'OpenSpec', description: 'The progress of OpenSpec changes, live',
         start_url: '/', scope: '/', display: 'standalone', background_color: '#eef0fb', theme_color: '#5865f2',
-        icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }, { src: '/logo.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
+        // the PNGs have the margin of a macOS app icon (the tile is 70 % of the canvas); ?v= changes when they change
+        icons: [{ src: '/icon-192.png?v=2', sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: '/icon-512.png?v=2', sizes: '512x512', type: 'image/png', purpose: 'any' }],
       }));
     }
     if (url.pathname === '/' || url.pathname === '/index.html') {
