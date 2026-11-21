@@ -195,6 +195,9 @@ What makes it more than a status page:
 - **Talk to the agent** (`--agent`). A chat with a read-only project assistant, Claude Code sessions started on a
   ticket from the dashboard, and messages to a session that is already working, also one in a terminal (through
   a hook). It runs your local `claude` command with its own login: no API key, same plan.
+- **Edit the specs from a conversation.** Every tab of a change (tasks, proposal, design, spec deltas, validation)
+  has its own question box with that context. When the conversation finds something to change, Claude proposes
+  the updated file; you see a diff and accept or reject it.
 - **Quick replies in the chat.** React to an answer with one click (👍 ✅ 🙏 🎉 💡), ask for it again in simpler
   words (🔁), as a summary (📝) or as a table (📊), or quote it (↩, also just a selected part). Claude gets a short
   reference to the answer, so it knows what you mean without the answer being sent again; the chat stays quiet

@@ -322,6 +322,19 @@ span.ch-warn { color: var(--st-progress); }
   border-radius: 8px; padding: 6px 10px; font-size: 12px; line-height: 1.45; max-width: 320px; }
 .ch-tip .h { font-weight: 700; }
 .board.max .charts { padding-bottom: 8px; }
+/* proposed updates of a file: diff, accept, reject */
+.ed-card { border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 10px; padding: 8px 10px; margin: 8px 0; background: var(--surface); display: flex; flex-direction: column; gap: 6px; }
+.ed-card.done { border-left-color: var(--faint); }
+.ed-h { font-weight: 700; font-size: 13px; }
+.ed-stat { font-weight: 600; font-size: 12px; } .ed-stat .add { color: var(--st-complete); } .ed-stat .del { color: var(--st-blocked); }
+.ed-diff { font-family: var(--font-mono); font-size: 11.5px; line-height: 1.45; max-height: 360px; overflow: auto; border-radius: 6px; background: var(--surface-2); padding: 4px 0; }
+.ed-l { white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 8px 0 0; display: flex; }
+.ed-l > span { flex: none; width: 18px; text-align: center; color: var(--muted); user-select: none; }
+.ed-l.add { background: color-mix(in srgb, var(--st-complete) 16%, transparent); } .ed-l.add > span { color: var(--st-complete); }
+.ed-l.del { background: color-mix(in srgb, var(--st-blocked) 14%, transparent); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--st-blocked) 50%, transparent); } .ed-l.del > span { color: var(--st-blocked); }
+.ed-skip { color: var(--faint); font-style: italic; padding: 2px 18px; }
+.ed-done { font-size: 12.5px; color: var(--muted); }
+.ed-card .btn.primary { background: var(--accent) !important; color: var(--bg) !important; border-color: var(--accent) !important; font-weight: 700; }
 /* inline chat under the tabs of a change */
 .ic { margin-top: 18px; border-top: 1px dashed var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
 .ic-thread { display: flex; flex-direction: column; gap: 6px; }
@@ -1800,6 +1813,7 @@ async function renderFocus(s, el = $('focus'), forced = null) {
     <div class="tabs" role="tablist">${tabs.map(([k, label, ok]) => `<button type="button" class="tab" role="tab" data-tab="${k}" aria-selected="${k === tab}" ${ok ? '' : 'disabled'}>${label}</button>`).join('')}</div>
     <div class="f-body">${body}${AGENT_TOKEN ? icHtml(c, tab) : ''}</div>`;
   icRestore(el);
+  edFill();
   if (inDrawer) el.scrollTop = scroll; else if (!ui.boardMax) window.scrollTo(0, scroll);
 }
 
@@ -1826,21 +1840,21 @@ function icExchanges(c, tab) {
   const list = [];
   let cur = null;
   for (const j of conv.jobs) for (const l of j.log) {
-    if (l.kind === 'user') { cur = l.text.startsWith(prefix) ? { q: l.text.match(IC_RE)?.[3] ?? l.text, t: l.t, a: [] } : null; if (cur) list.push(cur); }
-    else if (l.kind === 'text' && !l.sub && cur) cur.a.push(l.text);
+    if (l.kind === 'user') { cur = l.text.startsWith(prefix) ? { q: (l.text.match(IC_RE)?.[3] ?? l.text).replace(/^Please propose an updated version of (\S+?)(?: that does this: (.*?)| that applies what we discussed)(?:, so that openspec validate passes)?\. Write the complete new content[\s\S]*$/, (_, f, what) => `✎ Propose an update${what ? `: ${what}` : ''}`), t: l.t, a: [], key: '' } : null; if (cur) list.push(cur); }
+    else if (l.kind === 'text' && !l.sub && cur) { if (!cur.key) cur.key = `${j.id}:${l.t}`; cur.a.push(l.text); }
   }
   return { list: list.slice(-3), running: ['running', 'starting'].includes(conv.last?.status) };
 }
 function icThreadHtml(c, tab) {
   const { list, running } = icExchanges(c, tab);
-  return list.map((e, i) => `<div class="ic-q"><span>${esc(e.q)}</span><time>${hhmm(e.t)}</time></div>${e.a.length ? `<div class="ic-a md">${md(e.a.join('\n\n'))}</div>`
+  return list.map((e, i) => `<div class="ic-q"><span>${esc(e.q)}</span><time>${hhmm(e.t)}</time></div>${e.a.length ? `<div class="ic-a md">${e.a.map((a, k) => editMd(a, `${e.key}:${k}`)).join('')}</div>`
     : i === list.length - 1 && running ? '<div class="ic-a ic-wait"><span class="ag-spin"></span>thinking…</div>' : ''}`).join('');
 }
 function icHtml(c, tab) {
   const key = `${c.name}|${tab}`;
   return `<div class="ic" data-ic="${esc(key)}">
     <div class="ic-thread">${icThreadHtml(c, tab)}</div>
-    <div class="ic-compose"><textarea class="ic-text" rows="1" placeholder="Ask about the ${esc(IC_LABEL[tab])} of ${esc(title(c.name))}…"></textarea><button class="btn" type="button" data-ic-send>Ask</button></div>
+    <div class="ic-compose"><textarea class="ic-text" rows="1" placeholder="Ask about the ${esc(IC_LABEL[tab])} of ${esc(title(c.name))}…"></textarea><button class="btn" type="button" data-ic-send>Ask</button>${icFiles(c, tab).length ? `<button class="btn" type="button" data-ic-propose title="Ask Claude for an updated version of ${esc(icFiles(c, tab).join(', '))}, with what you typed as the instructions (or what was discussed); you see a diff and accept or reject it">✎ Propose update</button>` : ''}</div>
     <div class="ic-note"><span class="ic-err"></span>Goes to the assistant with this context; it reads the project and changes nothing. Enter sends. <button class="link" type="button" data-chat="assistant">Continue in chat →</button></div>
   </div>`;
 }
@@ -1857,17 +1871,28 @@ function icRefresh() { // new answers: only the threads, not the whole tab view
     const [name, tab] = box.dataset.ic.split('|');
     const c = ui.state?.changes.find((x) => x.name === name);
     const th = box.querySelector('.ic-thread');
-    if (c && th) { const html = icThreadHtml(c, tab); if (th.innerHTML !== html) th.innerHTML = html; }
+    if (c && th) { const html = icThreadHtml(c, tab); if (th.dataset.html !== html) { th.innerHTML = html; th.dataset.html = html; } }
   }
+  edFill();
 }
-async function icSend(box) {
+// the files a tab's update would touch
+function icFiles(c, tab) {
+  const f = (n) => c.files.find((x) => x.name === n)?.path;
+  return (tab === 'tasks' ? [f('tasks.md')] : tab === 'proposal' ? [f('proposal.md')] : tab === 'design' ? [f('design.md')]
+    : tab === 'specs' || tab === 'validation' ? c.specs.files.map((x) => x.path) : []).filter(Boolean);
+}
+async function icSend(box, propose = false) {
   const ta = box.querySelector('.ic-text');
   const q = ta.value.trim();
-  if (!q) return;
+  if (!q && !propose) return;
   const [name, tab] = box.dataset.ic.split('|');
   const c = ui.state.changes.find((x) => x.name === name);
+  const files = icFiles(c, tab);
+  const text = propose
+    ? `${icTag(c, tab)} Please propose an updated version of ${files.join(', ')}${q ? ` that does this: ${q}` : ' that applies what we discussed'}${tab === 'validation' ? ', so that openspec validate passes' : ''}. Write the complete new content in a fenced block whose info string is "edit" and the path (four backticks if the content contains three), one block per changed file, and say in one sentence what changed.`
+    : `${icTag(c, tab)} ${q}`;
   try {
-    await agentPost('chat', { text: `${icTag(c, tab)} ${q}`, mode: 'assistant' });
+    await agentPost('chat', { text, mode: 'assistant' });
     ui.icDrafts.delete(box.dataset.ic); ta.value = ''; box.querySelector('.ic-err').textContent = '';
   } catch (e) { box.querySelector('.ic-err').textContent = `✕ ${e.message} `; }
 }
@@ -1882,7 +1907,10 @@ document.addEventListener('keydown', (e) => {
   if (!e.target.matches?.('.ic-text') || e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
   e.preventDefault(); icSend(e.target.closest('.ic'));
 });
-document.addEventListener('click', (e) => { const b = e.target.closest?.('[data-ic-send]'); if (b) { e.stopPropagation(); icSend(b.closest('.ic')); } }, true);
+document.addEventListener('click', (e) => {
+  const b = e.target.closest?.('[data-ic-send], [data-ic-propose]');
+  if (b) { e.stopPropagation(); icSend(b.closest('.ic'), b.matches('[data-ic-propose]')); }
+}, true);
 
 // ------------------------------------------------------------ render: side
 function renderMilestone(s) {
@@ -3089,6 +3117,106 @@ document.addEventListener('click', (e) => {
   ta?.focus();
 }, true);
 
+// ---- proposed updates of a file: the assistant writes the complete new content in a ```edit <path> block; the
+// dashboard shows a diff against the file as it is now, and only Accept writes it (if the file has not changed since).
+const ed = { items: new Map(), diffs: new Map(), pending: new Set(), notes: new Map(), decided: (() => { try { return JSON.parse(localStorage.getItem('osd-edits') || '{}'); } catch { return {}; } })() };
+const ED_SPLIT = /(`{3,})edit[ \t]+(\S+)[^\n]*\n([\s\S]*?)\n\1[ \t]*(?=\n|$)/g;
+const textHash = (t) => { let h = 0x811c9dc5; for (const ch of String(t ?? '')) { h ^= ch.codePointAt(0); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16); };
+function editMd(text, key) {
+  let out = '', last = 0, i = 0;
+  for (const m of text.matchAll(ED_SPLIT)) {
+    if (m.index > last) out += md(text.slice(last, m.index));
+    const id = `${key}:${i++}`;
+    ed.items.set(id, { path: m[2], content: m[3] });
+    out += edCardHtml(id);
+    last = m.index + m[0].length;
+  }
+  return out + (last < text.length ? md(text.slice(last)) : '');
+}
+function edCardHtml(id) {
+  const it = ed.items.get(id), d = ed.diffs.get(id), done = ed.decided[id];
+  const file = it.path.split('/').pop();
+  const head = `<div class="ed-h">✎ Proposed update of <code title="${esc(it.path)}">${esc(file)}</code>${d && !d.error ? ` <span class="ed-stat"><span class="add">+${d.adds}</span> <span class="del">−${d.dels}</span></span>` : ''}</div>`;
+  if (done) return `<div class="ed-card done" data-ed="${esc(id)}">${head}<div class="ed-done">${done === 'accepted' ? `✓ Accepted: <code>${esc(it.path)}</code> was updated.` : 'Rejected: the file stays as it is.'}</div></div>`;
+  return `<div class="ed-card" data-ed="${esc(id)}">${head}
+    <div class="ed-diff">${d ? d.error ? `<div class="ag-note warn">✕ ${esc(d.error)}</div>` : d.html : '<div class="ag-note">Comparing with the file…</div>'}</div>
+    <div class="ag-row"><button class="btn primary" type="button" data-ed-accept="${esc(id)}" ${d && !d.error ? '' : 'disabled'}>Accept</button><button class="btn" type="button" data-ed-reject="${esc(id)}">Reject</button><span class="ag-note ed-note ${ed.notes.has(id) ? 'warn' : ''}">${esc(ed.notes.get(id) ?? '')}</span></div>
+  </div>`;
+}
+// line diff (longest common subsequence), unchanged lines folded down to two lines of context
+function lineDiff(a, b) {
+  const A = a.split('\n'), B = b.split('\n'), n = A.length, m = B.length;
+  if (n * m > 4e6) return null;
+  const L = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = A[i] === B[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const ops = [];
+  let i = 0, j = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && A[i] === B[j]) { ops.push([' ', A[i]]); i++; j++; }
+    else if (j < m && (i >= n || L[i][j + 1] >= L[i + 1][j])) ops.push(['+', B[j++]]);
+    else ops.push(['-', A[i++]]);
+  }
+  return ops;
+}
+function diffHtml(ops) {
+  const keep = ops.map((o, k) => o[0] !== ' ' || ops.slice(Math.max(0, k - 2), k + 3).some((x) => x[0] !== ' '));
+  let html = '', skipped = 0;
+  const flush = () => { if (skipped) html += `<div class="ed-skip">… ${skipped} unchanged line${skipped > 1 ? 's' : ''}</div>`; skipped = 0; };
+  ops.forEach(([op, line], k) => {
+    if (!keep[k]) { skipped++; return; }
+    flush();
+    html += `<div class="ed-l ${op === '+' ? 'add' : op === '-' ? 'del' : ''}"><span>${op === ' ' ? '' : op === '+' ? '+' : '−'}</span>${esc(line) || ' '}</div>`;
+  });
+  flush();
+  return html;
+}
+async function edFill() {
+  for (const card of document.querySelectorAll('.ed-card:not(.done)')) {
+    const id = card.dataset.ed;
+    if (ed.diffs.has(id) || ed.pending.has(id)) continue;
+    const it = ed.items.get(id);
+    if (!it) continue;
+    ed.pending.add(id);
+    try {
+      const r = await fetch(withProject('/api/file?path=' + encodeURIComponent(it.path)));
+      if (!r.ok && r.status !== 404) throw new Error(r.status === 400 ? 'Only Markdown files under openspec/ can be updated.' : `Could not read ${it.path} (${r.status}).`);
+      const orig = r.ok ? await r.text() : '';
+      const ops = lineDiff(orig.replace(/\n$/, ''), it.content.replace(/\n$/, ''));
+      if (!ops) throw new Error('The file is too large for a preview.');
+      ed.diffs.set(id, { base: textHash(orig), adds: ops.filter((o) => o[0] === '+').length, dels: ops.filter((o) => o[0] === '-').length, html: (r.ok ? '' : '<div class="ag-note">A new file.</div>') + diffHtml(ops) });
+    } catch (e) { ed.diffs.set(id, { error: e.message }); }
+    ed.pending.delete(id);
+    for (const c of document.querySelectorAll(`.ed-card[data-ed="${CSS.escape(id)}"]`)) c.outerHTML = edCardHtml(id);
+  }
+}
+document.addEventListener('click', async (e) => {
+  const acc = e.target.closest?.('[data-ed-accept]'), rej = e.target.closest?.('[data-ed-reject]');
+  if (!acc && !rej) return;
+  e.stopPropagation();
+  const id = (acc ?? rej).dataset.edAccept ?? (acc ?? rej).dataset.edReject;
+  const it = ed.items.get(id), d = ed.diffs.get(id);
+  const card = (acc ?? rej).closest('.ed-card');
+  if (acc) {
+    acc.disabled = true;
+    try {
+      const r = await fetch(withProject('/api/file/write'), { method: 'POST', headers: { 'content-type': 'application/json', 'x-osd-token': AGENT_TOKEN }, body: JSON.stringify({ path: it.path, content: it.content, base: d.base }) });
+      const out = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+      if (!r.ok) { if (r.status === 409) ed.diffs.delete(id); throw new Error(out.error || `HTTP ${r.status}`); }
+      ui.fileCache.delete(it.path);
+    } catch (err) {
+      // e.g. the file changed meanwhile: say so, and show the diff against the file as it is now
+      ed.notes.set(id, `✕ ${err.message}`);
+      for (const c of document.querySelectorAll(`.ed-card[data-ed="${CSS.escape(id)}"]`)) c.outerHTML = edCardHtml(id);
+      if (!ed.diffs.has(id)) edFill();
+      return;
+    }
+    ed.notes.delete(id);
+  }
+  ed.decided[id] = acc ? 'accepted' : 'rejected';
+  try { localStorage.setItem('osd-edits', JSON.stringify(ed.decided)); } catch {}
+  for (const c of document.querySelectorAll(`.ed-card[data-ed="${CSS.escape(id)}"]`)) c.outerHTML = edCardHtml(id);
+}, true);
+
 // ---- live parts
 function threadHtml(c) {
   if (!c) return '';
@@ -3114,7 +3242,7 @@ function threadHtml(c) {
         const id = `${j.id}:${l.t}`;
         rx.msgs.set(id, l.text);
         const got = reacted.get(excerptOf(l.text)) ?? [];
-        out.push(`<div class="msg them ${l.sub ? 'sub' : ''} ${rx.openId === id ? 'rx-open' : ''}" data-msg="${esc(id)}"><div class="md">${c.newproject ? projectMd(l.text, id) : c.brainstorm ? brainstormMd(l.text, id, j.idea ?? c.jobs.find((x) => x.idea)?.idea) : md(l.text)}</div>
+        out.push(`<div class="msg them ${l.sub ? 'sub' : ''} ${rx.openId === id ? 'rx-open' : ''}" data-msg="${esc(id)}"><div class="md">${c.newproject ? projectMd(l.text, id) : c.brainstorm ? brainstormMd(l.text, id, j.idea ?? c.jobs.find((x) => x.idea)?.idea) : editMd(l.text, id)}</div>
           <div class="msg-foot">${l.sub ? '' : `<button type="button" class="rx-more" data-rx-more="${esc(id)}" aria-label="React, quote, rephrase, summarize" title="React, quote, rephrase, summarize">⋯</button><span class="rx-bar">${REACTIONS.map(([e, say]) => `<button type="button" class="rx" data-react="${e}" data-msg="${esc(id)}" title="${esc(`Sends: ${say}`)}">${e}</button>`).join('')}<span class="rx-sep"></span>${REQUESTS.map(([e, say, label]) => `<button type="button" class="rx" data-react="${e}" data-msg="${esc(id)}" title="${esc(`${label}: sends "${say}"`)}" aria-label="${label}">${e}</button>`).join('')}<button type="button" class="rx rx-q" data-quote="${esc(id)}" title="Quote: reply to this message (select a part of it first to quote just that)" aria-label="Quote">↩</button></span>`}
             <span class="meta">${got.length ? `<span class="rx-got" title="Your reactions">${[...new Set(got)].join('')}</span>` : ''}${hhmm(l.t)}</span></div>
         </div>`);
@@ -3201,6 +3329,7 @@ function renderAgentLive() {
     const th = $('ag-thread');
     const atEnd = th.scrollHeight - th.scrollTop - th.clientHeight < 60;
     th.innerHTML = threadHtml(c);
+    edFill();
     if (atEnd || ag.stick) { th.scrollTop = th.scrollHeight; ag.stick = false; }
     $('ag-route').innerHTML = c?.terminal ? '' : 'Enter sends · Shift+Enter for a new line';
   } else {

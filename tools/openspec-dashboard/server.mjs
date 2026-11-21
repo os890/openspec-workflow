@@ -1013,6 +1013,7 @@ function createAgent(project) {
       'Work read-only: read and search files, never change them. When the user wants something built or changed, suggest starting a session on a ticket (from the ticket in the dashboard) or sending a message to the session that works on it.',
       'OpenSpec lives in openspec/: roadmap.md (planned changes, milestones), backlog/ (drafts), changes/<name>/ (proposal.md, design.md, specs/, tasks.md), changes/archive/, specs/ (current specs).',
       status && `Status when this chat started: ${status}`,
+      'You cannot change files, but you can propose an update of a Markdown file under openspec/ (a proposal, design, tasks or spec delta) when the user asks for it or agrees: write the complete new content of the file in a fenced code block whose info string is "edit" followed by the file path, e.g. ```edit openspec/changes/x/design.md (use four backticks for the fence when the content itself contains ```), one block per file, and say in one sentence what changed. The dashboard shows the user a diff to accept or reject.',
       'Answer like in a chat: short, in Markdown, with file references where they help.',
     ].filter(Boolean).join('\n');
   }
@@ -1731,6 +1732,23 @@ function remapDeps(raw, map) {
   const soft = softDependsOn.length ? `(${fmtNums(softDependsOn.map(m))})` : '';
   return [hard, soft].filter(Boolean).join(', ') || '—';
 }
+// ---------------------------------------------------------------- accepting a proposed update of a file (with --agent)
+// The assistant only proposes (an ```edit <path> block); the user's Accept writes it. Only Markdown under openspec/,
+// new files only below openspec/changes/, and only when the file is still what the preview was computed against.
+const textHash = (t) => { let h = 0x811c9dc5; for (const ch of String(t ?? '')) { h ^= ch.codePointAt(0); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16); };
+async function writeOpenspecFile(project, { path: rel, content, base }) {
+  const file = path.resolve(project.root, String(rel ?? ''));
+  const openspec = path.join(project.root, 'openspec');
+  if (!file.startsWith(openspec + path.sep) || !file.endsWith('.md')) throw httpError(400, 'Only Markdown files under openspec/ can be updated here.');
+  if (typeof content !== 'string' || content.length > 400000) throw httpError(400, 'No content, or too long.');
+  const now = await readText(file);
+  if (now === null && !file.startsWith(path.join(openspec, 'changes') + path.sep)) throw httpError(404, `${rel} does not exist; new files only below openspec/changes/.`);
+  if ((now ?? '') !== '' && textHash(now) !== base) throw httpError(409, `${rel} changed since the preview was made; look at the new preview.`);
+  await writeAtomic(file, content.endsWith('\n') ? content : content + '\n');
+  project.schedule(0);
+  return { written: rel };
+}
+
 // ---------------------------------------------------------------- new tickets and ideas (with --agent)
 // "New idea" and brainstorming save a draft proposal to openspec/backlog/<name>.md, either
 //   - as an idea: with the idea marker and no roadmap row (it still needs refinement), or
@@ -2165,7 +2183,7 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ error: e.message }));
       }
     }
-    const WRITES = { '/api/roadmap/move': moveInRoadmap, '/api/backlog/add': addToBacklog, '/api/backlog/remove': removeIdea, '/api/discover': (_, body) => discoveryAction(body) };
+    const WRITES = { '/api/file/write': writeOpenspecFile, '/api/roadmap/move': moveInRoadmap, '/api/backlog/add': addToBacklog, '/api/backlog/remove': removeIdea, '/api/discover': (_, body) => discoveryAction(body) };
     if (WRITES[url.pathname] && req.method === 'POST') {
       if (!AGENT) { res.writeHead(404); return res.end('start the dashboard with --agent'); }
       const origin = req.headers.origin;

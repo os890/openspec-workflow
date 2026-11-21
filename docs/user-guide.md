@@ -84,6 +84,14 @@ the agent works. It updates within a second of every file change. The screenshot
   right there; **Continue in chat** opens the whole conversation.
 
 ![Asking about the design right in the tab](images/dashboard-inline-chat.png)
+
+  When the conversation shows something to change, **✎ Propose update** (next to Ask) asks Claude for an updated
+  version of that tab's file, with what you typed as the instructions, or what was discussed. The proposal shows as
+  a diff (added lines green, removed lines red, unchanged ones folded); **Accept** writes the file, **Reject** leaves
+  it as it is. Claude itself never writes: only Accept does, and only if the file has not changed since the preview
+  (otherwise you get a new preview). This also works in the chat, when Claude proposes an update there.
+
+![A proposed update of the design, as a diff to accept or reject](images/dashboard-propose-update.png)
 - **Current milestone** lists the other changes of the milestone; **Activity** lists every checked-off task and
   status change since the dashboard started, with a chart of tasks done over time.
 - The **Board** shows every change in the column its files put it in. "Waits for #3, #6" names the unfinished

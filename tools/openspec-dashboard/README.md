@@ -200,6 +200,11 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
 - **A question box under each tab** of a change (Tasks, Proposal, Design, Spec deltas, Validation): the question
   goes to the assistant with that part as context (`[About the design of the change x: <file>] …`), the answers
   about that tab show inline, and the chat marks such messages with their context.
+- **Proposed updates**: **✎ Propose update** under a tab (or a request in the chat) makes the assistant write the
+  complete new version of the file in a ```` ```edit <path> ```` block. The dashboard shows it as a diff against the
+  file as it is now; **Accept** writes it, **Reject** drops it. The assistant stays read-only: only Accept writes,
+  only Markdown under `openspec/` (new files only below `openspec/changes/`), and only if the file is unchanged
+  since the preview.
 - **Agent…** on a ticket, with the ticket's context added automatically:
   - **Ask**: a read-only question about the ticket; "Ask about this task" next to the current task prefills one.
   - **Start session**: a new Claude Code session that works on the ticket with the ticket workflow; it opens as a
