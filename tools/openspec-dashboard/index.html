@@ -1428,7 +1428,8 @@ body.board-max { overflow: hidden; }
 .agent-panel.term-look #ag-thread .rx { filter: none; }
 .cli-step { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: calc(var(--term-fs, 13.5px) - 1px); line-height: 1.45; align-self: stretch; }
 .cli-step.sub { margin-left: 16px; opacity: .8; }
-.cli-call { color: #7ee787; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cli-call { color: #d6dde6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cli-call .cli-dot { color: #3fb950; }
 .cli-res { color: #8b949e; white-space: pre-wrap; overflow-wrap: anywhere; padding-left: 2ch; }
 .cli-res.err { color: #ff7b72; }
 .cli-more { display: block; color: #6e7681; }
@@ -3261,7 +3262,7 @@ function termThreadHtml(sid) {
       const res = !r ? '' : r.kind === 'error' ? `<div class="cli-res err">⎿  ${esc(r.text)}</div>`
         : /^(Read|Write)\(/.test(e.cli ?? '') && r.lines > 1 ? `<div class="cli-res">⎿  ${/^Read/.test(e.cli) ? 'Read' : 'Wrote'} ${r.lines} lines</div>`
         : r.text ? `<div class="cli-res">⎿  ${esc(r.text)}${r.lines > 4 ? `<span class="cli-more">… +${r.lines - 4} lines</span>` : ''}</div>` : '<div class="cli-res">⎿  (no output)</div>';
-      out.push(`<div class="cli-step ${e.sub ? 'sub' : ''}"><div class="cli-call">⏺ ${esc(e.cli ?? e.text)}</div>${res}</div>`);
+      out.push(`<div class="cli-step ${e.sub ? 'sub' : ''}"><div class="cli-call"><span class="cli-dot">⏺</span> ${esc(e.cli ?? e.text)}</div>${res}</div>`);
       continue;
     }
     if (e.kind === 'result') continue;
