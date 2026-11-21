@@ -283,6 +283,28 @@ coloured bar), the current milestone, validation problems and when something las
 active project comes first and the cards update live. Click a card, or pick the project in the header, to open its
 dashboard; **All projects** in the picker returns to the overview.
 
+### Archive and unfollow
+
+Every project the dashboard follows costs a little all the time: it watches `openspec/`, looks at the files of the
+whole project to tell when something was last written, and validates the changes with the OpenSpec CLI (in a
+container, if you use one) whenever `openspec/` changes. So with `--agent`, each card has two links at the bottom
+(they show when you point at the card):
+
+- **Archive**: for a project that is done or on hold. The dashboard stops watching, scanning and validating it; it
+  moves to a folded **Archived** section below the projects, with the status it had. **Reactivate** follows it again.
+- **Unfollow**: the dashboard stops following it and lists it below only by name; **Follow again** brings it back,
+  ✕ removes it from the list.
+
+Neither changes anything in the project, and both are remembered, also for projects given on the command line. The
+dashboard keeps following at least one project, and a project Claude is working in (a session or an onboarding)
+can only be put aside once that has ended.
+
+![A project's Archive and Unfollow links, an archived project and an unfollowed one](images/dashboard-archived.png)
+
+To keep large projects cheap, the dashboard looks at a project's files every 10 seconds only while someone has it
+open, and every 2 minutes otherwise (the "files written" figure on a card can be up to 2 minutes old); a project
+that takes long to look at is looked at less often.
+
 ### Onboard more projects
 
 With `--agent`, the overview also finds projects to onboard (the lower half of the screenshot above). Enter a folder

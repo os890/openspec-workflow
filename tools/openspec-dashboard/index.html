@@ -1301,7 +1301,7 @@ body.board-max { overflow: hidden; }
 .disc { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
 .disc-form { display: flex; gap: 8px 10px; align-items: center; flex-wrap: wrap; }
 .disc-form input[type="text"], .disc-form #disc-path { flex: 1 1 320px; max-width: 560px; font: inherit; font-size: 13.5px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 11px; }
-.disc .btn.primary, .agent-panel .sc-decide .btn.primary { background: var(--accent) !important; color: var(--bg) !important; border-color: var(--accent) !important; font-weight: 700; }
+.disc .btn.primary, .ov-parked .btn.primary, .agent-panel .sc-decide .btn.primary { background: var(--accent) !important; color: var(--bg) !important; border-color: var(--accent) !important; font-weight: 700; }
 .disc-toggle { font-size: 12.5px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
 .disc-note { font-size: 12.5px; color: var(--muted); } .disc-note.warn { color: var(--st-blocked); font-weight: 600; }
 .disc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -1341,6 +1341,17 @@ body.board-max { overflow: hidden; }
 .ov-card { display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; color: inherit; text-decoration: none; min-width: 0; transition: box-shadow .15s, transform .15s; }
 .ov-card:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
 .ov-card.fresh { animation: moved 3s ease-out; }
+.ov-acts { display: flex; gap: 14px; justify-content: flex-end; font-size: 12.5px; opacity: 0; transition: opacity .15s; margin-top: -6px; }
+.ov-card:hover .ov-acts, .ov-card:focus-within .ov-acts, .ov-acts.show { opacity: 1; }
+@media (hover: none) { .ov-acts { opacity: 1; } }
+.ov-parked { margin-top: 26px; }
+.ov-parked > summary { cursor: pointer; display: flex; gap: 10px; align-items: baseline; margin-bottom: 12px; list-style: none; }
+.ov-parked > summary::-webkit-details-marker { display: none; }
+.ov-parked > summary::before { content: '▸'; color: var(--muted); } .ov-parked[open] > summary::before { content: '▾'; }
+.ov-arch { opacity: .82; } .ov-arch:hover { opacity: 1; }
+.ov-unf { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: baseline; margin-top: 14px; font-size: 13px; }
+.ov-unf-i { display: inline-flex; gap: 8px; align-items: baseline; }
+.ov-note { font-size: 12.5px; color: var(--st-blocked); }
 .ov-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .ov-name { font-size: 19px; font-weight: 800; letter-spacing: -.01em; overflow-wrap: anywhere; }
 .ov-top .pill { margin-left: auto; }
@@ -3024,6 +3035,7 @@ function connect() {
   es.onmessage = (ev) => { const d = JSON.parse(ev.data); $('conn').innerHTML = `<span class="dot on"></span>live · ${hhmm(d.scannedAt)}`; accept(d); };
   es.onerror = () => { $('conn').innerHTML = '<span class="dot off"></span>disconnected, retrying…'; };
   es.addEventListener('agent', (ev) => { ag.view = JSON.parse(ev.data); renderAgentLive(); icRefresh(); if (pd.sent) renderPropose(); });
+  es.addEventListener('gone', () => { es.close(); location.href = hrefFor(null); }); // unfollowed or archived
 }
 
 // ------------------------------------------------------------ interaction
@@ -4238,6 +4250,40 @@ function hrefFor(id) {
 }
 
 const CUR_LABEL = { 'in-progress': 'Working on', complete: 'Ready to archive', specified: 'Up next · planned', proposed: 'Up next' };
+// archived projects (folded, with the status they had) and unfollowed ones (by name), with the way back
+function parkedHtml(o) {
+  const a = o.archived ?? [], u = o.unfollowed ?? [];
+  if (!a.length && !u.length) return '';
+  const back = (x, act, label) => x.exists ? `<button class="${act === 'reactivate' ? 'btn primary' : 'link'}" type="button" data-proj-act="${act}" data-root="${esc(x.root)}">${label}</button>`
+    : `<span class="muted">its openspec/ folder is gone</span><button class="link" type="button" data-proj-act="forget" data-root="${esc(x.root)}">Remove from the list</button>`;
+  const arch = (x) => { const m = x.summary; return `<div class="panel ov-card ov-arch">
+      <div class="ov-top"><span class="ov-name">${esc(x.name)}</span><span class="pill" style="--st:var(--st-archived)">Archived</span></div>
+      <div class="ov-path">${esc(x.display)}</div>
+      ${m && !m.loading ? `<div class="ov-row"><span class="num">${m.done}/${m.changes} changes done</span><span class="num">${m.totals.done}/${m.totals.total} tasks</span>${m.current ? `<span>last: ${esc(title(m.current.name))}</span>` : ''}</div>` : ''}
+      <div class="ov-row"><span>archived ${ago(x.at)}</span></div>
+      ${AGENT_TOKEN ? `<div class="ov-acts show">${back(x, 'reactivate', 'Reactivate')}</div>` : ''}</div>`; };
+  return `<details class="ov-parked" ${ui.parkedOpen ? 'open' : ''} data-parked><summary><span class="label">${a.length ? 'Archived' : 'Unfollowed'}</span><span class="muted">${[a.length && `${a.length} archived`, u.length && `${u.length} unfollowed`].filter(Boolean).join(' · ')} · not watched, scanned or validated</span></summary>
+    ${a.length ? `<div class="ov-grid">${a.map(arch).join('')}</div>` : ''}
+    ${u.length ? `<div class="ov-unf"><span class="muted">Unfollowed:</span>${u.map((x) => `<span class="ov-unf-i" title="${esc(x.display)}"><b>${esc(x.name)}</b>${AGENT_TOKEN ? back(x, 'follow', 'Follow again') : ''}${AGENT_TOKEN && x.exists ? `<button class="link" type="button" data-proj-act="forget" data-root="${esc(x.root)}" title="Remove it from this list">✕</button>` : ''}</span>`).join('')}</div>` : ''}
+  </details>`;
+}
+document.addEventListener('toggle', (e) => { if (e.target.matches?.('[data-parked]')) ui.parkedOpen = e.target.open; }, true);
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest?.('[data-proj-act]');
+  if (!b) return;
+  e.preventDefault(); e.stopPropagation(); // the buttons sit inside a card that links to the project
+  const act = b.dataset.projAct;
+  if (act === 'unfollow' && !confirm(`Unfollow ${b.dataset.name}?\n\nThe dashboard stops watching it; its files stay as they are. "Follow again" (below the projects) brings it back.`)) return;
+  b.disabled = true;
+  try {
+    const r = await fetch('/api/project', { method: 'POST', headers: { 'content-type': 'application/json', 'x-osd-token': AGENT_TOKEN }, body: JSON.stringify({ action: act, project: b.dataset.id, root: b.dataset.root }) });
+    const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+    ui.ovNote = '';
+    if (act === 'archive') ui.parkedOpen = ui.parkedOpen ?? false;
+  } catch (err) { ui.ovNote = `✕ ${err.message}`; b.disabled = false; }
+  if (ui.overview) renderOverview(ui.overview);
+}, true);
 function renderOverview(o) {
   $('git-btn').hidden = true;
   const prev = new Map((ui.overview?.projects ?? []).map((p) => [p.id, p.lastEvent?.t ?? 0]));
@@ -4267,15 +4313,18 @@ function renderOverview(o) {
       <div class="ov-stack" title="${order.filter((k) => p.counts[k]).map((k) => `${STATUS[k].label}: ${p.counts[k]}`).join(' · ')}">${order.filter((k) => p.counts[k]).map((k) => `<span style="width:${(p.counts[k] / n) * 100}%;background:${stVar(k)}"></span>`).join('')}</div>
       <div class="ov-row"><span class="num">${p.done}/${p.changes} changes done</span><span class="num">${p.totals.done}/${p.totals.total} tasks</span>${p.milestone ? `<span>${esc(p.milestone.id)} ${esc(p.milestone.title)} · <span class="num">${p.milestone.done}/${p.milestone.total}</span></span>` : ''}</div>
       <div class="ov-row"><span>last activity ${ago(p.lastActivity)}</span>${p.filesLast15m ? `<span class="num">${p.filesLast15m} files written in 15 min</span>` : ''}${p.invalid ? `<span class="warn">✕ ${p.invalid} failing validation</span>` : ''}${p.agent?.session ? `<span><span class="dot on"></span>session on ${esc(title(p.agent.session))}</span>` : p.agent?.external ? '<span><span class="dot on"></span>Claude Code active</span>' : ''}${p.agent?.queued ? `<span>${p.agent.queued} message${p.agent.queued > 1 ? 's' : ''} queued</span>` : ''}${p.cli?.error ? '<span class="warn">CLI error</span>' : ''}</div>
+      ${AGENT_TOKEN ? `<div class="ov-acts"><button class="link" type="button" data-proj-act="archive" data-id="${esc(p.id)}" data-name="${esc(p.name)}" title="Stop following it for now; it stays below, folded, with its last status">Archive</button><button class="link" type="button" data-proj-act="unfollow" data-id="${esc(p.id)}" data-name="${esc(p.name)}" title="Stop following it; its files stay as they are">Unfollow</button></div>` : ''}
     </a>`;
   };
   morphHtml($('overview'), `
-    <div class="ov-head"><span class="label">Projects</span><span class="muted">${list.length} followed · ${working} with a change in progress</span></div>
+    <div class="ov-head"><span class="label">Projects</span><span class="muted">${list.length} followed · ${working} with a change in progress</span><span class="ov-note">${esc(ui.ovNote ?? '')}</span></div>
     <div class="ov-grid">${list.map(card).join('')}</div>
+    ${parkedHtml(o)}
     ${o.discovery ? discoveryHtml(o.discovery) : ''}`);
   // the project picker follows projects added while the dashboard runs
   const sel = $('project');
-  if (sel && sel.options.length !== list.length + 1) {
+  if (sel && sel.dataset.ids !== o.projects.map((p) => p.id).join(' ')) {
+    sel.dataset.ids = o.projects.map((p) => p.id).join(' ');
     sel.innerHTML = `<option value="">All projects (${list.length})</option>` + o.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
     sel.value = '';
   }
@@ -4649,8 +4698,9 @@ function startOverview() {
   let list = [];
   try { list = (await (await fetch('/api/projects')).json()).projects ?? []; } catch { /* older server: one project */ }
   if (list.length > 1 || AGENT_TOKEN) { // with --agent the overview (and its discovery) is reachable with one project too
-    if (PROJECT && !list.some((p) => p.id === PROJECT)) PROJECT = null;
-    if (!PROJECT && list.length === 1 && !PARAMS.has('overview')) PROJECT = list[0].id;
+    const gone = PROJECT && !list.some((p) => p.id === PROJECT); // unfollowed or archived meanwhile: the overview
+    if (gone) { PROJECT = null; history.replaceState(null, '', hrefFor(null)); }
+    if (!PROJECT && list.length === 1 && !PARAMS.has('overview') && !gone) PROJECT = list[0].id;
     const sel = $('project');
     sel.innerHTML = `<option value="">All projects (${list.length})</option>` + list.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
     sel.value = PROJECT ?? '';

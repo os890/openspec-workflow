@@ -766,6 +766,7 @@ function createProject(root, id, historyFile, onChange) {
 
   let timer = null;
   function schedule(delay = 250) {
+    if (project.stopped) return;
     clearTimeout(timer);
     timer = setTimeout(async () => { await publish(); cliDebounced(); }, delay);
   }
@@ -779,6 +780,7 @@ function createProject(root, id, historyFile, onChange) {
   }
   function cliRetry() { cli.nextTry = 0; cliSig = null; cliDebounced(); } // after the container engine came back
   function cliDebounced() {
+    if (project.stopped) return;
     clearTimeout(cliTimer);
     cliTimer = setTimeout(async () => {
       if (!cli.available || cliRunning) return;
@@ -829,17 +831,20 @@ function createProject(root, id, historyFile, onChange) {
     };
   }
 
+  let watcher = null;
   function start() {
-    try { fs.watch(OPENSPEC, { recursive: true }, () => schedule()); }
+    try { watcher = fs.watch(OPENSPEC, { recursive: true }, () => schedule()); }
     catch (e) { console.warn(`[${id}] fs.watch unavailable, polling only:`, e.message); }
   }
+  // unfollowed or archived: no more watching, scanning or validating
+  function stop() { project.stopped = true; watcher?.close(); watcher = null; clearTimeout(timer); clearTimeout(cliTimer); }
 
   async function timeline() {
     const g = await gitTimeline(root);
     return mergeTimeline(g, history.events, project.state?.changes ?? []);
   }
 
-  return Object.assign(project, { timeline, gitLog: (q) => gitLog(root, q), gitShow: (h) => gitShow(root, h), publish, schedule, cliDebounced, cliRetry, refreshCli, scanWorkspace, summary, start, openspecDir: OPENSPEC });
+  return Object.assign(project, { stop, timeline, gitLog: (q) => gitLog(root, q), gitShow: (h) => gitShow(root, h), publish, schedule, cliDebounced, cliRetry, refreshCli, scanWorkspace, summary, start, openspecDir: OPENSPEC });
 }
 
 // ---------------------------------------------------------------- agent (opt-in with --agent)
@@ -1314,17 +1319,23 @@ function createAgent(project) {
       queued: inbox.messages.filter((m) => m.state === 'queued').length,
     };
   }
+  let inboxWatch = null, inboxTimer = null;
   function startWatching() {
     const dir = inboxDir(root);
     fs.mkdirSync(dir, { recursive: true });
     let t = null;
-    try { fs.watch(dir, { recursive: true }, () => { clearTimeout(t); t = setTimeout(reloadInbox, 150); }); } catch { /* the interval below still runs */ }
-    setInterval(reloadInbox, 10000);
+    try { inboxWatch = fs.watch(dir, { recursive: true }, () => { clearTimeout(t); t = setTimeout(reloadInbox, 150); }); } catch { /* the interval below still runs */ }
+    inboxTimer = setInterval(reloadInbox, 10000);
     reloadInbox();
   }
+  function stopWatching() { // the project is unfollowed or archived: idle conversations end too (they can be resumed)
+    inboxWatch?.close(); clearInterval(inboxTimer); inboxWatch = inboxTimer = null;
+    for (const j of jobs) if (j.kind === 'chat' && j.child) j.child.stdin.end();
+  }
+  const busy = () => jobs.some((j) => j.child && ['starting', 'running'].includes(j.status) && j.kind !== 'chat');
   sttListeners.add(() => changed(0));
   rpListeners.add(() => changed(0));
-  return { view, ask, chat, start, message, control, cancel, brief, startWatching, onboard };
+  return { view, ask, chat, start, message, control, cancel, brief, startWatching, stopWatching, busy, onboard };
 }
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => { for (const c of children) { try { c.kill('SIGTERM'); } catch { /* gone */ } } process.exit(0); });
@@ -2118,9 +2129,26 @@ function overviewChanged() {
   }, 200);
 }
 
+// ---------------------------------------------------------------- unfollowed and archived projects
+// Remembered in projects.json (also for projects given with --project): the dashboard does not watch, scan or
+// validate them. An archived project stays on the overview, folded, with the status it had; Reactivate follows it
+// again. An unfollowed one is listed there only by name, with Follow again.
+const PROJ_FILE = path.join(STATE_DIR, 'projects.json');
+const parkedState = { unfollowed: new Map(), archived: new Map() }; // root -> { name, display, at[, summary] }
+try {
+  const d = JSON.parse(fs.readFileSync(PROJ_FILE, 'utf8'));
+  parkedState.unfollowed = new Map(Object.entries(d.unfollowed ?? {}));
+  parkedState.archived = new Map(Object.entries(d.archived ?? {}));
+} catch { /* first use */ }
+const saveParked = () => { try { fs.mkdirSync(STATE_DIR, { recursive: true }); fs.writeFileSync(PROJ_FILE, JSON.stringify({ unfollowed: Object.fromEntries(parkedState.unfollowed), archived: Object.fromEntries(parkedState.archived) }, null, 1)); } catch { /* not essential */ } };
+const isParked = (root) => { let r = root; try { r = fs.realpathSync(root); } catch { /* gone */ } return [root, r].some((x) => parkedState.unfollowed.has(x) || parkedState.archived.has(x)); };
+
 const projects = [];
 const usedIds = new Set();
-for (const root of uniqueRoots) {
+// one project stays followed even if all were put aside (the dashboard needs one)
+const startRoots = uniqueRoots.filter((r) => !isParked(r));
+if (!startRoots.length && uniqueRoots.length) { startRoots.push(uniqueRoots[0]); parkedState.unfollowed.delete(uniqueRoots[0]); parkedState.archived.delete(uniqueRoots[0]); }
+for (const root of startRoots) {
   const base = path.basename(root).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'project';
   let pid = base;
   for (let n = 2; usedIds.has(pid); n++) pid = `${base}-${n}`;
@@ -2131,7 +2159,8 @@ for (const root of uniqueRoots) {
 }
 const byId = new Map(projects.map((p) => [p.id, p]));
 const projectFor = (url) => byId.get(url.searchParams.get('project')) ?? projects[0];
-const overview = () => ({ scannedAt: Date.now(), projects: projects.map((p) => p.summary()), discovery: AGENT ? discoveryView() : null });
+const parkedList = (m) => [...m.entries()].map(([root, x]) => ({ root, ...x, exists: fs.existsSync(path.join(root, 'openspec')) })).sort((a, b) => b.at - a.at);
+const overview = () => ({ scannedAt: Date.now(), projects: projects.map((p) => p.summary()), archived: parkedList(parkedState.archived), unfollowed: parkedList(parkedState.unfollowed), discovery: AGENT ? discoveryView() : null });
 async function bootProject(p) { await p.scanWorkspace(); await p.publish(); p.start(); p.agent?.startWatching(); p.cliDebounced(); }
 // Follow one more project while the dashboard runs (after onboarding, or a folder that has openspec/ already).
 function addProject(dir) {
@@ -2163,6 +2192,40 @@ const disc = { path: null, scanning: false, scannedAt: null, error: null, candid
 try { const d = JSON.parse(fs.readFileSync(DISC_FILE, 'utf8')); disc.path = d.path ?? null; disc.skipped = new Set(d.skipped ?? []); disc.added = new Set(d.added ?? []); } catch { /* first use */ }
 const saveDisc = () => { try { fs.mkdirSync(STATE_DIR, { recursive: true }); fs.writeFileSync(DISC_FILE, JSON.stringify({ path: disc.path, skipped: [...disc.skipped], added: [...disc.added] })); } catch { /* not essential */ } };
 function adopt(dir) { const p = addProject(dir); disc.added.add(dir); saveDisc(); overviewChanged(); return p; }
+// Unfollow / Archive a followed project, Reactivate an archived one or Follow an unfollowed one again.
+function projectAction(body) {
+  const action = String(body.action ?? '');
+  if (action === 'unfollow' || action === 'archive') {
+    const p = byId.get(String(body.project ?? ''));
+    if (!p) throw httpError(404, 'No such project.');
+    if (projects.length <= 1) throw httpError(409, 'It is the only project the dashboard follows.');
+    if (p.agent?.busy()) throw httpError(409, 'Claude is working in this project (a session or an onboarding); end it first.');
+    const entry = { name: p.name, display: displayPath(p.root), at: Date.now(), ...(action === 'archive' ? { summary: p.state ? p.summary() : null } : {}) };
+    p.stop(); p.agent?.stopWatching();
+    projects.splice(projects.indexOf(p), 1); byId.delete(p.id);
+    for (const res of p.clients) { res.write(`event: gone\ndata: ${JSON.stringify({ action })}\n\n`); res.end(); }
+    p.clients.clear();
+    parkedState.unfollowed.delete(p.root); parkedState.archived.delete(p.root);
+    (action === 'archive' ? parkedState.archived : parkedState.unfollowed).set(p.root, entry);
+    saveParked(); overviewChanged();
+    console.log(`  - ${p.id.padEnd(22)} ${action === 'archive' ? 'archived' : 'unfollowed'}`);
+    return { ok: true };
+  }
+  if (action === 'reactivate' || action === 'follow') {
+    const root = String(body.root ?? '');
+    if (!parkedState.archived.has(root) && !parkedState.unfollowed.has(root)) throw httpError(404, 'Not an archived or unfollowed project.');
+    if (!fs.existsSync(path.join(root, 'openspec'))) throw httpError(409, 'Its openspec/ folder is gone.');
+    parkedState.archived.delete(root); parkedState.unfollowed.delete(root); saveParked();
+    const p = addProject(root);
+    disc.added.add(root); saveDisc(); overviewChanged();
+    return { project: p.id };
+  }
+  if (action === 'forget') { // remove an unfollowed project from the list
+    parkedState.unfollowed.delete(String(body.root ?? '')); saveParked(); overviewChanged();
+    return { ok: true };
+  }
+  throw httpError(400, 'Unknown action.');
+}
 const scouts = new Map();
 const newChats = new Map(); // parent folder -> pseudo project for brainstorming a new project there
 const expandHome = (d) => path.resolve(String(d ?? '').trim().replace(/^~(?=$|\/)/, os.homedir()));
@@ -2280,7 +2343,24 @@ async function discoveryAction(body) {
 
 // ---------------------------------------------------------------- timers
 setInterval(() => projects.forEach((p) => p.schedule(0)), 5000);                 // safety net for missed events
-setInterval(async () => { for (const p of projects) { await p.scanWorkspace(); p.schedule(0); } }, 10000);
+// The workspace scan (the modification time of every file, for "files written lately") walks the whole project: every
+// 10 s while someone has the project open, every 2 minutes otherwise, and never more often than 20 times as long as
+// the last scan took (a large project is scanned less often).
+let scanning = false;
+setInterval(async () => {
+  if (scanning) return;
+  scanning = true;
+  try {
+    for (const p of [...projects]) {
+      if (p.stopped || Date.now() < (p.nextScan ?? 0)) continue;
+      const t0 = Date.now();
+      await p.scanWorkspace();
+      p.scanMs = Date.now() - t0;
+      p.nextScan = Date.now() + Math.max(p.clients.size ? 10e3 : 120e3, p.scanMs * 20);
+      p.schedule(0);
+    }
+  } finally { scanning = false; }
+}, 5000);
 setInterval(() => projects.forEach((p) => p.cliDebounced()), 60000);              // validation also follows schema/config
 setInterval(() => {
   for (const p of projects) for (const res of p.clients) res.write(': ping\n\n');
@@ -2335,7 +2415,7 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ error: e.message }));
       }
     }
-    const WRITES = { '/api/file/write': writeOpenspecFile, '/api/roadmap/move': moveInRoadmap, '/api/backlog/add': addToBacklog, '/api/backlog/remove': removeIdea, '/api/discover': (_, body) => discoveryAction(body) };
+    const WRITES = { '/api/file/write': writeOpenspecFile, '/api/roadmap/move': moveInRoadmap, '/api/backlog/add': addToBacklog, '/api/backlog/remove': removeIdea, '/api/discover': (_, body) => discoveryAction(body), '/api/project': (_, body) => projectAction(body) };
     if (WRITES[url.pathname] && req.method === 'POST') {
       if (!AGENT) { res.writeHead(404); return res.end('start the dashboard with --agent'); }
       const origin = req.headers.origin;
@@ -2412,10 +2492,12 @@ const server = http.createServer(async (req, res) => {
         req.on('close', () => overviewClients.delete(res));
         return;
       }
+      if (url.searchParams.get('project') && !byId.has(url.searchParams.get('project'))) { res.write('event: gone\ndata: {}\n\n'); return res.end(); } // unfollowed or archived
       const p = projectFor(url);
       res.write(`retry: 2000\nid: ${p.rev}\ndata: ${JSON.stringify({ rev: p.rev, scannedAt: Date.now(), ...p.state })}\n\n`);
       if (p.agent) res.write(`event: agent\ndata: ${JSON.stringify(p.agent.view())}\n\n`);
       p.clients.add(res);
+      if ((p.nextScan ?? 0) - Date.now() > 10e3) p.nextScan = Date.now() + Math.min(10e3, (p.scanMs ?? 0) * 20); // opened: scan soon
       req.on('close', () => p.clients.delete(res));
       return;
     }
@@ -2445,7 +2527,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 for (const p of projects) { await p.scanWorkspace(); await p.publish(); p.start(); p.agent?.startWatching(); }
-if (AGENT) for (const dir of disc.added) if (fs.existsSync(path.join(dir, 'openspec'))) addProject(dir); // onboarded or followed earlier
+if (AGENT) for (const dir of disc.added) if (fs.existsSync(path.join(dir, 'openspec')) && !isParked(fs.realpathSync(dir))) addProject(dir); // onboarded or followed earlier
 if (AGENT && disc.path && fs.existsSync(disc.path)) discoveryAction({ action: 'scan', path: disc.path }).catch(() => {}); // the last discovery again
 if (USE_RP) { detectRephrase().then(() => console.log(`  Rephrasing: ${rp.available ? (rp.kind === 'url' ? RP_URL : `${rp.engine} image ${rp.image}, model ${rp.model}`) : `off (${rp.error})`}`)); setInterval(detectRephrase, 60000); }
 if (USE_STT) { detectStt().then(() => console.log(`  Voice input: ${stt.available ? `${stt.engine} image ${stt.image}` : `off (${stt.error})`}`)); setInterval(detectStt, 60000); }

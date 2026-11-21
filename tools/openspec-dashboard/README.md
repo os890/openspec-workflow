@@ -25,6 +25,23 @@ most recently active first and updated live. A card (or the project picker in th
 dashboard; `?project=<id>` in the address links to it directly. Each project keeps its own history, and OpenSpec
 CLI calls for all projects run one at a time.
 
+**What a followed project costs.** A watcher on `openspec/` plus a re-read every 5 s; the workspace scan (the
+modification time of every file, up to 40,000, without `node_modules`, `.git` and the like, for "files written
+lately") every 10 s while the project is open in a browser, every 2 minutes otherwise, and never more often than 20
+times as long as its last scan took; `openspec validate` only when `openspec/` changed (checked every 60 s), one
+container run each with a containerised CLI; `git log` only for the charts and the history, cached per commit; with
+`--agent` the inbox for sessions in other terminals every 10 s. An onboarding is one Claude Code run; no Claude
+process stays after it.
+
+**Archive and unfollow** (with `--agent`). Each card has **Archive** and **Unfollow** (shown on hover). Both stop
+everything above for that project (watchers, scans, validation, the inbox; idle chats end and can be resumed) and
+are remembered in `projects.json` in the state folder, also for projects given with `--project` or `--scan`. An
+archived project stays on the overview in a folded **Archived** section with the status it had and **Reactivate**;
+an unfollowed one is listed there by name with **Follow again** (✕ removes it from the list). The project's files
+are not touched. One project always stays followed, and a project with a running session or onboarding cannot be
+put aside. A page of a project that is no longer followed shows the overview. `POST /api/project` with `action`
+`archive`, `unfollow` (and `project`), `reactivate`, `follow` or `forget` (and `root`).
+
 ## Onboarding more projects (with `--agent`)
 
 Below the project cards, the overview has **Onboard more projects**: enter a folder (e.g. `~/workspace`) and
