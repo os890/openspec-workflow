@@ -900,15 +900,21 @@ function transcriptInfo(file) {
   const info = { mtime: st.mtimeMs, prompt: null, headless: false };
   try {
     info.headless = /"entrypoint":\s*"sdk-/.test(readAt(0, Math.min(st.size, 16384))); // claude -p (the dashboard's own runs, scripts)
-    for (const l of readAt(Math.max(0, st.size - 262144), Math.min(st.size, 262144)).split('\n').reverse()) {
-      if (!/"type":\s*"user"/.test(l)) continue;
-      let m; try { m = JSON.parse(l); } catch { continue; }
-      if (m.isSidechain || m.isMeta || m.isCompactSummary) continue;
-      const ct = m.message?.content;
-      const t = cleanUser(typeof ct === 'string' ? ct : Array.isArray(ct) ? ct.filter((x) => x.type === 'text').map((x) => x.text).join('\n') : '');
-      // the last prompt typed there: not Claude Code's own lines (a summary after compaction, an interruption, a /command)
-      if (t && !/^(<|\/|\[Request interrupted|This session is being continued from a previous conversation)/.test(t) && !/from the OpenSpec dashboard/.test(t)) { info.prompt = t.slice(0, 200); break; }
-    }
+    // the last prompt typed there: not Claude Code's own lines (a summary after compaction, an interruption, a
+    // /command); from the last 256 KB, else (large entries in between) from the whole file, up to 8 MB
+    const lastPrompt = (text) => {
+      for (const l of text.split('\n').reverse()) {
+        if (!/"type":\s*"user"/.test(l)) continue;
+        let m; try { m = JSON.parse(l); } catch { continue; }
+        if (m.isSidechain || m.isMeta || m.isCompactSummary) continue;
+        const ct = m.message?.content;
+        const t = cleanUser(typeof ct === 'string' ? ct : Array.isArray(ct) ? ct.filter((x) => x.type === 'text').map((x) => x.text).join('\n') : '');
+        if (t && !/^(<|\/|\[Request interrupted|This session is being continued from a previous conversation)/.test(t) && !/from the OpenSpec dashboard/.test(t)) return t.slice(0, 200);
+      }
+      return null;
+    };
+    info.prompt = lastPrompt(readAt(Math.max(0, st.size - 262144), Math.min(st.size, 262144)))
+      ?? (st.size > 262144 ? lastPrompt(readAt(Math.max(0, st.size - (8 << 20)), Math.min(st.size, 8 << 20))) : null);
   } catch { /* unreadable: listed without a prompt */ }
   headCache.set(file, info);
   return info;
@@ -925,7 +931,7 @@ function runningSessions() {
     try { process.kill(d.pid, 0); } catch (e) { if (e.code !== 'EPERM') continue; } // the process is gone
     const tf = [encDir(d.cwd), encDir(realOf(d.cwd))].map((x) => path.join(x, `${d.sessionId}.jsonl`)).find((x) => fs.existsSync(x)) ?? null;
     const ti = tf ? transcriptInfo(tf) : null;
-    out.push({ sessionId: d.sessionId, pid: d.pid, t: Math.max(d.updatedAt ?? 0, ti?.mtime ?? 0), cwd: d.cwd, transcript: tf, prompt: ti?.prompt ?? null, waiting: d.status === 'idle', ended: false, typeable: typeableOf(d.pid) });
+    out.push({ sessionId: d.sessionId, pid: d.pid, t: Math.max(d.updatedAt ?? 0, ti?.mtime ?? 0), cwd: d.cwd, transcript: tf, prompt: ti?.prompt ?? null, waiting: d.status === 'idle', asking: d.status === 'waiting', ended: false, typeable: typeableOf(d.pid) }); // status "waiting": it waits for an answer (a permission, a question)
   }
   runningCache = { t: Date.now(), list: out };
   return out;
@@ -997,7 +1003,7 @@ end run`;
 const squash = (t) => t.replace(/\s+/g, ' ').trim();
 // the input box of Claude Code: the lines between the last two horizontal rules
 const inputBox = (contents) => { const ls = contents.replace(/\s+$/, '').split('\n'); const rules = ls.map((l, i) => (/^─{10,}/.test(l.trim()) ? i : -1)).filter((i) => i >= 0); return rules.length >= 2 ? squash(ls.slice(rules.at(-2) + 1, rules.at(-1)).join(' ')).replace(/^❯\s*/, '') : ''; };
-const ASKING = /Do you want to|\b1\. Yes\b|❯ 1\.|Enter to confirm|Esc to cancel/; // a question or menu of Claude Code (permission, trust, choice)
+const ASKING = /Do you want to|\b1\. Yes\b|❯ 1\.|Enter to confirm|Enter to select|Esc to cancel/; // a question or menu of Claude Code (permission, trust, choice)
 async function typeInto(pid, text) {
   if (!typeableOf(pid)) throw httpError(409, 'This session does not run in macOS Terminal; the message can only go through the hook.');
   const ps = (await runCmd('ps', ['-o', 'tty=,stat=', '-p', String(pid)])).out.trim().split(/\s+/);
@@ -1019,6 +1025,59 @@ async function typeInto(pid, text) {
     if (ASKING.test(tail(now))) return;
     await runCmd('osascript', ['-e', TYPE_SCRIPT, tty, 'enter', '']);
   }
+}
+// ---- the background list of the page (write sessions sent to the background): the state of each one, across folders.
+// working / waiting (done) from Claude Code's own record; asking: a waiting session in macOS Terminal shows a
+// question or menu; ended: the process is gone; error: its last reply is an API error.
+const transcriptIndex = { t: 0, map: new Map() };
+function transcriptFor(sid) {
+  const r = runningSessions().find((x) => x.sessionId === sid);
+  if (r?.transcript) return r.transcript;
+  if (Date.now() - transcriptIndex.t > 60e3) {
+    transcriptIndex.map.clear();
+    for (const base of CLAUDE_PROJECT_DIRS) for (const d of (() => { try { return fs.readdirSync(base); } catch { return []; } })()) {
+      for (const f of (() => { try { return fs.readdirSync(path.join(base, d)); } catch { return []; } })()) if (f.endsWith('.jsonl')) transcriptIndex.map.set(f.slice(0, -6), path.join(base, d, f));
+    }
+    transcriptIndex.t = Date.now();
+  }
+  return transcriptIndex.map.get(sid) ?? null;
+}
+function lastReplyOf(file) {
+  try {
+    const st = fs.statSync(file), len = Math.min(st.size, 262144), buf = Buffer.alloc(len), fd = fs.openSync(file, 'r');
+    try { fs.readSync(fd, buf, 0, len, st.size - len); } finally { fs.closeSync(fd); }
+    for (const l of buf.toString('utf8').split('\n').reverse()) {
+      if (!/"type":\s*"assistant"/.test(l)) continue;
+      let m; try { m = JSON.parse(l); } catch { continue; }
+      if (m.isSidechain) continue;
+      const text = (m.message?.content ?? []).filter((b) => b.type === 'text').map((b) => b.text).join(' ').replace(/\s+/g, ' ').trim();
+      if (!text) continue;
+      return { text: text.slice(0, 200), error: !!m.isApiErrorMessage, t: Date.parse(m.timestamp) || st.mtimeMs };
+    }
+  } catch { /* unreadable */ }
+  return null;
+}
+const askCache = new Map(); // sid -> { t, asking }
+async function sessionsStatus(ids) {
+  const run = new Map(runningSessions().map((x) => [x.sessionId, x]));
+  const out = [];
+  for (const sid of [...new Set(ids)].filter((x) => /^[0-9a-f-]{8,64}$/i.test(x)).slice(0, 30)) {
+    const r = run.get(sid), file = transcriptFor(sid), last = file ? lastReplyOf(file) : null;
+    let state = r ? (r.asking ? 'asking' : r.waiting ? 'waiting' : 'working') : file ? 'ended' : 'unknown';
+    if (r?.waiting && r.typeable) { // a question in its tab needs the user
+      let c = askCache.get(sid);
+      if (!c || Date.now() - c.t > 4000) {
+        const ps = (await runCmd('ps', ['-o', 'tty=', '-p', String(r.pid)])).out.trim();
+        const tab = ps && ps !== '??' ? (await runCmd('osascript', ['-e', TYPE_SCRIPT, `/dev/${ps}`, 'check', ''])).out : '';
+        c = { t: Date.now(), asking: ASKING.test(tab.replace(/\s+$/, '').split('\n').slice(-30).join('\n')) };
+        askCache.set(sid, c);
+      }
+      if (c.asking) state = 'asking';
+    }
+    if (last?.error && state !== 'working') state = 'error';
+    out.push({ sessionId: sid, state, t: Math.max(r?.t ?? 0, last?.t ?? 0), cwd: r?.cwd ? homeDisplay(r.cwd) : null, last: last?.text ?? null, prompt: file ? transcriptInfo(file)?.prompt ?? null : null });
+  }
+  return out;
 }
 // the followed project a folder belongs to (the deepest one)
 const ownerOf = (d) => { const x = realOf(d); return projects.filter((p) => { const r = realOf(p.root); return x === r || x.startsWith(r + path.sep); }).sort((a, b) => b.root.length - a.root.length)[0] ?? null; };
@@ -1539,7 +1598,7 @@ function createAgent(project) {
     const now = Date.now();
     // Claude Code's own idle/busy is more exact than the hook's last event (no hook runs while a session waits)
     const live = new Map(runningSessions().map((x) => [x.sessionId, x]));
-    const hooked = inbox.sessions.filter((x) => now - x.t < 12 * 3600e3).map((x) => { const l = live.get(x.sessionId); return l && !x.ended ? { ...x, waiting: x.listening ? false : l.waiting, pid: l.pid, typeable: l.typeable } : x; });
+    const hooked = inbox.sessions.filter((x) => now - x.t < 12 * 3600e3).map((x) => { const l = live.get(x.sessionId); return l && !x.ended ? { ...x, waiting: x.listening ? false : l.waiting, asking: l.asking, pid: l.pid, typeable: l.typeable } : x; });
     const ids = new Set(hooked.map((x) => x.sessionId));
     return [...hooked, ...foundSessions().filter((x) => !ids.has(x.sessionId))].sort((a, b) => b.t - a.t).slice(0, 16);
   }
@@ -1575,7 +1634,7 @@ function createAgent(project) {
   function transcript({ session, from }) {
     const x = sessionOf(session);
     const r0 = x && runningSessions().find((y) => y.sessionId === x.sessionId);
-    if (!x?.transcript && r0) return { entries: [], next: 0, cut: false, size: 0, state: r0.waiting ? 'waiting' : 'working' }; // started, no prompt yet: Claude Code writes the transcript with the first one
+    if (!x?.transcript && r0) return { entries: [], next: 0, cut: false, size: 0, state: r0.asking ? 'asking' : r0.waiting ? 'waiting' : 'working' }; // started, no prompt yet: Claude Code writes the transcript with the first one
     if (!x?.transcript) throw httpError(404, 'No transcript known for this session (the hook records it with its next step).');
     let file;
     try { file = fs.realpathSync(x.transcript); } catch { throw httpError(404, 'The transcript is gone.'); }
@@ -1594,7 +1653,7 @@ function createAgent(project) {
     const entries = end > from0 ? buf.subarray(from0, end).toString('utf8').split('\n').filter(Boolean).flatMap(transcriptEntries) : [];
     // the state right now, for "working…" / "done" at the end of the thread (Claude Code's own idle/busy when it runs)
     const r = runningSessions().find((y) => y.sessionId === x.sessionId);
-    const state = x.listening ? 'listening' : r ? (r.waiting ? 'waiting' : 'working') : x.ended || x.elsewhere || x.hookless ? 'ended' : x.waiting ? 'waiting' : 'working';
+    const state = x.listening ? 'listening' : r ? (r.asking ? 'asking' : r.waiting ? 'waiting' : 'working') : x.ended || x.elsewhere || x.hookless ? 'ended' : x.waiting ? 'waiting' : 'working';
     return { entries, next: start + Math.max(end, from0), cut, size, state };
   }
 
@@ -2908,6 +2967,10 @@ const server = http.createServer(async (req, res) => {
       }
     }
     if (url.pathname === '/api/projects') return json(res, overview());
+    if (url.pathname === '/api/sessions/status') { // the background list (with --agent)
+      if (!AGENT || req.headers['x-osd-token'] !== TOKEN) { res.writeHead(403); return res.end('forbidden'); }
+      return json(res, await sessionsStatus(String(url.searchParams.get('ids') ?? '').split(',').filter(Boolean)));
+    }
     if (url.pathname === '/api/timeline') return json(res, await projectFor(url).timeline());
     if (url.pathname === '/api/git/log') return json(res, await projectFor(url).gitLog({ skip: url.searchParams.get('skip'), only: url.searchParams.get('only') === '1' }));
     if (url.pathname === '/api/git/commit') {

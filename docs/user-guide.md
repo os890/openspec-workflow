@@ -315,6 +315,22 @@ already and continues the session there. **Details ▾** shows the session picke
 and ↩ to quote, also a selected part); they are typed into the session like any message, and the thread shows them
 as reactions and quotes.
 
+**Send it to the background.** For a longer task, **⤓ Background** (next to **Read only**) closes the panel and
+keeps the session in a list; a button with the number of sessions appears in the header, on every page of the
+dashboard. Its dot is amber while one still works, green when all are done, red when one needs you or has an issue;
+**n ✓** counts the ones that finished since you last looked. A click opens the list, with a status per session:
+
+- pulsing amber: still working;
+- **✓** green: done, waiting for your next message (with the start of its last reply);
+- **?** orange: it needs you, it asks something in its terminal (a permission, a choice);
+- **!** red: an issue, the session has ended or its last reply is an error.
+
+A click on an entry opens the session in write mode (on its project's page), ✕ removes it from the list (the
+session keeps running), **Clear finished** removes the done ones. The list is kept in the browser. The joined
+session's thread also says **Needs you** while it waits for an answer.
+
+![The sessions in the background: one needs an answer, one is done, one has ended](images/dashboard-background.png)
+
 **The look while writing.** **▣ Terminal** shows the conversation in terminal colors (dark, monospaced; your own
 messages keep a bright blue background, so they stand out), with the steps as the CLI shows them
 (`⏺ Bash(git log --oneline -3)`, then `⎿` and the first lines of the result); a second click colors the whole panel,

@@ -281,7 +281,11 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     on its own. The end of a joined session's thread shows its state (working with the current step, done and
     waiting, listening, ended), polled with the transcript every 2 s from Claude Code's own idle/busy. In write mode
     the bar folds into one line (**Details ▾** unfolds it), and Claude's answers get the reactions, requests and
-    quotes of the chat, and a session-only session gets the quick path next to **Read only**: **Onboard as
+    quotes of the chat; **⤓ Background** puts the session into the background list (`localStorage` `osd-bg`), a
+    header button with its states polled every 4 s from `GET /api/sessions/status?ids=…` (token in the header):
+    `working`, `waiting` (done), `asking` (Claude Code's own status `waiting`: a permission or question is open; for a
+    session in macOS Terminal also a menu in its tab), `ended` (the process is gone) or `error` (the last reply is an
+    API error), with the last prompt and the start of the last reply; a session-only session gets the quick path next to **Read only**: **Onboard as
     project** (a confirmation, then `add` and `onboard` of the discovery API, and the overview with its onboarding
     chat) or **Follow now** when the folder has `openspec/` (following it again removes it from the unfollowed or
     archived ones); a quote typed into a terminal is one line, so the dashboard reads `[Replying to …] text`

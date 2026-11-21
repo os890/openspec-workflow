@@ -227,7 +227,8 @@ What makes it more than a status page:
   message is typed right into the session, also while it waits; elsewhere through a hook (one click). While you
   write, it can look like the CLI (terminal colors, steps as `⏺ Bash(…)` / `⎿ output`), offers the chat's quick
   replies (🌿 accepts a proposal on a new branch), and when an answer takes a while, **green code rains behind the
-  conversation until it is done** — you see from across the room when it has finished. Sessions in other projects
+  conversation until it is done** — you see from across the room when it has finished. Long tasks go to the
+  **background**: a header button lists them with their state (working, done, needs you, an issue). Sessions in other projects
   switch there; one in a folder that is not followed yet can be followed on its own and onboarded with one click.
 - **Git history** of the project: the commits with a graph of branches, tags and remote branches, and each commit's
   message, files and diff, read-only; **openspec/ only** shows just the commits that changed the specs.
