@@ -246,6 +246,12 @@ Claude's replies and its steps). The end of the thread says where it stands: **W
 <time>** while it works (an answer is on its way), **✓ Done · waiting for your next message** once it has answered,
 or **Session ended**.
 
+While you write to a session, the details above the conversation fold into one line (**✎ Writing to …**, its state,
+**Details ▾**, **Read only**), so the conversation gets the panel; **Details ▾** shows the session picker and the
+notes again, **Fewer details ▴** folds them. Claude's answers there have the same quick replies as the chat
+(👍 ✅ 🙏 🎉 💡, 🔁 📝 📊 and ↩ to quote, also a selected part); they are typed into the session like any message,
+and the thread shows them as reactions and quotes.
+
 Following a session works without any setup: the dashboard finds the running sessions in Claude Code's own records
 (`~/.claude/sessions`) and reads their transcripts.
 

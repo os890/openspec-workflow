@@ -1407,6 +1407,9 @@ body.board-max { overflow: hidden; }
 .xp-g.xp-off { opacity: .45; }
 .xp-g.xp-off .xp-chip { pointer-events: none; }
 .np-repo { flex-wrap: wrap; margin-bottom: 6px; }
+.term-compact { flex-wrap: nowrap; align-items: center; gap: 10px; }
+.term-compact .link, .term-compact .btn { white-space: nowrap; flex-shrink: 0; }
+.term-compact .ag-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .term-done { align-self: center; font-size: 12.5px; color: var(--muted); padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); margin: 4px 0 2px; }
 .term-state .muted { margin-left: 4px; }
 .term-setup { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); font-size: 13px; }
@@ -1456,7 +1459,9 @@ body.board-max { overflow: hidden; }
 /* small windows: the head and the compose box keep their size; the bar (folder, expert mode) shrinks and scrolls on
    its own, the thread keeps a few lines; nothing overflows the panel (it cannot be scrolled back) */
 .agent-panel > .ag-head, .agent-panel > .ag-compose, .agent-panel > .ag-route { flex-shrink: 0; }
-.agent-panel > .ag-bar { flex: 0 1 auto; min-height: 0; max-height: 62%; overflow: auto; }
+.agent-panel > .ag-bar { flex: 0 1 auto; min-height: 0; max-height: 62%; overflow: hidden auto; scrollbar-gutter: stable; } /* never sideways: that made a flickering scroll bar */
+.ag-bar code { overflow-wrap: anywhere; }
+.ag-bar .term-pick { width: 100%; min-width: 0; }
 .agent-panel > .ag-thread { min-height: 72px; }
 .agent-panel .ag-bar .np-expert { max-height: none; overflow: visible; }
 .ag-bar code { overflow-wrap: anywhere; }
@@ -3186,14 +3191,24 @@ function termThreadHtml(sid) {
   const mine = (xo ? xo.messages ?? [] : (ag.view?.messages ?? []).filter((m) => m.session === sid)).map((m) => ({ t: m.t, kind: 'mine', m, folder: xo?.folder }));
   const items = [...T.entries.filter((e) => !(e.kind === 'user' && /from the OpenSpec dashboard/.test(e.text))), ...mine].sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
   const out = T.cut ? ['<div class="ag-note" style="text-align:center">Earlier parts of this session are not shown.</div>'] : [];
+  // reactions and quotes, as in the chat: only while writing to it
+  const canWrite = ag.termWrite && sx && !sx.ended && (!sx.hookless || sx.typeable);
+  const reacted = new Map();
+  for (const e of items) { const r = e.kind === 'user' && e.text.match(REACT_RE); if (r) (reacted.get(r[3]) ?? reacted.set(r[3], []).get(r[3])).push(r[1] ?? r[2]); }
+  let n = 0;
   let steps = [];
   const flush = () => { if (!steps.length) return; out.push(`<details class="steps"><summary>${steps.length === 1 ? esc(steps[0].text) : `${steps.length} steps · ${esc(steps.at(-1).text)}`}</summary>${steps.map((x) => `<div class="${x.kind}">${esc(x.text)}</div>`).join('')}</details>`); steps = []; };
   for (const e of items) {
     if (e.kind === 'tool' || e.kind === 'error') { steps.push(e); continue; }
     flush();
     if (e.kind === 'mine') out.push(`<div class="msg me"><span class="ic-chip">from the dashboard</span>${esc(e.m.text)}<span class="meta">${hhmm(e.m.t)} · ${e.m.state === 'queued' ? `${waitingNow ? 'queued: arrives with the next prompt typed in its terminal' : 'queued: arrives with its next step'}${e.m.state === 'queued' ? ` · <button class="link" type="button" data-ag-cancel="${esc(e.m.id)}" ${e.folder ? `data-folder="${esc(e.folder)}"` : ''}>cancel</button>` : ''}` : 'delivered ' + hhmm(e.m.deliveredAt)}</span></div>`);
+    else if (e.kind === 'user' && (REACT_RE.test(e.text) || QUOTE_RE.test(e.text))) out.push(userMsgHtml(e).replace('<div class="msg me', '<div class="msg me term-user'));
     else if (e.kind === 'user') out.push(`<div class="msg me term-user">${typedHere.has(e.text.trim()) ? '<span class="ic-chip">typed from the dashboard</span>' : ''}${esc(e.text)}<span class="meta">${e.t ? hhmm(e.t) : ''} · in the terminal</span></div>`);
-    else out.push(`<div class="msg them ${e.sub ? 'sub' : ''}"><div class="md">${md(e.text)}</div><span class="meta">${e.t ? hhmm(e.t) : ''}</span></div>`);
+    else {
+      const id = `term:${sid}:${e.t}:${n++}`;
+      rx.msgs.set(id, e.text);
+      out.push(`<div class="msg them ${e.sub ? 'sub' : ''} ${rx.openId === id ? 'rx-open' : ''}" data-msg="${esc(id)}"><div class="md">${md(e.text)}</div>${rxFootHtml(id, canWrite && !e.sub, reacted.get(excerptOf(e.text)) ?? [], e.t)}</div>`);
+    }
   }
   flush();
   out.push(termStateHtml(T, items));
@@ -3209,7 +3224,7 @@ function termStateHtml(T, items) {
     return `<div class="msg them typing term-state"><span class="ag-spin"></span>${sent ? 'Sent · it starts in a moment…' : `Working${step ? `: ${esc(step.text)}` : '…'}`}${!sent && lastUser?.t ? ` <span class="muted">· since ${hhmm(lastUser.t)}</span>` : ''}</div>`;
   }
   if (T.state === 'listening') return '<div class="term-done"><span class="dot on"></span>Listening: waiting for your message</div>';
-  if (T.state === 'waiting') return '<div class="term-done">✓ Done · waiting for your next message</div>';
+  if (T.state === 'waiting') return items.length ? '<div class="term-done">✓ Done · waiting for your next message</div>' : '<div class="term-done">Waiting for its first prompt</div>';
   if (T.state === 'ended') return '<div class="term-done muted">Session ended</div>';
   return '';
 }
@@ -3352,7 +3367,10 @@ const clip = (t, n) => (t.length > n ? t.slice(0, n - 1).replace(/\s+\S*$/, '') 
 // the first sentence, at most 120 characters: short, and the same every time for the same message
 const excerptOf = (md) => { const p = plainOf(md); return clip(p.match(/^.{12,}?[.!?:](\s|$)/)?.[0].trim() ?? p, 120); };
 const REACT_RE = /^\[(?:Reaction (\S+) to|Request (\S+) about) your message: "([^"]*)"\] ([\s\S]*)$/;
-const QUOTE_RE = /^\[Replying to (this part of )?your message: "([^"]*)"\]\n([\s\S]*)$/;
+const QUOTE_RE = /^\[Replying to (this part of )?your message: "([^"]*)"\]\s+([\s\S]*)$/; // \s: typed into a terminal, it is one line
+// the row under one of Claude's messages: reactions, requests, quote (shown on hover, or with ⋯), and the time
+const rxFootHtml = (id, on, got, t) => `<div class="msg-foot">${on ? `<button type="button" class="rx-more" data-rx-more="${esc(id)}" aria-label="React, quote, rephrase, summarize" title="React, quote, rephrase, summarize">⋯</button><span class="rx-bar">${REACTIONS.map(([e, say]) => `<button type="button" class="rx" data-react="${e}" data-msg="${esc(id)}" title="${esc(`Sends: ${say}`)}">${e}</button>`).join('')}<span class="rx-sep"></span>${REQUESTS.map(([e, say, label]) => `<button type="button" class="rx" data-react="${e}" data-msg="${esc(id)}" title="${esc(`${label}: sends "${say}"`)}" aria-label="${label}">${e}</button>`).join('')}<button type="button" class="rx rx-q" data-quote="${esc(id)}" title="Quote: reply to this message (select a part of it first to quote just that)" aria-label="Quote">↩</button></span>` : ''}
+            <span class="meta">${got.length ? `<span class="rx-got" title="Your reactions">${[...new Set(got)].join('')}</span>` : ''}${t ? hhmm(t) : ''}</span></div>`;
 function reactionsIn(jobs) {
   const m = new Map();
   for (const j of jobs) for (const l of j.log) {
@@ -3547,8 +3565,7 @@ function threadHtml(c) {
         rx.msgs.set(id, l.text);
         const got = reacted.get(excerptOf(l.text)) ?? [];
         out.push(`<div class="msg them ${l.sub ? 'sub' : ''} ${rx.openId === id ? 'rx-open' : ''}" data-msg="${esc(id)}"><div class="md">${c.newproject ? projectMd(l.text, id) : c.brainstorm ? brainstormMd(l.text, id, j.idea ?? c.jobs.find((x) => x.idea)?.idea) : editMd(l.text, id)}</div>
-          <div class="msg-foot">${l.sub ? '' : `<button type="button" class="rx-more" data-rx-more="${esc(id)}" aria-label="React, quote, rephrase, summarize" title="React, quote, rephrase, summarize">⋯</button><span class="rx-bar">${REACTIONS.map(([e, say]) => `<button type="button" class="rx" data-react="${e}" data-msg="${esc(id)}" title="${esc(`Sends: ${say}`)}">${e}</button>`).join('')}<span class="rx-sep"></span>${REQUESTS.map(([e, say, label]) => `<button type="button" class="rx" data-react="${e}" data-msg="${esc(id)}" title="${esc(`${label}: sends "${say}"`)}" aria-label="${label}">${e}</button>`).join('')}<button type="button" class="rx rx-q" data-quote="${esc(id)}" title="Quote: reply to this message (select a part of it first to quote just that)" aria-label="Quote">↩</button></span>`}
-            <span class="meta">${got.length ? `<span class="rx-got" title="Your reactions">${[...new Set(got)].join('')}</span>` : ''}${hhmm(l.t)}</span></div>
+          ${rxFootHtml(id, !l.sub, got, l.t)}
         </div>`);
       }
       else if (l.kind === 'prompt') out.push(`<details class="sys"><summary>${j.kind === 'onboard' ? 'Onboarding started with the setup prompt' : 'Started on the ticket with the workflow prompt'}</summary><div>${esc(l.text)}</div></details>`);
@@ -3626,9 +3643,14 @@ function barHtml(c) {
     if (x?.hookless && !x.typeable) return `<div class="ag-row ag-target">${pick}</div><div class="ag-note">${x.waiting ? '<span class="dot"></span>Waiting for input in the terminal' : '<span class="dot on"></span>Working'} · last activity ${ago(x.t)} · read-only: this session runs without the dashboard's hook</div>
       ${ag.view?.hooks ? `<div class="ag-note">The hook is set up, but this session started before it: restart it to write to it (<code>/exit</code>, then <code>claude --resume ${esc(x.sessionId)}</code>).</div>` : setup('To write to it, set up the hook')}`;
     const state = x2.listening ? '<span class="dot on"></span>Listening: waiting for your message' : x2.waiting ? '<span class="dot"></span>Waiting for input in the terminal' : '<span class="dot on"></span>Working';
+    // writing: the details fold into one line, so the conversation gets the panel ("Details" brings them back)
+    if (ag.termWrite && !ag.termDetails) return `<div class="ag-row term-compact"><span class="ag-note">✎ Writing to <b>${esc(xo ? xo.display : x2.prompt ? `“${x2.prompt.replace(/\s+/g, ' ').slice(0, 40)}${x2.prompt.length > 40 ? '…' : ''}”` : x2.sessionId.slice(0, 8))}</b> · ${state}</span>
+        <button class="link" type="button" data-ag-term-details aria-expanded="false" style="margin-left:auto" title="Show the session picker and the details again">Details ▾</button>
+        <button class="btn" type="button" data-ag-term-write aria-pressed="true" title="Back to read-only">Read only</button></div>${termLog.get(x2.sessionId)?.err ? `<div class="ag-note warn">✕ ${esc(termLog.get(x2.sessionId).err)}</div>` : ''}`;
     return `${top}
       <div class="ag-row"><span class="ag-note">${state} · last step ${ago(x2.t)}${x2.tool && !x2.waiting ? ` (${esc(x2.tool)})` : ''}</span>
-        <button class="btn" type="button" data-ag-term-write aria-pressed="${ag.termWrite}" style="margin-left:auto" title="${ag.termWrite ? 'Back to read-only' : 'Write to this session as if you typed it there'}">${ag.termWrite ? 'Read only' : '✎ Write to it'}</button>
+        ${ag.termWrite ? '<button class="link" type="button" data-ag-term-details aria-expanded="true" style="margin-left:auto" title="Fold the details into one line">Fewer details ▴</button>' : ''}
+        <button class="btn" type="button" data-ag-term-write aria-pressed="${ag.termWrite}" ${ag.termWrite ? '' : 'style="margin-left:auto"'} title="${ag.termWrite ? 'Back to read-only' : 'Write to this session as if you typed it there'}">${ag.termWrite ? 'Read only' : '✎ Write to it'}</button>
         ${ag.termWrite && cur && !x2.hookless && !x2.typeable ? `<button class="btn" type="button" data-ag-term-listen aria-pressed="${!!x2.listen}" title="When it is about to stop, it waits for your message instead (the terminal shows the hook running; Esc there takes the session back)">${x2.listen ? '👂 Listening · stop' : '👂 Keep it listening'}</button>` : ''}</div>
       ${ag.termWrite && x2.typeable ? `<div class="ag-note">Your message is typed into its Terminal tab and sent with Return, exactly as if you typed it there, also while it waits for input (one line; not while it asks you something there).</div>`
       : ag.termWrite ? `<div class="ag-note">Your message reaches it at its next step, as if you typed it there. ${x2.listening ? 'It is listening: your message continues it right away.' : x2.waiting ? `It is waiting for input in the terminal, so it takes no step: the message arrives with the next prompt typed there.${x2.listen ? ' After that answer it listens and takes your messages directly.' : ' <b>Keep it listening</b> lets it take your messages directly after its next answer.'}` : x2.listen ? 'When it is done, it waits for your messages instead of stopping.' : '<b>Keep it listening</b> lets it wait for your messages when it is done, instead of stopping.'}${cur ? '' : ` To let it listen, the hook needs an update: <button class="link" type="button" data-ag-hook ${xs.elsewhere ? `data-folder="${esc(xs.folder)}"` : ''}>Update it</button> (then restart the session)`}</div>` : '<div class="ag-note">Read-only: you see what the session does, live.</div>'}
@@ -3675,7 +3697,7 @@ function renderAgentLive() {
     th.innerHTML = threadHtml(c);
     edFill();
     if (atEnd || ag.stick) { th.scrollTop = th.scrollHeight; ag.stick = false; }
-    $('ag-route').innerHTML = c?.terminal ? '' : 'Enter sends · Shift+Enter for a new line';
+    $('ag-route').innerHTML = c?.terminal ? (ag.note.startsWith('✕') ? `<span style="color:var(--st-blocked)">${esc(ag.note)}</span>` : '') : 'Enter sends · Shift+Enter for a new line';
   } else {
     if (!$('ag-body')) return;
     $('ag-note').textContent = ag.note;
@@ -3782,7 +3804,8 @@ document.addEventListener('click', (e) => {
       .catch((err) => { ag.note = '✕ ' + err.message; renderAgentLive(); });
   }
   if (t.closest('[data-ag-hook]')) { ag.note = ''; return agentPost('hook', t.closest('[data-ag-hook]').dataset.folder ? { folder: t.closest('[data-ag-hook]').dataset.folder } : {}).then(() => { termPoll(true); }).catch((err) => { ag.note = '✕ ' + err.message; renderAgentLive(); }); }
-  if (t.closest('[data-ag-term-write]')) { ag.termWrite = !ag.termWrite; renderAgentLive(); if (ag.termWrite) $('ag-text')?.focus(); return; }
+  if (t.closest('[data-ag-term-details]')) { ag.termDetails = !ag.termDetails; renderAgentLive(); return; }
+  if (t.closest('[data-ag-term-write]')) { ag.termDetails = false; ag.termWrite = !ag.termWrite; renderAgentLive(); if (ag.termWrite) $('ag-text')?.focus(); return; }
   if (t.closest('[data-ag-term-listen]')) { const x = termSessions().find((y) => y.sessionId === ag.term) ?? (ag.view?.elsewhere ?? []).find((y) => y.sessionId === ag.term); return agentPost('listen', { session: ag.term, on: !x?.listen }).catch((err) => { ag.note = '✕ ' + err.message; renderAgentLive(); }); }
   const convo = t.closest('[data-ag-convo]');
   if (convo) { if ($('ag-text')) ag.drafts['chat-' + ag.convo] = $('ag-text').value; ag.convo = convo.dataset.agConvo; ag.stick = true; buildAgent(); return $('ag-text')?.focus(); }

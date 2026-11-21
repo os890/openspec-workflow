@@ -261,7 +261,10 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     text arrives in Claude Code as a paste, where the Return becomes part of it; the server then reads the tab and,
     while the text still sits in the input box (between the last two rules) and nothing is being asked, sends Return
     on its own. The end of a joined session's thread shows its state (working with the current step, done and
-    waiting, listening, ended), polled with the transcript every 2 s from Claude Code's own idle/busy. The drop-down lists the project's sessions of the last 12 hours: the ones the
+    waiting, listening, ended), polled with the transcript every 2 s from Claude Code's own idle/busy. In write mode
+    the bar folds into one line (**Details ▾** unfolds it), and Claude's answers get the reactions, requests and
+    quotes of the chat; a quote typed into a terminal is one line, so the dashboard reads `[Replying to …] text`
+    with a space as well as with a line break. The drop-down lists the project's sessions of the last 12 hours: the ones the
     hook below reports, and also those it has not seen (no hook, or started before it), found in Claude Code's own
     records: `~/.claude/sessions/<pid>.json` (session id, folder, idle or busy; the process must still run) for the
     running ones and the interactive transcripts in `~/.claude/projects/<folder>/` for the ended ones (`claude -p`

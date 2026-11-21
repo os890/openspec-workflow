@@ -1557,6 +1557,8 @@ function createAgent(project) {
   // folder are read; a long one starts with its last 2 MB.
   function transcript({ session, from }) {
     const x = sessionOf(session);
+    const r0 = x && runningSessions().find((y) => y.sessionId === x.sessionId);
+    if (!x?.transcript && r0) return { entries: [], next: 0, cut: false, size: 0, state: r0.waiting ? 'waiting' : 'working' }; // started, no prompt yet: Claude Code writes the transcript with the first one
     if (!x?.transcript) throw httpError(404, 'No transcript known for this session (the hook records it with its next step).');
     let file;
     try { file = fs.realpathSync(x.transcript); } catch { throw httpError(404, 'The transcript is gone.'); }
