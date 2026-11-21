@@ -47,7 +47,8 @@ What it adds: a chat about the project (read-only), sessions on tickets, new tic
 folders with a `CLAUDE.md`/`AGENTS.md` (overview › Onboard more projects), new projects from a brainstorm (with an
 expert mode for quality gates, docs, diagrams, containers, branches, version control and license), and the
 **terminal sessions** button (`>_`): every running Claude Code session, followed live; in macOS Terminal the
-dashboard can type messages into it (no setup); elsewhere it needs the hook:
+dashboard can type messages into it (no setup), **＋ New session** opens a new Terminal window with Claude Code in
+the project and joins it, and a gauge shows how full each session's context is; elsewhere writing needs the hook:
 `node <dash>/agent-hook.mjs install <project>` (then restart that session). Messages from the dashboard reach a
 session in fixed forms; the ticket workflow skill explains them (`openspec-ticket-workflow`,
 `references/dashboard-messages.md`).
@@ -77,9 +78,14 @@ write-mode look, the background list) are kept in the browser.
   projects are listed below the overview.
 - **No Chat / no terminal button**: start with `--agent`; the `claude` command must be on the PATH (or
   `--claude=<command>`).
+- **A new session does not show up**: the new Terminal window may ask whether you trust the folder (once per
+  folder); on Linux set the terminal in Settings › General if none is found.
+- **The context gauge shows 200k for a 1M session**: until a session has been larger than 200k, the window comes
+  from Settings › Write mode › Context window.
 - **A terminal session is not listed**: it must still run; sessions are found in `~/.claude/sessions` and their
   transcripts in `~/.claude/projects`.
 - **Writing to a session does nothing**: in macOS Terminal, macOS may ask once whether the dashboard may control
-  Terminal; elsewhere set up the hook and restart the session. While the session asks something (a permission, a
+  Terminal; run as a service, that question can stay hidden: allow it in System Settings › Privacy & Security ›
+  Automation. Elsewhere set up the hook and restart the session. While the session asks something (a permission, a
   choice), the dashboard does not type, since Return would answer it.
 - **Details**: the user guide (`docs/user-guide.md`) and `<dash>/README.md` cover every feature and endpoint.

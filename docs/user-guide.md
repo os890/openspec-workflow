@@ -308,6 +308,15 @@ way), **✓ Done · waiting for your next message** once it has answered, or **S
 needs no setup: the dashboard finds the running sessions in Claude Code's own records (`~/.claude/sessions`) and
 reads their transcripts.
 
+**＋ New session** next to the drop-down starts one: a new Terminal window opens in the background with Claude Code
+in the project's folder, and the panel joins the new session in write mode as soon as it runs, so you can write
+your first prompt right here. In a folder Claude Code does not trust yet, the window comes to the front instead: it
+asks once whether you trust the folder, and the session shows up after your answer. On Linux the first terminal
+found is used (x-terminal-emulator, GNOME Terminal, Konsole, …); **Settings › General › Start new sessions in** takes
+another one, as a command with `{cmd}` for the shell command that starts Claude Code there (e.g.
+`wezterm start -- sh -lc {cmd}`). The dashboard writes into macOS Terminal; a session in another terminal can be
+written to through the hook (below).
+
 The drop-down also lists sessions running in other folders. One in another project the dashboard follows is under
 **Other projects**: picking it switches to that project and joins the session there. One in a folder the dashboard
 does not follow is under **Session only**: you follow it without a board, roadmap or specs around it, and
@@ -322,8 +331,19 @@ message is typed into the session's macOS Terminal tab and sent with
 Return, exactly as if you typed it there, also while the session waits at its prompt; no setup is needed, and the
 transcript marks it as *typed from the dashboard*. It goes as one line (line breaks become spaces). The dashboard
 only types while Claude Code itself is in the foreground of that tab (never into a shell), and not while the session
-asks you something there (a permission, a choice), since Return would answer it. Terminal may ask once whether the
-dashboard may control it.
+asks you something there (a permission, a choice), since Return would answer it. macOS asks once whether the
+dashboard may control Terminal; when the dashboard runs as a service (`launcher.mjs install --service`), that
+question can stay unanswered in the background: the panel then says so, and the switch is in **System Settings ›
+Privacy & Security › Automation**.
+
+**How full its context is.** Next to the session's state, a small bar shows how much of the context window the
+session uses, e.g. **45k / 200k**: amber from 60 %, orange from 80 %, when Claude Code will soon compact the
+conversation (summarize it, and continue with the summary). The tooltip has the exact number and how often it was
+compacted so far; a compaction shows in the thread as a line (*Conversation compacted automatically: 531k → 21k
+tokens*). From 70 %, while the session waits at its prompt, **Compact now** types `/compact` into its terminal, so it
+happens when it suits you, not in the middle of a task. The window size is not in Claude Code's records: a session
+that has been larger than 200k tokens (or the model says so) counts with 1M; otherwise the gauge uses
+**Settings › Write mode › Context window** (200k by default, or 1M). The background list shows the gauge too.
 
 While you write, the details above the conversation fold into one line (**✎ Writing to …**, its state, **Details ▾**,
 **Read only**), so the conversation gets the panel. That way a session you started in the terminal continues in the
@@ -369,7 +389,8 @@ write to a session (with reduced motion it is a still image).
 falling code off, or start it after another number of seconds (5 to 600; 30 by default), and choose the color of
 **your messages**: highlighted (the default: bright blue in terminal colors, the style's color otherwise), the color
 of the current style (in terminal colors too), or a color of your own (the text turns dark or light to stay
-readable). All of the look settings are remembered in the browser.
+readable), and the **context window** the gauge assumes when the session does not show it. All of the look
+settings are remembered in the browser.
 
 ![The Write mode settings: falling code, its delay, and the color of your messages](images/dashboard-settings-write.png)
 

@@ -1397,7 +1397,9 @@ body.board-max { overflow: hidden; }
 .agent-panel { --agp: 18px; position: fixed; top: 12px; right: 12px; bottom: 12px; left: auto; width: min(480px, calc(100vw - 24px)); z-index: 70;
   display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-hover), 0 24px 60px -12px rgba(0, 0, 0, .28); }
 .ag-head { padding: 16px var(--agp) 8px; display: flex; align-items: baseline; gap: 10px; }
-.ag-head h2 { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -.02em; }
+.ag-head h2 { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -.02em; white-space: nowrap; }
+.ag-head > .muted { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-head > .link { white-space: nowrap; }
 .ag-head .link { margin-left: auto; }
 .ag-status { margin: 0 var(--agp); font-size: 12.5px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
 .ag-hint code { overflow-wrap: anywhere; }
@@ -1497,7 +1499,19 @@ body.board-max { overflow: hidden; }
 .dot.ask { background: #f08c2e; }
 .term-btns { display: inline-flex; gap: 6px; margin-left: auto; }
 .term-compact .link, .term-compact .btn { white-space: nowrap; flex-shrink: 0; }
+.term-new-note { border-left: 3px solid #f08c2e; padding-left: 8px; }
+.term-compact .term-ctx { flex-shrink: 0; font-size: 12.5px; color: var(--muted); display: inline-flex; gap: 8px; align-items: center; }
 .term-compact .ag-note { min-width: 120px; flex: 1 1 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the context gauge of a joined session (bar, background list) */
+.ctx { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ctx-bar { display: inline-block; width: 44px; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--ink) 14%, transparent); overflow: hidden; }
+.ctx-bar i { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+.ctx.mid .ctx-bar i { background: #d9a400; }
+.ctx.hi .ctx-bar i { background: #f08c2e; }
+.ctx.hi { color: #f08c2e; font-weight: 600; }
+.bg-ctx { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.term-note { align-self: stretch; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); margin: 6px 0; }
+.term-note::before, .term-note::after { content: ""; flex: 1; border-top: 1px dashed var(--line); }
 .term-done { align-self: center; font-size: 12.5px; color: var(--muted); padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); margin: 4px 0 2px; }
 .term-state .muted { margin-left: 4px; }
 .term-setup { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); font-size: 13px; }
@@ -3385,7 +3399,18 @@ const typedHere = new Set(); // messages typed into a session's terminal from th
 // the icon of the terminal sessions (header button, panel title): a terminal window with a prompt
 const TERM_SVG = '<svg class="ic-term" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="3"/><path d="M7 9.5l3 2.5-3 2.5M12.5 15h4.5"/></svg>';
 const termLog = new Map(); // session id -> { entries, next (byte offset), cut, err }
-const termSessions = () => (ag.view?.sessions ?? []).filter((x) => !x.dashboardJob && (x.transcript || !x.ended)) // a new session has no transcript until its first prompt.sort((a, b) => b.t - a.t); // the latest on top (ended ones stay readable)
+// a new session has no transcript until its first prompt; the latest on top (ended ones stay readable)
+const termSessions = () => (ag.view?.sessions ?? []).filter((x) => !x.dashboardJob && (x.transcript || !x.ended)).sort((a, b) => b.t - a.t);
+// how full the session's context is: a small bar with the tokens; orange from 80 %, when Claude Code compacts soon.
+// The window comes from the session when it shows it (1M), else from Settings › Write mode (200k by default)
+const kTok = (n) => (n >= 1e6 ? `${+(n / 1e6).toFixed(n % 1e6 ? 1 : 0)}M` : `${Math.round(n / 1000)}k`);
+const ctxPct = (c) => (c?.used ? Math.min(100, Math.round((c.used / (c.window ?? termView.ctxWin ?? 200000)) * 100)) : 0);
+function ctxHtml(c, short) {
+  if (!c?.used) return '';
+  const w = c.window ?? termView.ctxWin ?? 200000, pct = ctxPct(c);
+  const tip = `Context: ${c.used.toLocaleString()} of ${kTok(w)} tokens in use (${pct} %)${c.window ? '' : ', window as set in Settings › Write mode'}${c.compactions ? ` · compacted ${c.compactions}× so far` : ''}. Claude Code compacts the conversation when it is nearly full.`;
+  return `<span class="ctx ${pct >= 80 ? 'hi' : pct >= 60 ? 'mid' : ''}" title="${esc(tip)}" aria-label="${esc(tip)}"><span class="ctx-bar"><i style="width:${Math.max(3, pct)}%"></i></span>${short ? `${pct} %` : `${kTok(c.used)} / ${kTok(w)}`}</span>`;
+}
 const termLabel = (x) => `${x.hookless && !x.ended && !x.typeable ? '◌ ' : x.ended ? '' : x.listening || x.listen ? '👂 ' : x.waiting ? '' : '● '}${x.prompt ? `“${x.prompt.replace(/\s+/g, ' ').slice(0, 48)}${x.prompt.length > 48 ? '…' : ''}”` : 'session'} · ${x.ended ? 'ended' : x.waiting ? 'waiting' : 'working'} · ${ago(x.t)} · ${x.sessionId.slice(0, 8)}${x.hookless && !x.ended && !x.typeable ? ' · read-only' : ''}`;
 function termThreadHtml(sid) {
   const T = termLog.get(sid);
@@ -3407,6 +3432,7 @@ function termThreadHtml(sid) {
   const results = new Map(items.filter((e) => e.kind === 'result' || (e.kind === 'error' && e.id)).map((e) => [e.id, e]));
   for (const e of items) {
     if (e.kind === 'result' || (e.kind === 'error' && e.id && cli)) continue;
+    if (e.kind === 'note') { flush(); out.push(`<div class="term-note"><span>${esc(e.text)}</span>${e.t ? `<span class="meta">${hhmm(e.t)}</span>` : ''}</div>`); continue; }
     if (cli && e.kind === 'tool') {
       flush();
       const r = results.get(e.id);
@@ -3457,8 +3483,8 @@ async function termPoll(force) {
     const r = await agentPost('transcript', { session: sid, from: T.next });
     const fresh = !termLog.has(sid) || r.entries.length || T.err;
     T.entries.push(...r.entries); if (T.entries.length > 4000) T.entries.splice(0, T.entries.length - 4000);
-    const stateChanged = T.state !== r.state;
-    T.next = r.next; T.cut ||= r.cut; T.err = ''; T.state = r.state;
+    const stateChanged = T.state !== r.state || T.ctx?.used !== r.context?.used;
+    T.next = r.next; T.cut ||= r.cut; T.err = ''; T.state = r.state; if (r.context) T.ctx = r.context;
     if (r.state === 'working') { T.waitStart ||= T.sentAt || Date.now(); T.sentAt = 0; }
     else if (!T.sentAt) T.waitStart = 0; // done (or not started yet): the wait is over
     termLog.set(sid, T);
@@ -3563,7 +3589,7 @@ function bgRender() {
     <ul>${bgList.map((e, i) => {
       const st = bgState.get(e.sessionId), [cls, ico, what] = BG_ICON[st?.state ?? 'working'];
       const label = st?.prompt && /^[0-9a-f]{8}$/.test(e.label) ? st.prompt.replace(/\s+/g, ' ').slice(0, 70) : e.label;
-      return `<li><button type="button" class="bg-item" data-bg-open="${esc(e.sessionId)}" title="${esc(what)} · open it"><span class="bg-ico ${cls}" aria-label="${esc(what)}">${ico}</span><span class="bg-txt"><b>${esc(label)}</b><span class="muted">${esc([e.projectLabel ?? st?.cwd ?? '', what, st?.t ? ago(st.t) : ''].filter(Boolean).join(' · '))}</span>${st?.last ? `<span class="bg-last">${esc(st.last)}</span>` : ''}</span></button><button type="button" class="link bg-x" data-bg-remove="${esc(e.sessionId)}" title="Remove from the list (the session keeps running)" aria-label="Remove">✕</button></li>`;
+      return `<li><button type="button" class="bg-item" data-bg-open="${esc(e.sessionId)}" title="${esc(what)} · open it"><span class="bg-ico ${cls}" aria-label="${esc(what)}">${ico}</span><span class="bg-txt"><b>${esc(label)}</b><span class="muted">${esc([e.projectLabel ?? st?.cwd ?? '', what, st?.t ? ago(st.t) : ''].filter(Boolean).join(' · '))}</span>${st?.last ? `<span class="bg-last">${esc(st.last)}</span>` : ''}${st?.ctx ? `<span class="bg-ctx">${ctxHtml(st.ctx)}</span>` : ''}</span></button><button type="button" class="link bg-x" data-bg-remove="${esc(e.sessionId)}" title="Remove from the list (the session keeps running)" aria-label="Remove">✕</button></li>`;
     }).join('')}</ul>`;
 }
 async function bgPoll() {
@@ -3963,7 +3989,7 @@ function barHtml(c) {
     const setup = (lead, f) => `<div class="term-setup"><b>${lead}</b>
       <p>To write to a session, the dashboard needs its hook in the ${f ? 'folder' : 'project'}: a few lines in <code>.claude/settings.local.json</code>, which stays out of git. Sessions started after that can be written to; a session that is running already needs a restart (<code>claude --resume</code> continues it).</p>
       <div class="ag-row"><button class="btn primary" type="button" data-ag-hook ${f ? `data-folder="${esc(f.folder)}"` : ''}>Set up the hook</button><span class="ag-note">or in a terminal: <code>${esc(f ? (ag.view?.hookInstall ?? '').replace(/ install .*$/, ` install ${f.display}`) : ag.view?.hookInstall ?? '')}</code></span></div>${ag.note ? `<div class="ag-note warn">${esc(ag.note)}</div>` : ''}</div>`;
-    const pick = `<select class="term-pick" data-ag-term aria-label="Session to join" title="Claude Code sessions in this project, in a terminal or an IDE (running, and ended in the last 12 hours)">
+    let pick = `<select class="term-pick" data-ag-term aria-label="Session to join" title="Claude Code sessions in this project, in a terminal or an IDE (running, and ended in the last 12 hours)">
       <option value="" ${ag.term ? '' : 'selected'}>${ss.length || el.length ? (ag.view?.hooks ? 'Any session (the next one that takes a step)' : `Pick a session (${ss.length})…`) : 'No session running yet'}</option>
       ${(() => {
         const opt = (y, label) => `<option value="${esc(y.sessionId)}" ${y.sessionId === ag.term ? 'selected' : ''}>${esc(label)}</option>`;
@@ -3974,6 +4000,9 @@ function barHtml(c) {
           + (other.length ? `<optgroup label="Other projects (switches there)">${other.map((y) => opt(y, `${y.projectLabel ?? y.display} · ${termLabel(y).replace(/ · read-only$/, '')}`)).join('')}</optgroup>` : '')
           + (only.length ? `<optgroup label="Session only (not followed)">${only.map((y) => opt(y, `${y.display} · ${termLabel(y).replace(/ · read-only$/, '')}`)).join('')}</optgroup>` : '');
       })()}</select>`;
+    // "＋ New session": Claude Code in a new terminal window in this project's folder, joined here once it runs
+    const newBtn = PROJECT ? `<button class="btn" type="button" data-ag-term-new ${ag.newAt ? 'disabled' : ''} title="Open a new terminal window with Claude Code in this project's folder; it shows up here, ready to write to">${ag.newAt ? '<span class="ag-spin"></span>Starting…' : '＋ New session'}</button>` : '';
+    pick += newBtn;
     // a session in a folder the dashboard does not follow ("Session only"): read-only, or with the hook in its folder
     // writable like a session of this project
     const xo = !x && el.find((y) => y.sessionId === ag.term && !y.projectId);
@@ -3983,7 +4012,8 @@ function barHtml(c) {
     if (xo?.hookless && !xo.typeable) return `${top}<div class="ag-note">${xo.waiting ? '<span class="dot"></span>Waiting for input' : '<span class="dot on"></span>Working'} · last activity ${ago(xo.t)} · read-only: this session runs without the dashboard's hook</div>
       ${xo.hooks ? `<div class="ag-note">The hook is set up in this folder, but the session started before it: restart it to write to it (<code>/exit</code>, then <code>claude --resume ${esc(xo.sessionId)}</code>).</div>` : setup('To write to it, set up the hook in its folder', xo)}`;
     if (!xs && !PROJECT) return `<div class="ag-row ag-target">${pick}</div><div class="ag-note">${el.length ? 'Pick a session: one of a project opens that project; one in a folder the dashboard does not follow is joined here.' : 'No Claude Code session is running.'}</div>`;
-    if (!xs) return `<div class="ag-row ag-target">${pick}</div>${ag.view?.hooks
+    const noteNew = ag.note && !xs ? `<div class="ag-note ${ag.note.startsWith('✕') ? 'warn' : 'term-new-note'}">${esc(ag.note)}</div>` : '';
+    if (!xs) return `<div class="ag-row ag-target">${pick}</div>${noteNew}${ag.view?.hooks
       ? `<div class="ag-note">${ss.length ? 'Pick a session to join it: you see what it does, live, and can write to it.' : ''} ${ext ? `<span class="dot on"></span>Active · last step ${ago(ext.t)}${ext.tool ? ` (${esc(ext.tool)})` : ''}` : '<span class="dot"></span>No session seen in the last 15 minutes; messages wait until one takes a step.'}</div>`
       : `<div class="ag-note">${ss.length ? 'Pick a session to follow it live; one in macOS Terminal you can also write to.' : 'Sessions you start in this project (in a terminal or an IDE) show up here.'}</div>`}`; // the hook is offered only for a picked session that cannot be typed into
     const fresh = termLog.get(xs?.sessionId)?.state; // polled with the transcript every 2 s: newer than the session list
@@ -3992,15 +4022,18 @@ function barHtml(c) {
     if (x?.hookless && !x.typeable) return `<div class="ag-row ag-target">${pick}</div><div class="ag-note">${x.waiting ? '<span class="dot"></span>Waiting for input in the terminal' : '<span class="dot on"></span>Working'} · last activity ${ago(x.t)} · read-only: this session runs without the dashboard's hook</div>
       ${ag.view?.hooks ? `<div class="ag-note">The hook is set up, but this session started before it: restart it to write to it (<code>/exit</code>, then <code>claude --resume ${esc(x.sessionId)}</code>).</div>` : setup('To write to it, set up the hook')}`;
     const state = x2.listening ? '<span class="dot on"></span>Listening: waiting for your message' : x2.asking ? '<span class="dot ask"></span>Needs you: it asks something in its terminal' : x2.waiting ? '<span class="dot"></span>Waiting for input in the terminal' : '<span class="dot on"></span>Working';
+    // the context gauge; nearly full and waiting at its prompt: "Compact now" types /compact into its terminal
+    const cx = termLog.get(x2.sessionId)?.ctx ?? x2.ctx;
+    const gauge = cx ? ` · ${ctxHtml(cx)}${ag.termWrite && x2.typeable && x2.waiting && !x2.asking && ctxPct(cx) >= 70 ? ` <button class="link" type="button" data-ctx-compact title="Types /compact into its terminal: Claude Code summarizes the conversation so far and continues with that, which frees the context">Compact now</button>` : ''}` : '';
     // a session in a folder that is not followed: the quick path to make it a project, next to "Read only"
     const quickAdopt = xo && ag.termWrite ? `<button class="btn" type="button" data-ag-adopt="${xo.openspec ? 'follow' : 'onboard'}" data-quick title="${xo.openspec ? 'It has an openspec/ folder: follow it as a project and continue this session there' : 'Set up OpenSpec in this folder (in the background, nothing committed) and follow it'}">${xo.openspec ? 'Follow now' : 'Onboard as project'}</button>` : '';
     // writing: the details fold into one line, so the conversation gets the panel ("Details" brings them back)
     const look = `<button class="link term-v" type="button" data-term-look aria-pressed="${termView.look > 0}" title="${['Terminal colors for the conversation (your messages stay highlighted)', 'Terminal colors for the whole panel', 'Back to the normal colors'][termView.look]}">${['▣ Terminal', '▣ Terminal: conversation', '▣ Terminal: all'][termView.look]}</button><button class="link term-v" type="button" data-term-fs="-1" title="Smaller text" aria-label="Smaller text">A−</button><button class="link term-v" type="button" data-term-fs="0" ${termView.fs === TERM_FS ? 'disabled' : ''} title="Default text size (${TERM_FS}px)" aria-label="Default text size">A</button><button class="link term-v" type="button" data-term-fs="1" title="Larger text" aria-label="Larger text">A+</button>`;
-    if (ag.termWrite && !ag.termDetails) return `<div class="ag-row term-compact"><span class="ag-note">✎ Writing to <b>${esc(xo ? xo.display : x2.prompt ? `“${x2.prompt.replace(/\s+/g, ' ').slice(0, 40)}${x2.prompt.length > 40 ? '…' : ''}”` : x2.sessionId.slice(0, 8))}</b> · ${state}</span>
+    if (ag.termWrite && !ag.termDetails) return `<div class="ag-row term-compact"><span class="ag-note">✎ Writing to <b>${esc(xo ? xo.display : x2.prompt ? `“${x2.prompt.replace(/\s+/g, ' ').slice(0, 40)}${x2.prompt.length > 40 ? '…' : ''}”` : x2.sessionId.slice(0, 8))}</b> · ${state}</span>${gauge ? `<span class="term-ctx">${gauge.replace(/^ · /, '')}</span>` : ''}
         <span class="term-vs" style="margin-left:auto">${look}</span><button class="link" type="button" data-ag-term-details aria-expanded="false" title="Show the session picker and the details again">Details ▾</button>
         <span class="term-btns"><button class="btn" type="button" data-ag-bg title="Keep it working in the background: the button with the number in the header shows how it is doing and when it is done">⤓ Background</button>${cur && !x2.hookless && !x2.typeable ? `<button class="btn" type="button" data-ag-term-listen aria-pressed="${!!x2.listen}" title="When it is about to stop, it waits for your message instead (the terminal shows the hook running; Esc there takes the session back)">${x2.listen ? '👂 Listening · stop' : '👂 Keep it listening'}</button>` : ''}${quickAdopt}<button class="btn" type="button" data-ag-term-write aria-pressed="true" title="Back to read-only">Read only</button></span></div>${termLog.get(x2.sessionId)?.err ? `<div class="ag-note warn">✕ ${esc(termLog.get(x2.sessionId).err)}</div>` : ''}`;
     return `${top}
-      <div class="ag-row"><span class="ag-note">${state} · last step ${ago(x2.t)}${x2.tool && !x2.waiting ? ` (${esc(x2.tool)})` : ''}</span>
+      <div class="ag-row"><span class="ag-note">${state} · last step ${ago(x2.t)}${x2.tool && !x2.waiting ? ` (${esc(x2.tool)})` : ''}${gauge}</span>
         ${ag.termWrite ? `<span class="term-vs" style="margin-left:auto">${look}</span><button class="link" type="button" data-ag-term-details aria-expanded="true" title="Fold the details into one line">Fewer details ▴</button>` : ''}
         ${ag.termWrite ? quickAdopt : ''}<button class="btn ${ag.termWrite ? '' : 'primary'}" type="button" data-ag-term-write aria-pressed="${ag.termWrite}" ${ag.termWrite ? '' : 'style="margin-left:auto"'} title="${ag.termWrite ? 'Back to read-only' : 'Write to this session as if you typed it there'}">${ag.termWrite ? 'Read only' : '✎ Write to it'}</button>
         ${ag.termWrite && cur && !x2.hookless && !x2.typeable ? `<button class="btn" type="button" data-ag-term-listen aria-pressed="${!!x2.listen}" title="When it is about to stop, it waits for your message instead (the terminal shows the hook running; Esc there takes the session back)">${x2.listen ? '👂 Listening · stop' : '👂 Keep it listening'}</button>` : ''}</div>
@@ -4029,7 +4062,15 @@ function ticketItem(j) {
     : alive(j) ? `<div class="ag-note"><span class="ag-spin"></span>${last ? esc(last.text) : 'thinking…'}</div>` : '';
   return `<div class="ag-item">${head}<div class="ag-q">${esc(j.text)}</div>${body}${j.error ? `<div class="ag-err">✕ ${esc(j.error)}</div>` : ''}</div>`;
 }
+// after "New session": join the session that started since then, in write mode (or give up after a minute)
+function termAutoJoin() {
+  if (!ag.newAt) return;
+  const x = termSessions().find((y) => !y.ended && (y.startedAt ?? 0) >= ag.newAt - 3000);
+  if (x) { Object.assign(ag, { newAt: 0, note: '', term: x.sessionId, termWrite: true, termDetails: false, stick: true }); termPoll(true); }
+  else if (Date.now() - ag.newAt > (ag.note ? 180e3 : 60e3)) { ag.newAt = 0; ag.note = '✕ The new session did not show up within a minute: is the terminal window asking something (e.g. whether you trust the folder)?'; }
+}
 function renderAgentLive() {
+  termAutoJoin();
   updateAgentBtn();
   if (!ag.open || !ag.view) return;
   for (const el of document.querySelectorAll('[data-ag-voice]')) el.hidden = !ag.view.stt?.available;
@@ -4169,6 +4210,21 @@ document.addEventListener('click', (e) => {
   }
   if (t.closest('[data-ag-term-details]')) { ag.termDetails = !ag.termDetails; renderAgentLive(); return; }
   if (t.closest('[data-ag-term-write]')) { ag.termDetails = false; ag.termWrite = !ag.termWrite; renderAgentLive(); if (ag.termWrite) $('ag-text')?.focus(); return; }
+  if (t.closest('[data-ag-term-new]')) {
+    ag.newAt = Date.now(); ag.note = ''; renderAgentLive();
+    return agentPost('new-session', {}).then(async (r) => {
+      if (r && r.trusted === false) { ag.note = 'The new Terminal window asks first whether you trust this folder (Claude Code asks once per folder): answer it there, then the session shows up here.'; renderAgentLive(); }
+      while (ag.newAt) { // the session list comes with the page's updates; asked for directly until the new one is there
+        await new Promise((r) => setTimeout(r, 1500));
+        try { ag.view = await (await fetch(withProject('/api/agent'))).json(); } catch { /* next round */ }
+        renderAgentLive();
+      }
+    }).catch((err) => { ag.newAt = 0; ag.note = '✕ ' + err.message; renderAgentLive(); });
+  }
+  if (t.closest('[data-ctx-compact]')) {
+    const L = termLog.get(ag.term);
+    return agentPost('type', { session: ag.term, text: '/compact' }).then(() => { if (L) { L.sentAt = Date.now(); L.waitStart = L.sentAt; } ag.stick = true; termPoll(true); }).catch((err) => { ag.note = '✕ ' + err.message; renderAgentLive(); });
+  }
   if (t.closest('[data-ag-term-listen]')) { const x = termSessions().find((y) => y.sessionId === ag.term) ?? (ag.view?.elsewhere ?? []).find((y) => y.sessionId === ag.term); return agentPost('listen', { session: ag.term, on: !x?.listen }).catch((err) => { ag.note = '✕ ' + err.message; renderAgentLive(); }); }
   const convo = t.closest('[data-ag-convo]');
   if (convo) { if ($('ag-text')) ag.drafts['chat-' + ag.convo] = $('ag-text').value; ag.convo = convo.dataset.agConvo; ag.stick = true; buildAgent(); return $('ag-text')?.focus(); }
@@ -4415,10 +4471,12 @@ const setTabs = () => `<div class="set-tabs" role="tablist"><button type="button
 // settings › General: the file manager for the folder button in the header (kept in the dashboard's settings file)
 async function renderGeneralSettings() {
   if (!st.view) { try { st.view = await settingsFetch('GET'); } catch (e) { st.note = '✕ ' + e.message; } }
-  const cur = st.view?.settings?.files?.open ?? '';
+  const cur = st.view?.settings?.files?.open ?? '', curT = st.view?.settings?.terminal?.open ?? '';
   $('settings').innerHTML = `<div class="set-head"><h2 id="set-title">Settings</h2><button class="link" type="button" data-set-close>Close ✕</button></div>${setTabs()}
     <div class="set-gen"><label><b>Open project folders with</b><input id="set-fm" value="${esc(cur)}" placeholder="the system's file manager" spellcheck="false" autocomplete="off"></label>
-    <p class="ag-note">For the folder button in the header. Empty: the system's file manager (Finder, Explorer, xdg-open). On macOS the name of an app, e.g. <code>Finder</code> or another file manager, opens the folder with <code>open -a &lt;app&gt;</code>. Anything else: a command with <code>{dir}</code> for the folder, e.g. <code>my-file-manager --path {dir}</code>. Kept in the dashboard's settings file.</p>
+    <p class="ag-note">For the folder button in the header. Empty: the system's file manager (Finder, Explorer, xdg-open). On macOS the name of an app, e.g. <code>Finder</code> or another file manager, opens the folder with <code>open -a &lt;app&gt;</code>. Anything else: a command with <code>{dir}</code> for the folder, e.g. <code>my-file-manager --path {dir}</code>.</p>
+    <label><b>Start new sessions in</b><input id="set-term" value="${esc(curT)}" placeholder="${/Mac/.test(navigator.platform) ? 'Terminal' : 'the first terminal found'}" spellcheck="false" autocomplete="off"></label>
+    <p class="ag-note">For <b>＋ New session</b> in the terminal sessions. Empty: on macOS a new Terminal window (the dashboard can write into it), on Linux the first terminal found (x-terminal-emulator, GNOME Terminal, Konsole, …). Anything else: a command with <code>{cmd}</code>, the shell command that starts Claude Code in the project's folder, e.g. <code>wezterm start -- sh -lc {cmd}</code>. Both are kept in the dashboard's settings file.</p>
     <div class="ag-row set-actions"><button class="btn primary" type="button" data-set-fm-save>Save</button><span class="ag-note" id="set-fm-note">${esc(st.fmNote ?? '')}</span></div></div>`;
 }
 // settings of the write mode of a joined session (kept in this browser, like the text size and the colors)
@@ -4428,6 +4486,8 @@ function renderWriteSettings() {
     <p class="ag-note">For writing to a session that runs in a terminal (the terminal button › ✎ Write to it). Kept in this browser.</p>
     <label class="set-opt ${on ? 'sel' : ''}"><input type="checkbox" data-wm="matrix" ${on ? 'checked' : ''}><span><b>Falling code while you wait</b><span class="muted"> · green code runs behind the conversation while an answer takes long, and stops when the session is done</span></span></label>
     <label class="set-opt ${on ? '' : 'off'}"><span><b>Start it after</b> <input type="number" min="5" max="600" step="5" data-wm="after" value="${termView.rainAfter ?? 30}" ${on ? '' : 'disabled'} style="width:5em"> seconds</span></label>
+    <div class="wm-head"><b>Context window</b> <span class="muted">· for the gauge that shows how full a session's context is, when the session does not show it (a session beyond 200k has 1M)</span></div>
+    ${[[200000, '200k tokens', 'the default'], [1000000, '1M tokens', 'the long-context models']].map(([v, label, desc]) => `<label class="set-opt ${(termView.ctxWin ?? 200000) === v ? 'sel' : ''}"><input type="radio" name="wm-ctx" data-wm="ctxwin" value="${v}" ${(termView.ctxWin ?? 200000) === v ? 'checked' : ''}><span><b>${label}</b><span class="muted"> · ${desc}</span></span></label>`).join('')}
     <div class="wm-head"><b>Your messages</b> <span class="muted">· their background in the conversation</span></div>
     ${[['highlight', 'Highlighted', 'bright blue in terminal colors, the style\'s color otherwise (default)'], ['theme', 'Color of the style', 'the current style\'s own color, in terminal colors too'], ['custom', 'Your own color', '']].map(([v, label, desc]) => {
       const cur = /^#/.test(me) ? 'custom' : me;
@@ -4440,6 +4500,7 @@ document.addEventListener('change', (e) => {
   if (k === 'matrix') termView.matrix = e.target.checked;
   else if (k === 'me') termView.me = e.target.value === 'custom' ? termView.meLast ?? '#7c3aed' : e.target.value;
   else if (k === 'mecolor') termView.me = termView.meLast = e.target.value;
+  else if (k === 'ctxwin') termView.ctxWin = Number(e.target.value) || 200000;
   else termView.rainAfter = Math.min(600, Math.max(5, Number(e.target.value) || 30));
   termViewSave(); renderWriteSettings();
   if (ag.open) renderAgentLive(); // the open panel follows at once
@@ -4624,7 +4685,7 @@ $('settings').addEventListener('click', async (e) => {
   const tab = t.closest('[data-set-tab]');
   if (tab) { clearTimeout(st.pmTimer); st.tab = tab.dataset.setTab; return st.tab === 'podman' ? openPodman() : st.tab === 'write' ? renderWriteSettings() : st.tab === 'general' ? renderGeneralSettings() : st.view ? renderSettings() : openSettings(false); }
   if (t.closest('[data-set-fm-save]')) {
-    try { st.view = await settingsFetch('POST', { files: { open: $('set-fm').value } }); st.fmNote = '✓ Saved'; } catch (err) { st.fmNote = '✕ ' + err.message; }
+    try { st.view = await settingsFetch('POST', { files: { open: $('set-fm').value }, terminal: { open: $('set-term').value } }); st.fmNote = '✓ Saved'; } catch (err) { st.fmNote = '✕ ' + err.message; }
     return renderGeneralSettings();
   }
   if (t.closest('[data-pm-restart]')) {

@@ -306,7 +306,7 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     runs behind the conversation and is removed when it is done (a still image with reduced motion); the **Write
     mode** tab of the settings (⚙ below the input box opens it there) turns it off, sets the delay (5–600 s) and the
     color of your messages (highlighted, the style's accent, or an own color with a readable text color). Both only apply in write mode
-    and are kept in `localStorage` (`osd-term-view`: `look`, `fs`, `matrix`, `rainAfter`, `me`). **Set up the hook** is
+    and are kept in `localStorage` (`osd-term-view`: `look`, `fs`, `matrix`, `rainAfter`, `me`, `ctxWin`). **Set up the hook** is
     only offered for a picked session that cannot be typed into. The drop-down lists the project's sessions of the last 12 hours: the ones the
     hook below reports, and also those it has not seen (no hook, or started before it), found in Claude Code's own
     records: `~/.claude/sessions/<pid>.json` (session id, folder, idle or busy; the process must still run) for the
@@ -323,6 +323,23 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     waiting, last step); a joined session shows its transcript live, read-only, until **✎ Write to it**; then
     messages go to that session only, as if typed there. **👂 Keep it listening** makes the session wait for a
     message when it is done instead of stopping. **Any session** sends to the next session that takes a step.
+    **＋ New session** (`POST /api/agent/new-session`) opens a terminal with `cd <project> && claude`: on macOS a
+    Terminal window via AppleScript (`do script`), in the background, or in front when the folder is not trusted yet
+    (Claude Code's trust question comes first; the session record only exists after it); on Linux the first of
+    x-terminal-emulator, gnome-terminal, konsole, xfce4-terminal, kitty, alacritty, xterm with `$SHELL -lc`; on
+    Windows `cmd /k`; or the command in the settings file (`terminal.open`, with `{cmd}` and `{dir}`, run without a
+    shell). The page joins the first session of the project whose `startedAt` is after the click, in write mode.
+    AppleScript calls to Terminal time out after 8 s; when macOS has not allowed the dashboard to control Terminal
+    (an unanswered or denied Automation request, typical for a LaunchAgent), the server says so and does not try
+    again for a minute.
+  - **Context gauge**: the session list, the transcript and `/api/sessions/status` carry `ctx` (`used`, `window`,
+    `compactions`): `used` from the last main-chain assistant message's `usage` (input + cache creation + cache read
+    + output tokens) or, after a `compact_boundary`, its `postTokens`; `window` is 1M when the model id has `[1m]` or
+    the transcript was ever above 200k tokens (the largest `usage` and `preTokens` of the whole transcript, read once
+    in the background in 4 MB steps and then only what was added), 200k when Claude Code compacted it on its own
+    below that, else `null` (the page uses `osd-term-view.ctxWin`, 200k by default). **Compact now** (from 70 %,
+    while the session waits at its prompt in macOS Terminal) types `/compact`. A `compact_boundary` shows in the
+    thread as a divider with the tokens before and after; the summary Claude Code adds after it is left out.
   - **⤢ Maximize** gives the chat the whole window (`Esc` restores it, a second `Esc` closes it).
   - **Reactions and quotes**: each of Claude's answers has a faint ⋯; hovering the answer (or tapping ⋯) shows a
     row where 👍 ✅ 🌿 🙏 🎉 💡 send a short answer at once ("I agree

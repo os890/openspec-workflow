@@ -917,11 +917,82 @@ function transcriptInfo(file) {
       }
       return null;
     };
-    info.prompt = lastPrompt(readAt(Math.max(0, st.size - 262144), Math.min(st.size, 262144)))
-      ?? (st.size > 262144 ? lastPrompt(readAt(Math.max(0, st.size - (8 << 20)), Math.min(st.size, 8 << 20))) : null);
+    const tail = readAt(Math.max(0, st.size - 262144), Math.min(st.size, 262144));
+    const big = () => (big.t ??= st.size > 262144 ? readAt(Math.max(0, st.size - (8 << 20)), Math.min(st.size, 8 << 20)) : '');
+    info.prompt = lastPrompt(tail) ?? (st.size > 262144 ? lastPrompt(big()) : null);
+    const cx = contextOf(tail) ?? (st.size > 262144 ? contextOf(big()) : null);
+    if (cx) {
+      const all = contextScan(file, st.size), peak = Math.max(all.peak, cx.peak), autoAt = Math.max(all.autoAt, cx.autoAt);
+      info.ctx = { used: cx.used, model: cx.model, compactions: Math.max(all.compactions, cx.compactions),
+        window: /\[1m\]/i.test(cx.model ?? '') || peak > 200000 ? 1000000 : autoAt ? 200000 : null };
+    }
   } catch { /* unreadable: listed without a prompt */ }
   headCache.set(file, info);
   return info;
+}
+// how full a session's context is: the tokens of its last request (input, cache, the answer), or after a compaction
+// what was left. The window is not in the transcript: 1M when the model says so, when the session was larger than 200k
+// already, or when Claude Code compacted it on its own beyond 200k; otherwise unknown (the page assumes its setting).
+function contextOf(text) {
+  let used = null, model = null, autoAt = 0, compactions = 0, peak = 0;
+  for (const l of text.split('\n')) {
+    if (l.includes('"compact_boundary"')) {
+      let m; try { m = JSON.parse(l); } catch { continue; }
+      const c = m.compactMetadata ?? {};
+      compactions++;
+      if (c.trigger === 'auto' && c.preTokens) autoAt = Math.max(autoAt, c.preTokens);
+      peak = Math.max(peak, c.preTokens ?? 0);
+      used = c.postTokens ?? used;
+      continue;
+    }
+    if (!l.includes('"usage"') || !/"type":\s*"assistant"/.test(l)) continue;
+    let m; try { m = JSON.parse(l); } catch { continue; }
+    const u = m.message?.usage;
+    if (m.isSidechain || !u || m.message.model === '<synthetic>') continue;
+    used = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.output_tokens ?? 0);
+    model = m.message.model ?? model;
+    peak = Math.max(peak, used);
+  }
+  if (used == null) return null;
+  return { used, model, peak, autoAt, compactions };
+}
+// the whole transcript, read once and then only what was added: the largest context so far and the compactions
+// (to tell a 1M window from a 200k one); numbers by pattern, not by parsing each (large) line
+const ctxScans = new Map(); // file -> { pos, peak, autoAt, compactions, busy }
+const TOK_RE = ['input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens', 'output_tokens'].map((k) => new RegExp(`"${k}":(\\d+)`));
+// in the background, 4 MB at a time (a long session's transcript has hundreds of MB): the page gets the window with
+// the next poll once it is known
+function contextScan(file, size) {
+  let c = ctxScans.get(file);
+  if (!c || size < c.pos) ctxScans.set(file, c = { pos: 0, peak: 0, autoAt: 0, compactions: 0, busy: false }); // new or rewritten
+  if (c.busy || c.pos >= size) return c;
+  c.busy = true;
+  (async () => {
+    const fh = await fs.promises.open(file, 'r');
+    try {
+      while (c.pos < size) {
+        const len = Math.min(size - c.pos, 4 << 20), b = Buffer.alloc(len);
+        await fh.read(b, 0, len, c.pos);
+        const end = b.lastIndexOf(10);
+        if (end < 0) break; // a line still being written
+        const text = b.subarray(0, end + 1).toString('utf8');
+        for (let i = text.indexOf('"compact_boundary"'); i >= 0; i = text.indexOf('"compact_boundary"', i + 1)) {
+          const line = text.slice(text.lastIndexOf('\n', i) + 1, text.indexOf('\n', i));
+          const pre = Number(line.match(/"preTokens":(\d+)/)?.[1] ?? 0);
+          c.compactions++; c.peak = Math.max(c.peak, pre);
+          if (line.includes('"trigger":"auto"')) c.autoAt = Math.max(c.autoAt, pre);
+        }
+        for (let i = text.indexOf('"usage":{'); i >= 0; i = text.indexOf('"usage":{', i + 1)) {
+          const u = text.slice(i, i + 400), sum = TOK_RE.reduce((n, re) => n + Number(u.match(re)?.[1] ?? 0), 0);
+          if (sum > c.peak && text.slice(text.lastIndexOf('\n', i) + 1, i).includes('"type":"assistant"')) c.peak = sum;
+        }
+        c.pos += end + 1;
+        await new Promise((r) => setImmediate(r));
+      }
+    } catch { /* unreadable: what was read counts */ }
+    finally { await fh.close().catch(() => {}); c.busy = false; headCache.delete(file); runningCache.t = 0; }
+  })();
+  return c;
 }
 let runningCache = { t: 0, list: [] };
 function runningSessions() {
@@ -935,7 +1006,7 @@ function runningSessions() {
     try { process.kill(d.pid, 0); } catch (e) { if (e.code !== 'EPERM') continue; } // the process is gone
     const tf = [encDir(d.cwd), encDir(realOf(d.cwd))].map((x) => path.join(x, `${d.sessionId}.jsonl`)).find((x) => fs.existsSync(x)) ?? null;
     const ti = tf ? transcriptInfo(tf) : null;
-    out.push({ sessionId: d.sessionId, pid: d.pid, t: Math.max(d.updatedAt ?? 0, ti?.mtime ?? 0), cwd: d.cwd, transcript: tf, prompt: ti?.prompt ?? null, waiting: d.status === 'idle', asking: d.status === 'waiting', ended: false, typeable: typeableOf(d.pid) }); // status "waiting": it waits for an answer (a permission, a question)
+    out.push({ sessionId: d.sessionId, pid: d.pid, startedAt: d.startedAt ?? null, t: Math.max(d.updatedAt ?? 0, ti?.mtime ?? 0), cwd: d.cwd, transcript: tf, prompt: ti?.prompt ?? null, ctx: ti?.ctx ?? null, waiting: d.status === 'idle', asking: d.status === 'waiting', ended: false, typeable: typeableOf(d.pid) }); // status "waiting": it waits for an answer (a permission, a question)
   }
   runningCache = { t: Date.now(), list: out };
   return out;
@@ -1004,6 +1075,21 @@ const TYPE_SCRIPT = `on run argv
   end tell
   return "no tab"
 end run`;
+// macOS asks once whether the dashboard may control Terminal (Privacy & Security › Automation); until that is answered
+// a script waits, and when it was denied it fails with -1743. Either way: a clear message, and no waiting each time.
+const termAccess = { blockedAt: 0, why: '' };
+const TERM_ACCESS = 'macOS has not let the dashboard control Terminal: allow it in System Settings › Privacy & Security › Automation (the dashboard, or the app it runs in, › Terminal), or answer the dialog that asks for it.';
+async function termScript(...args) { return appleScript(TYPE_SCRIPT, args); }
+async function appleScript(script, args) {
+  if (Date.now() - termAccess.blockedAt < 60e3) throw httpError(403, termAccess.why);
+  const r = await new Promise((resolve) => execFile('osascript', ['-e', script, ...args], { timeout: 8000 }, (err, out, errOut) => resolve({ err, out: String(out ?? ''), errOut: String(errOut ?? '') })));
+  if (r.err && (r.err.killed || /-1743|Not authori[sz]ed/i.test(r.errOut))) {
+    Object.assign(termAccess, { blockedAt: Date.now(), why: r.err.killed ? `${TERM_ACCESS} (No answer from Terminal within 8 seconds.)` : TERM_ACCESS });
+    throw httpError(403, termAccess.why);
+  }
+  termAccess.blockedAt = 0;
+  return r;
+}
 const squash = (t) => t.replace(/\s+/g, ' ').trim();
 // the input box of Claude Code: the lines between the last two horizontal rules
 const inputBox = (contents) => { const ls = contents.replace(/\s+$/, '').split('\n'); const rules = ls.map((l, i) => (/^─{10,}/.test(l.trim()) ? i : -1)).filter((i) => i >= 0); return rules.length >= 2 ? squash(ls.slice(rules.at(-2) + 1, rules.at(-1)).join(' ')).replace(/^❯\s*/, '') : ''; };
@@ -1014,20 +1100,20 @@ async function typeInto(pid, text) {
   if (!ps[0] || ps[0] === '??') throw httpError(409, 'The session has ended.');
   if (!ps[1]?.includes('+')) throw httpError(409, 'Claude Code is not in the foreground of its terminal right now.');
   const tty = `/dev/${ps[0]}`;
-  const check = await runCmd('osascript', ['-e', TYPE_SCRIPT, tty, 'check', '']);
+  const check = await termScript(tty, 'check', '');
   if (check.err) throw httpError(502, `Terminal cannot be scripted: ${(check.errOut || check.err.message).trim().slice(0, 200)}`);
   if (check.out.trim() === 'no tab') throw httpError(409, 'Its Terminal tab was not found.');
   const tail = (c) => c.replace(/\s+$/, '').split('\n').slice(-30).join('\n');
   if (ASKING.test(tail(check.out))) throw httpError(409, 'The session is asking something in its terminal (e.g. a permission); answer it there first.');
-  const r = await runCmd('osascript', ['-e', TYPE_SCRIPT, tty, 'type', text]);
+  const r = await termScript(tty, 'type', text);
   if (r.err || r.out.trim() !== 'typed') throw httpError(502, `Typing failed: ${(r.errOut || r.out || r.err?.message || '').trim().slice(0, 200)}`);
   // a long text arrives as a paste, where the Return becomes part of it: if it still sits in the input box, send Return
   for (let i = 0; i < 3; i++) {
     await new Promise((res) => setTimeout(res, 400));
-    const now = (await runCmd('osascript', ['-e', TYPE_SCRIPT, tty, 'check', ''])).out;
+    const now = (await termScript(tty, 'check', '')).out;
     if (!inputBox(now).includes(squash(text).slice(0, 40))) return; // submitted
     if (ASKING.test(tail(now))) return;
-    await runCmd('osascript', ['-e', TYPE_SCRIPT, tty, 'enter', '']);
+    await termScript(tty, 'enter', '');
   }
 }
 // ---- the background list of the page (write sessions sent to the background): the state of each one, across folders.
@@ -1072,14 +1158,14 @@ async function sessionsStatus(ids) {
       let c = askCache.get(sid);
       if (!c || Date.now() - c.t > 4000) {
         const ps = (await runCmd('ps', ['-o', 'tty=', '-p', String(r.pid)])).out.trim();
-        const tab = ps && ps !== '??' ? (await runCmd('osascript', ['-e', TYPE_SCRIPT, `/dev/${ps}`, 'check', ''])).out : '';
+        const tab = ps && ps !== '??' ? (await termScript(`/dev/${ps}`, 'check', '').catch(() => ({ out: '' }))).out : '';
         c = { t: Date.now(), asking: ASKING.test(tab.replace(/\s+$/, '').split('\n').slice(-30).join('\n')) };
         askCache.set(sid, c);
       }
       if (c.asking) state = 'asking';
     }
     if (last?.error && state !== 'working') state = 'error';
-    out.push({ sessionId: sid, state, t: Math.max(r?.t ?? 0, last?.t ?? 0), cwd: r?.cwd ? homeDisplay(r.cwd) : null, last: last?.text ?? null, prompt: file ? transcriptInfo(file)?.prompt ?? null : null });
+    out.push({ sessionId: sid, state, t: Math.max(r?.t ?? 0, last?.t ?? 0), cwd: r?.cwd ? homeDisplay(r.cwd) : null, last: last?.text ?? null, prompt: file ? transcriptInfo(file)?.prompt ?? null : null, ctx: file ? transcriptInfo(file)?.ctx ?? null : null });
   }
   return out;
 }
@@ -1556,6 +1642,14 @@ function createAgent(project) {
     if (!x) throw httpError(404, 'No session runs in that folder.');
     return x.folder;
   };
+  // "New session": Claude Code in a new terminal window in the project's folder; the page joins it once it runs
+  async function newSession({ folder } = {}) {
+    const dir = folder ? folderOf({ folder }) : root;
+    // a folder Claude Code does not trust yet: it asks first, in the terminal, and only then starts the session
+    const trust = trusted(dir);
+    await openTerminal(dir, !trust);
+    return { at: Date.now(), trusted: trust };
+  }
   function hook({ remove, folder } = {}) {
     const dir = folderOf({ folder });
     const file = setupHook(dir, remove);
@@ -1578,7 +1672,7 @@ function createAgent(project) {
         const ti = transcriptInfo(file);
         if (!ti || ti.headless) continue;
         seen.add(sid);
-        out.push({ sessionId: sid, t: st.mtimeMs, cwd: root, transcript: file, prompt: ti.prompt, waiting: false, ended: true, hookless: true });
+        out.push({ sessionId: sid, t: st.mtimeMs, cwd: root, transcript: file, prompt: ti.prompt, ctx: ti.ctx ?? null, waiting: false, ended: true, hookless: true });
       }
     }
     return out;
@@ -1602,7 +1696,7 @@ function createAgent(project) {
     const now = Date.now();
     // Claude Code's own idle/busy is more exact than the hook's last event (no hook runs while a session waits)
     const live = new Map(runningSessions().map((x) => [x.sessionId, x]));
-    const hooked = inbox.sessions.filter((x) => now - x.t < 12 * 3600e3).map((x) => { const l = live.get(x.sessionId); return l && !x.ended ? { ...x, waiting: x.listening ? false : l.waiting, asking: l.asking, pid: l.pid, typeable: l.typeable } : x; });
+    const hooked = inbox.sessions.filter((x) => now - x.t < 12 * 3600e3).map((x) => { const l = live.get(x.sessionId); return l && !x.ended ? { ...x, waiting: x.listening ? false : l.waiting, asking: l.asking, pid: l.pid, typeable: l.typeable, startedAt: l.startedAt, ctx: l.ctx } : x; });
     const ids = new Set(hooked.map((x) => x.sessionId));
     return [...hooked, ...foundSessions().filter((x) => !ids.has(x.sessionId))].sort((a, b) => b.t - a.t).slice(0, 16);
   }
@@ -1613,7 +1707,11 @@ function createAgent(project) {
       const x = cleanUser(m.attachment.prompt);
       return x ? [{ t: Date.parse(m.timestamp) || null, kind: 'user', text: x, sub: !!m.isSidechain }] : [];
     }
-    if (m.isMeta || !m.message) return [];
+    if (m.type === 'system' && m.subtype === 'compact_boundary') {
+      const c = m.compactMetadata ?? {};
+      return [{ t: Date.parse(m.timestamp) || null, kind: 'note', text: `Conversation compacted${c.trigger === 'auto' ? ' automatically' : ''}${c.preTokens ? `: ${Math.round(c.preTokens / 1000)}k → ${Math.round((c.postTokens ?? 0) / 1000)}k tokens` : ''}` }];
+    }
+    if (m.isMeta || m.isCompactSummary || !m.message) return [];
     const t = Date.parse(m.timestamp) || null, sub = !!m.isSidechain;
     const c = m.message.content;
     if (m.type === 'user') {
@@ -1658,7 +1756,7 @@ function createAgent(project) {
     // the state right now, for "working…" / "done" at the end of the thread (Claude Code's own idle/busy when it runs)
     const r = runningSessions().find((y) => y.sessionId === x.sessionId);
     const state = x.listening ? 'listening' : r ? (r.asking ? 'asking' : r.waiting ? 'waiting' : 'working') : x.ended || x.elsewhere || x.hookless ? 'ended' : x.waiting ? 'waiting' : 'working';
-    return { entries, next: start + Math.max(end, from0), cut, size, state };
+    return { entries, next: start + Math.max(end, from0), cut, size, state, context: transcriptInfo(file)?.ctx ?? null };
   }
 
   function control({ job: jobId, action }) {
@@ -1706,7 +1804,7 @@ function createAgent(project) {
   const busy = () => jobs.some((j) => j.child && ['starting', 'running'].includes(j.status) && j.kind !== 'chat');
   sttListeners.add(() => changed(0));
   rpListeners.add(() => changed(0));
-  return { view, ask, chat, start, message, control, cancel, brief, startWatching, stopWatching, busy, onboard, listen, transcript, hook, type };
+  return { view, ask, chat, start, message, control, cancel, brief, startWatching, stopWatching, busy, onboard, listen, transcript, hook, type, newSession };
 }
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => { for (const c of children) { try { c.kill('SIGTERM'); } catch { /* gone */ } } process.exit(0); });
@@ -2135,7 +2233,32 @@ function folderCommand(dir) {
 }
 async function openFolder(project) {
   const [cmd, args] = folderCommand(project.root);
-  await new Promise((resolve, reject) => {
+  await launch(cmd, args);
+  return { ok: true };
+}
+// a new Claude Code session in a real terminal, in the project's folder (Terminal sessions › New session): on macOS a
+// Terminal window (the page can write to it); elsewhere the first terminal found. Settings › General "Start new
+// sessions in": a command with {cmd} (the shell command that starts Claude Code there) and {dir}, run without a shell.
+const shq = (x) => `'${String(x).replace(/'/g, `'\\''`)}'`;
+async function openTerminal(dir, front) {
+  const cmd = `cd ${shq(dir)} && ${CLAUDE.includes('/') ? shq(CLAUDE) : CLAUDE}`;
+  const c = String(settings.terminal?.open ?? '').trim();
+  if (c) { const [bin, ...args] = splitCmd(c); return launch(bin, args.map((a) => a.split('{cmd}').join(cmd).split('{dir}').join(dir))); }
+  if (process.platform === 'darwin') {
+    // in the background, unless it asks something first (the folder is not trusted yet): then in front
+    const r = await appleScript(`on run argv\n  tell application "Terminal"\n    do script (item 1 of argv)\n${front ? '    activate\n' : ''}  end tell\n  return "ok"\nend run`, [cmd]);
+    if (r.err) throw httpError(502, `Terminal: ${(r.errOut || r.err.message).trim().slice(0, 200)}`);
+    return;
+  }
+  if (process.platform === 'win32') return launch('cmd.exe', ['/c', 'start', 'cmd.exe', '/k', `cd /d "${dir}" && ${CLAUDE}`]);
+  const sh = [process.env.SHELL || 'bash', '-lc', cmd];
+  for (const [bin, ...pre] of [['x-terminal-emulator', '-e'], ['gnome-terminal', '--'], ['konsole', '-e'], ['xfce4-terminal', '-x'], ['kitty'], ['alacritty', '-e'], ['xterm', '-e']]) {
+    try { return await launch(bin, [...pre, ...sh]); } catch (e) { if (!/was not found/.test(e.message)) throw e; }
+  }
+  throw httpError(502, 'No terminal found: set one in Settings › General (Start new sessions in), e.g. "foot sh -lc {cmd}".');
+}
+function launch(cmd, args) {
+  return new Promise((resolve, reject) => {
     let child;
     try { child = spawn(cmd, args, { detached: true, stdio: ['ignore', 'ignore', 'pipe'] }); } catch (e) { return reject(httpError(502, `${cmd}: ${e.message}`)); }
     let err = '';
@@ -2145,10 +2268,13 @@ async function openFolder(project) {
     if (cmd === 'open') child.on('close', (code) => (code ? reject(httpError(502, err.trim() || `open failed (${code}).`)) : resolve()));
     else child.on('spawn', () => { child.stderr.destroy(); child.unref(); resolve(); });
   });
-  return { ok: true };
 }
 async function saveSettings(body) {
-  if (body.files) { settings.files = { open: typeof body.files.open === 'string' ? body.files.open.trim().slice(0, 500) : '' }; writeSettings(); return settingsView(false); }
+  if (body.files || body.terminal) {
+    if (body.files) settings.files = { open: typeof body.files.open === 'string' ? body.files.open.trim().slice(0, 500) : '' };
+    if (body.terminal) settings.terminal = { open: typeof body.terminal.open === 'string' ? body.terminal.open.trim().slice(0, 500) : '' };
+    writeSettings(); return settingsView(false);
+  }
   const r = body.rephrase ?? {}, t = body.stt ?? {};
   if (r.provider && !['auto', 'container', 'url', 'apple', 'off'].includes(r.provider)) throw httpError(400, 'Unknown provider.');
   if (r.url && !/^https?:\/\/[^\s]+$/.test(r.url)) throw httpError(400, 'The URL must start with http:// or https://.');
@@ -2873,7 +2999,7 @@ async function readBody(req, max = 100_000) {
   for await (const chunk of req) { raw += chunk; if (raw.length > max) throw httpError(413, 'Too large.'); }
   try { return JSON.parse(raw || '{}'); } catch { throw httpError(400, 'Expected JSON.'); }
 }
-const AGENT_ACTIONS = { ask: 'ask', chat: 'chat', start: 'start', message: 'message', control: 'control', cancel: 'cancel', listen: 'listen', transcript: 'transcript', hook: 'hook', type: 'type' };
+const AGENT_ACTIONS = { ask: 'ask', chat: 'chat', start: 'start', message: 'message', control: 'control', cancel: 'cancel', listen: 'listen', transcript: 'transcript', hook: 'hook', type: 'type', 'new-session': 'newSession' };
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
