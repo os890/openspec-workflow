@@ -1403,6 +1403,12 @@ body.board-max { overflow: hidden; }
 .chip[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
 .ag-bar { padding: 0 var(--agp) 8px; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid var(--line); }
 .ag-bar:empty { display: none; }
+/* small windows: the head and the compose box keep their size; the bar (folder, expert mode) shrinks and scrolls on
+   its own, the thread keeps a few lines; nothing overflows the panel (it cannot be scrolled back) */
+.agent-panel > .ag-head, .agent-panel > .ag-compose, .agent-panel > .ag-route { flex-shrink: 0; }
+.agent-panel > .ag-bar { flex: 0 1 auto; min-height: 0; max-height: 62%; overflow: auto; }
+.agent-panel > .ag-thread { min-height: 72px; }
+.agent-panel .ag-bar .np-expert { max-height: none; overflow: visible; }
 .ag-bar code { overflow-wrap: anywhere; }
 .ag-thread { flex: 1; overflow: auto; padding: 14px var(--agp); display: flex; flex-direction: column; gap: 8px; }
 .msg { max-width: 88%; border-radius: 16px; padding: 8px 12px; font-size: 13.5px; overflow-wrap: anywhere; display: flex; flex-direction: column; gap: 2px; flex: none; }
@@ -1474,7 +1480,8 @@ body.board-max { overflow: hidden; }
 .agent-panel.max .ag-thread { padding-block: 16px; gap: 10px; }
 .agent-panel.max .msg, .agent-panel.max .steps { max-width: 80%; }
 .agent-panel.max .ag-compose { padding-block: 10px 2px; }
-.agent-panel.max .np-expert { display: block; columns: 3 320px; column-gap: 22px; max-height: 72vh; }
+.agent-panel.max .np-expert { display: block; columns: 3 320px; column-gap: 22px; }
+.agent-panel.max > .ag-bar { max-height: 78%; }
 .agent-panel.max .np-expert > .xp-g { break-inside: avoid; margin-bottom: 12px; }
 .agent-panel.max .np-expert > .ag-note { column-span: all; }
 .agent-panel.max .np-row { flex-wrap: nowrap; }
