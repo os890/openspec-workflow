@@ -94,14 +94,19 @@ Click a card to open its details next to the board; `Esc` closes them. A link to
 
 ## Styles
 
-The dashboard has two styles, **Flat** (the default) and **Glass**, each in light and dark. The **Glass** / **Flat**
-button in the header switches the style, ◐ switches light and dark; both choices are remembered per browser.
-In a link, `?style=glass|flat` and `?theme=light|dark` set them, e.g.
-http://127.0.0.1:4590/?style=glass&theme=dark.
+The dashboard has three styles, each in light and dark: **Flat** (the default), **Glass** (frosted panels over a
+soft colour field) and **Paper** (index cards on cork boards, the current task on a sticky note). The style picker
+in the header switches the style, ◐ switches light and dark; both choices are remembered per browser.
+In a link, `?style=flat|glass|paper` and `?theme=light|dark` set them, e.g.
+http://127.0.0.1:4590/?style=paper&theme=dark.
 
 | Flat, light | Flat, dark | Glass, dark |
 |---|---|---|
 | ![Flat style, light](images/style-flat-light.png) | ![Flat style, dark](images/style-flat-dark.png) | ![Glass style, dark](images/style-glass-dark.png) |
+
+| Paper, light | Paper, dark |
+|---|---|
+| ![Paper style, light](images/style-paper-light.png) | ![Paper style, dark](images/style-paper-dark.png) |
 
 ## Tips
 
