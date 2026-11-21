@@ -343,6 +343,10 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     AppleScript calls to Terminal time out after 8 s; when macOS has not allowed the dashboard to control Terminal
     (an unanswered or denied Automation request, typical for a LaunchAgent), the server says so and does not try
     again for a minute.
+  - **Side by side**: an overlay with two frames of the page itself, each with `?embed` (only the terminal sessions
+    panel, filling the frame; no header, no close or maximize) and `term=<session>&write=1` on the session's project
+    page (or the overview); each half polls, joins and writes on its own. The left one is the joined session, the
+    right one the most recent other running session.
   - **Context gauge**: the session list, the transcript and `/api/sessions/status` carry `ctx` (`used`, `window`,
     `compactions`): `used` from the last main-chain assistant message's `usage` (input + cache creation + cache read
     + output tokens) or, after a `compact_boundary`, its `postTokens`; `window` is 1M when the model id has `[1m]` or

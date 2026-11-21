@@ -1653,6 +1653,23 @@ body.board-max { overflow: hidden; }
 /* git history panel */
 .gh-panel { width: min(640px, calc(100vw - 24px)); z-index: 71; }
 .gh-panel.max { inset: 8px; width: auto; --agp: 22px; }
+/* one half of "Side by side": only the terminal sessions panel, filling the frame */
+body.embed > header, body.embed > .wrap, body.embed #tt-bar, body.embed #board, body.embed .board-wrap { display: none !important; }
+body.embed { background: var(--surface); }
+body.embed #agent { inset: 0 !important; width: auto !important; border-radius: 0; box-shadow: none; border: 0; }
+body.embed [data-ag-max], body.embed [data-ag-close] { display: none; }
+.split { position: fixed; inset: 8px; z-index: 75; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; box-shadow: var(--shadow-hover), 0 24px 60px -12px rgba(0, 0, 0, .28); }
+.split-head { display: flex; align-items: baseline; gap: 12px; padding: 12px 18px 10px; border-bottom: 1px solid var(--line); }
+.split-head h2 { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -.02em; white-space: nowrap; }
+.split-head h2 .ic-term { vertical-align: -2px; margin-right: 4px; }
+.split-head .muted { font-size: 12.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.split-head [data-split-swap] { margin-left: auto; }
+.split-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; }
+.split-body iframe { width: 100%; height: 100%; border: 0; min-width: 0; }
+.split-body iframe + iframe { border-left: 1px solid var(--line); }
+@media (max-width: 860px) { .split-body { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; } .split-body iframe + iframe { border-left: 0; border-top: 1px solid var(--line); } }
+.ag-head .ag-splitbtn { margin-left: auto; white-space: nowrap; }
+.ag-head .ag-splitbtn + .ag-maxbtn { margin-left: 0; }
 /* time travel: the history shrinks to a small box at the bottom right, the board is the earlier state */
 .gh-panel.travel, .gh-panel.travel.max { inset: auto 12px 12px auto; top: auto; height: min(44vh, 420px); width: min(400px, calc(100vw - 24px)); }
 .gh-panel.travel .gh-detail { display: none; }
@@ -3342,7 +3359,8 @@ window.addEventListener('hashchange', () => {
   render();
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && ag.open) {
+  if (e.key === 'Escape' && split.open) { e.preventDefault(); return splitClose(); }
+  if (e.key === 'Escape' && ag.open && !EMBED) {
     if (ag.max) { ag.max = false; try { localStorage.setItem('osd-chat-max', '0'); } catch {} return buildAgent(); }
     return closeAgent();
   }
@@ -3651,7 +3669,40 @@ document.addEventListener('click', (e) => {
     location.href = u.toString();
   }
 }, true);
-function closeAgent() { cancelRecording(); ag.open = false; $('agent').hidden = true; document.body.classList.remove('ag-open', 'ag-max'); updateAgentBtn(); }
+function closeAgent() { if (EMBED) return; cancelRecording(); ag.open = false; $('agent').hidden = true; document.body.classList.remove('ag-open', 'ag-max'); updateAgentBtn(); }
+// ---- side by side: two terminal sessions next to each other, each half the page itself with ?embed (its own picker,
+// thread, write mode and input box); the left one starts with the joined session, the right one with the next
+const split = { open: false };
+function splitUrl(sid, projectId) {
+  const u = new URL(location.href);
+  for (const k of ['project', 'overview', 'panel', 'term', 'write', 'onboard', 'max', 'focus', 'view']) u.searchParams.delete(k);
+  if (projectId) { u.searchParams.set('project', projectId); u.searchParams.set('panel', 'chat'); } else u.searchParams.set('overview', '');
+  if (sid) { u.searchParams.set('term', sid); u.searchParams.set('write', '1'); }
+  u.searchParams.set('embed', ''); u.hash = '';
+  return u.pathname + u.search;
+}
+function splitOpen() {
+  // a session of this page's project, of another followed project (opened on that project's page) or session only
+  const all = [...termSessions().filter((x) => !x.ended), ...(ag.view?.elsewhere ?? [])];
+  const ctx = (x) => (x ? x.projectId || PROJECT || null : PROJECT || null);
+  const cur = ag.term ? all.find((x) => x.sessionId === ag.term) : null;
+  const other = all.filter((x) => x.sessionId !== ag.term).sort((a, b) => b.t - a.t)[0];
+  const left = splitUrl(cur?.sessionId ?? null, ctx(cur)), right = splitUrl(other?.sessionId ?? null, ctx(other));
+  let el = $('split');
+  if (!el) { el = document.createElement('div'); el.id = 'split'; el.className = 'split'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Two sessions side by side'); document.body.append(el); }
+  el.innerHTML = `<div class="split-head"><h2><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M12 4v16"/></svg> Side by side</h2><span class="muted">two sessions, each with its own picker and input box</span><button class="link" type="button" data-split-swap title="Swap the two sides">⇄ Swap</button><button class="link" type="button" data-split-close>Close ✕</button></div>
+    <div class="split-body"><iframe title="Left session" src="${esc(left)}"></iframe><iframe title="Right session" src="${esc(right)}"></iframe></div>`;
+  el.hidden = false; split.open = true; document.body.classList.add('split-open');
+}
+function splitClose() {
+  const el = $('split'); if (!el) return;
+  el.hidden = true; el.innerHTML = ''; split.open = false; document.body.classList.remove('split-open');
+}
+document.addEventListener('click', (e) => {
+  if (e.target.closest?.('[data-ag-split]')) return splitOpen();
+  if (e.target.closest?.('[data-split-close]')) return splitClose();
+  if (e.target.closest?.('[data-split-swap]')) { const b = $('split').querySelector('.split-body'); b.prepend(b.lastElementChild); }
+});
 function applyAgentMax() {
   $('agent').classList.toggle('max', ag.max);
   document.body.classList.toggle('ag-max', ag.max && ag.open);
@@ -3676,7 +3727,7 @@ function buildChatHtml(s, c, ph) {
   const term = c?.terminal || ag.convo === 'terminal'; // also before the session list has arrived
   const chips = term ? '' : '<div class="ag-chips" id="ag-chips" role="tablist"></div>'; // ⌨ Terminal sessions is a panel of its own
   return `
-    <div class="ag-head"><h2>${term ? `${TERM_SVG} Terminal sessions` : 'Chat'}</h2><span class="muted" style="font-size:12.5px">${esc(s.project)}</span>${ag.max ? chips : ''}<button class="link ag-maxbtn" type="button" data-ag-max aria-pressed="${ag.max}" title="${ag.max ? 'Back to the side panel' : 'Use the whole window'}">${ag.max ? '⤡ Restore' : '⤢ Maximize'}</button><button class="link" type="button" data-ag-close>Close ✕</button></div>
+    <div class="ag-head"><h2>${term ? `${TERM_SVG} Terminal sessions` : 'Chat'}</h2><span class="muted" style="font-size:12.5px">${esc(s.project)}</span>${ag.max ? chips : ''}${term && !EMBED ? '<button class="link ag-splitbtn" type="button" data-ag-split title="Two sessions next to each other, each with its own picker and input box (e.g. the one that implements and the one that reviews)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M12 4v16"/></svg>Side by side</button>' : ''}<button class="link ag-maxbtn" type="button" data-ag-max aria-pressed="${ag.max}" title="${ag.max ? 'Back to the side panel' : 'Use the whole window'}">${ag.max ? '⤡ Restore' : '⤢ Maximize'}</button><button class="link" type="button" data-ag-close>Close ✕</button></div>
     ${ag.max ? '' : chips}
     <div class="ag-bar" id="ag-bar"></div>
     <div class="ag-thread" id="ag-thread" aria-live="polite"></div>
@@ -4990,6 +5041,9 @@ document.addEventListener('click', (e) => { if (gh.open && e.target.closest?.('[
 // ?project=<id> shows one project; with several projects and no ?project= the overview is the start page.
 const PARAMS = new URLSearchParams(location.search);
 const SNAPSHOT = PARAMS.has('snapshot');
+// ?embed: only the terminal sessions panel, filling the page (one half of "Side by side")
+const EMBED = PARAMS.has('embed') && !!AGENT_TOKEN;
+if (EMBED) document.body.classList.add('embed');
 let PROJECT = PARAMS.get('project');
 function withProject(u) { const p = PROJECT ?? (AGENT_TOKEN ? ag.ovProject : null); return p ? `${u}${u.includes('?') ? '&' : '?'}project=${encodeURIComponent(p)}` : u; } // the overview's ⌨ panel goes through the first followed project
 function hrefFor(id) {
@@ -5039,7 +5093,7 @@ function renderOverview(o) {
   if (AGENT_TOKEN) $('podman-btn').hidden = false; // the overview has the room: Podman management at a click
   if (AGENT_TOKEN && !ag.ovProject && o.projects?.length) setTimeout(async () => {
     await ovTermFetch(); // ⌨ with its badge right away
-    if (PARAMS.get('term') && !ag.open) { await openTermOverview(); ag.term = PARAMS.get('term'); ag.termWrite = PARAMS.get('write') === '1'; renderAgentLive(); termPoll(true); } // from the background list
+    if ((PARAMS.get('term') || EMBED) && !ag.open) { await openTermOverview(); ag.term = PARAMS.get('term') || null; ag.termWrite = PARAMS.get('write') === '1'; renderAgentLive(); termPoll(true); } // from the background list, or one half of "Side by side"
   }, 0);
   $('git-btn').hidden = true;
   const prev = new Map((ui.overview?.projects ?? []).map((p) => [p.id, p.lastEvent?.t ?? 0]));
@@ -5507,7 +5561,8 @@ function startProject() {
   if (AGENT_TOKEN && PARAMS.get('panel')?.startsWith('ticket:')) { // ?panel=ticket:<change> opens a ticket's panel
     Object.assign(ag, { open: true, panel: 'ticket', target: PARAMS.get('panel').slice(7), max: ag.max || PARAMS.has('max') }); $('agent').hidden = false; document.body.classList.add('ag-open');
   }
-  if (AGENT_TOKEN && PARAMS.get('term')) { ag.convo = 'terminal'; ag.term = PARAMS.get('term'); ag.termWrite = PARAMS.get('write') === '1'; } // ?term=<session id> joins that session (&write=1: writing)
+  if (AGENT_TOKEN && (PARAMS.get('term') || EMBED)) { ag.convo = 'terminal'; ag.term = PARAMS.get('term') || null; ag.termWrite = PARAMS.get('write') === '1'; } // ?term=<session id> joins that session (&write=1: writing)
+  if (EMBED) { ag.open = true; ag.panel = 'chat'; ag.stick = true; $('agent').hidden = false; document.body.classList.add('ag-open'); }
   if (AGENT_TOKEN && PARAMS.get('panel') === 'chat') { ag.open = true; ag.panel = 'chat'; ag.stick = true; ag.max = ag.max || PARAMS.has('max'); $('agent').hidden = false; document.body.classList.add('ag-open'); } // ?panel=chat opens the chat, &max maximized
   if (SNAPSHOT && AGENT_TOKEN) fetch(withProject('/api/agent')).then((r) => r.json()).then((v) => { ag.view = v; renderAgentLive(); });
   if (SNAPSHOT) fetch(withProject('/api/state')).then((r) => r.json()).then((d) => { $('conn').innerHTML = `<span class="dot"></span>snapshot ${hhmm(d.scannedAt)}`; accept(d); });

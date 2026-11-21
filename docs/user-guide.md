@@ -367,6 +367,12 @@ already and continues the session there. **Details ▾** shows the session picke
 and ↩ to quote, also a selected part); they are typed into the session like any message, and the thread shows them
 as reactions and quotes.
 
+**Side by side.** **Side by side** in the panel's header shows two sessions next to each other (one above the
+other on a narrow screen), e.g. the session that implements a ticket and the one that reviews it. Each half is a
+panel of its own, with its own session picker, write mode, input box and look; the left one starts with the session
+you have joined, the right one with the most recent other one. **⇄ Swap** swaps the halves, **Close ✕** (or `Esc`)
+goes back to the single panel.
+
 **Send it to the background.** For a longer task, **⤓ Background** (next to **Read only**) closes the panel and
 keeps the session in a list; a button with the number of sessions appears in the header, on every page of the
 dashboard. Its dot is amber while one still works, green when all are done, red when one needs you or has an issue;
