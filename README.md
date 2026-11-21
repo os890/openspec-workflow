@@ -198,7 +198,8 @@ What makes it more than a status page:
 - **Edit the specs from a conversation.** Every tab of a change (tasks, proposal, design, spec deltas, validation)
   has its own question box with that context. When the conversation finds something to change, Claude proposes
   the updated file; you see a diff and accept or reject it.
-- **Quick replies in the chat.** React to an answer with one click (👍 ✅ 🙏 🎉 💡), ask for it again in simpler
+- **Quick replies in the chat.** React to an answer with one click (👍 ✅ 🙏 🎉 💡; 🌿 accepts a proposal but on a
+  new branch), ask for it again in simpler
   words (🔁), as a summary (📝) or as a table (📊), or quote it (↩, also just a selected part). Claude gets a short
   reference to the answer, so it knows what you mean without the answer being sent again; the chat stays quiet
   with just a faint ⋯ until you hover an answer.
@@ -210,7 +211,8 @@ What makes it more than a status page:
   in the background (nothing committed). Or **start a new project**: brainstorm it with Claude, and once you agree
   it is created with its roadmap and followed from then on; an **expert mode** sets its quality gates, task checks,
   review topics, workflow steps, documentation, diagram format (Mermaid by default) and types, container engine,
-  version control (local, GitHub, GitLab, …, public or private) and license up front, takes attached files (a spec,
+  branches (main, per ticket or per milestone), version control (local, GitHub, GitLab, …, public or private) and
+  license up front, takes attached files (a spec,
   notes, a PDF) as part of the idea,
   and lets Claude check your local containers for a service to reuse (e.g. a running Postgres) before anything is
   installed on the host. Projects you are done with can be **archived** or **unfollowed**, so they cost nothing

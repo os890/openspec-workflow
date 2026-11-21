@@ -212,8 +212,10 @@ lets you join a session running elsewhere (see below). Enter sends, Shift+Enter 
 **Quick replies.** Each of Claude's answers has a faint **⋯** next to its time. Move the mouse over the answer (or
 tap ⋯) and a row of buttons appears:
 
-- 👍 ✅ 🙏 🎉 💡 react at once, each with a short sentence ("I agree with this.", "Yes, go ahead with this.",
-  "Thanks, that helps.", "Great, that is exactly right.", "Good idea, let us keep that."); only positive ones;
+- 👍 ✅ 🌿 🙏 🎉 💡 react at once, each with a short sentence ("I agree with this.", "Yes, go ahead with this.",
+  "Thanks, that helps.", "Great, that is exactly right.", "Good idea, let us keep that."); only positive ones. 🌿
+  accepts a proposal but has it done on a new git branch: Claude creates one named after it, works there and leaves
+  merging to you;
 - 🔁 asks for the answer again in simpler words, 📝 for a summary in a few bullet points, 📊 for an overview table;
 - ↩ quotes the answer in your next message; select a part of it first to quote just that part.
 
@@ -249,8 +251,10 @@ or **Session ended**.
 While you write to a session, the details above the conversation fold into one line (**✎ Writing to …**, its state,
 **Details ▾**, **Read only**), so the conversation gets the panel; **Details ▾** shows the session picker and the
 notes again, **Fewer details ▴** folds them. Claude's answers there have the same quick replies as the chat
-(👍 ✅ 🙏 🎉 💡, 🔁 📝 📊 and ↩ to quote, also a selected part); they are typed into the session like any message,
-and the thread shows them as reactions and quotes.
+(👍 ✅ 🌿 🙏 🎉 💡, 🔁 📝 📊 and ↩ to quote, also a selected part); they are typed into the session like any message,
+and the thread shows them as reactions and quotes. Also only while writing: **▣ Terminal** shows the conversation in
+terminal colors (dark, monospaced; your own messages keep a bright blue background, so they stand out), and **A−** /
+**A+** change its text size; both are remembered in the browser.
 
 Following a session works without any setup: the dashboard finds the running sessions in Claude Code's own records
 (`~/.claude/sessions`) and reads their transcripts.
@@ -403,6 +407,8 @@ defaults; **+ add** takes your own entries:
   API compatibility, migrations;
 - **Workflow steps**: one commit per ticket, acceptance check, diff review with validated findings, docs and
   diagram updates, parking lot;
+- **Branches** (choose one): everything on main (the default), a branch per ticket that is merged when the ticket is
+  done, or a branch per milestone that is merged when the milestone is done;
 - **Documentation**: e.g. a README with setup and usage, CLAUDE.md / AGENTS.md kept current, an architecture
   overview, decision records (ADRs), an API reference, a user guide, a changelog, diagrams of the architecture and
   the main flows;

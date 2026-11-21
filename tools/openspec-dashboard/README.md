@@ -92,7 +92,8 @@ other platforms it shows what to run.
 
 **⚙ Expert mode** in that panel sets the workflow the project starts with: quality gates, what every task is
 checked for, what every change is reviewed for, the workflow steps, the documentation to keep, the diagram format
-(Mermaid, PlantUML or both; one choice) and the diagram types to draw (C4 context and containers, sequence, ER,
+(Mermaid, PlantUML or both; one choice), the branches (everything on main, a branch per ticket or per milestone,
+merged when it is done; one choice) and the diagram types to draw (C4 context and containers, sequence, ER,
 state, deployment, …), the container engine (Podman, Docker or none; one choice), how tools
 and services are run, version control (git local only, on GitHub, GitLab or another platform, or none; one choice),
 the repository's visibility (private or public; only with a platform) and the license (none yet, MIT, Apache-2.0,
@@ -264,7 +265,8 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     waiting, listening, ended), polled with the transcript every 2 s from Claude Code's own idle/busy. In write mode
     the bar folds into one line (**Details ▾** unfolds it), and Claude's answers get the reactions, requests and
     quotes of the chat; a quote typed into a terminal is one line, so the dashboard reads `[Replying to …] text`
-    with a space as well as with a line break. The drop-down lists the project's sessions of the last 12 hours: the ones the
+    with a space as well as with a line break. **▣ Terminal** (terminal colors, own messages highlighted) and
+    **A− / A+** (text size) only apply in write mode and are kept in `localStorage` (`osd-term-view`). The drop-down lists the project's sessions of the last 12 hours: the ones the
     hook below reports, and also those it has not seen (no hook, or started before it), found in Claude Code's own
     records: `~/.claude/sessions/<pid>.json` (session id, folder, idle or busy; the process must still run) for the
     running ones and the interactive transcripts in `~/.claude/projects/<folder>/` for the ended ones (`claude -p`
@@ -282,8 +284,8 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     message when it is done instead of stopping. **Any session** sends to the next session that takes a step.
   - **⤢ Maximize** gives the chat the whole window (`Esc` restores it, a second `Esc` closes it).
   - **Reactions and quotes**: each of Claude's answers has a faint ⋯; hovering the answer (or tapping ⋯) shows a
-    row where 👍 ✅ 🙏 🎉 💡 send a short answer at once ("I agree
-    with this.", "Yes, go ahead with this.", …), 🔁 asks Claude to say it again in simpler words, 📝 to summarize
+    row where 👍 ✅ 🌿 🙏 🎉 💡 send a short answer at once ("I agree
+    with this.", "Yes, go ahead with this.", …; 🌿 accepts but on a new git branch, unmerged), 🔁 asks Claude to say it again in simpler words, 📝 to summarize
     it in a few bullet points and 📊 to turn it into an overview table, and **↩ Quote** replies to that answer (select a part of it first
     to quote just that part). Claude sees no timestamps of the dashboard, so the reference it gets is the answer's
     first sentence, or the selected part, in a fixed form (`[Reaction 👍 to your message: "…"]`,

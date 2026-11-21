@@ -1408,6 +1408,24 @@ body.board-max { overflow: hidden; }
 .xp-g.xp-off .xp-chip { pointer-events: none; }
 .np-repo { flex-wrap: wrap; margin-bottom: 6px; }
 .term-compact { flex-wrap: nowrap; align-items: center; gap: 10px; }
+.term-vs { display: inline-flex; gap: 8px; align-items: center; }
+.term-v[aria-pressed="true"] { font-weight: 600; text-decoration: underline; }
+/* write mode in a joined session: the text size, and optionally terminal colors (your messages stay easy to spot) */
+.agent-panel.term-writing #ag-thread .msg, .agent-panel.term-writing #ag-thread .msg .md { font-size: var(--term-fs, 13.5px); }
+.agent-panel.term-writing #ag-thread details.steps { font-size: calc(var(--term-fs, 13.5px) - 1.5px); }
+.agent-panel.term-look #ag-thread { background: #0d1117; color: #d6dde6; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.agent-panel.term-look #ag-thread .msg.them { background: transparent; color: #d6dde6; border-radius: 0; padding-left: 10px; border-left: 2px solid #3a4250; max-width: 100%; }
+.agent-panel.term-look #ag-thread .msg.them code { background: #1f2630; color: #f0c674; }
+.agent-panel.term-look #ag-thread .msg.me { background: #1d4ed8; color: #fff; box-shadow: 0 0 0 1px #60a5fa; font-family: inherit; }
+.agent-panel.term-look #ag-thread .msg.me .rx-quote { color: #dbeafe; border-color: #93c5fd; }
+.agent-panel.term-look #ag-thread .msg.me.rx-sent { background: #1e3a8a; color: #fff; }
+.agent-panel.term-look #ag-thread .msg.me *, .agent-panel.term-look #ag-thread .msg.me .rx-on { color: inherit; }
+.agent-panel.term-look #ag-thread pre { background: #161b22; color: #d6dde6; border: 1px solid #30363d; }
+.agent-panel.term-look #ag-thread pre code { background: transparent; color: inherit; }
+.agent-panel.term-look #ag-thread .ic-chip { background: #0b3a8f; color: #dbeafe; }
+.agent-panel.term-look #ag-thread details.steps, .agent-panel.term-look #ag-thread details.steps summary { color: #8b949e; }
+.agent-panel.term-look #ag-thread .term-done, .agent-panel.term-look #ag-thread .msg.typing { background: #161b22; color: #8b949e; border-color: #30363d; }
+.agent-panel.term-look #ag-thread .rx { filter: none; }
 .term-compact .link, .term-compact .btn { white-space: nowrap; flex-shrink: 0; }
 .term-compact .ag-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .term-done { align-self: center; font-size: 12.5px; color: var(--muted); padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); margin: 4px 0 2px; }
@@ -3179,6 +3197,23 @@ async function agentPost(action, body) {
 }
 const recentExternal = () => (ag.view?.sessions ?? []).filter((x) => !x.ended && !x.dashboardJob && Date.now() - x.t < 15 * 60e3);
 // ---- joining a session that runs in a terminal (or an IDE): pick it, see its transcript live (read-only), write to it
+// how a joined session looks while writing to it: terminal colors and the text size (remembered in this browser)
+const termView = (() => { try { return { look: false, fs: 13.5, ...JSON.parse(localStorage.getItem('osd-term-view') || '{}') }; } catch { return { look: false, fs: 13.5 }; } })();
+const termViewSave = () => { try { localStorage.setItem('osd-term-view', JSON.stringify(termView)); } catch {} };
+function termViewApply(on) {
+  const a = $('agent');
+  a.classList.toggle('term-writing', !!on);
+  a.classList.toggle('term-look', !!on && termView.look);
+  a.style.setProperty('--term-fs', `${termView.fs}px`);
+}
+document.addEventListener('click', (e) => {
+  const lk = e.target.closest?.('[data-term-look]'), fs = e.target.closest?.('[data-term-fs]');
+  if (!lk && !fs) return;
+  e.stopPropagation();
+  if (lk) termView.look = !termView.look;
+  else termView.fs = Math.min(22, Math.max(10.5, termView.fs + Number(fs.dataset.termFs)));
+  termViewSave(); renderAgentLive();
+}, true);
 const typedHere = new Set(); // messages typed into a session's terminal from this page (marked in its transcript)
 const termLog = new Map(); // session id -> { entries, next (byte offset), cut, err }
 const termSessions = () => (ag.view?.sessions ?? []).filter((x) => !x.dashboardJob && x.transcript).sort((a, b) => (a.ended - b.ended) || b.t - a.t); // running first, ended ones stay readable
@@ -3357,7 +3392,8 @@ const columnLabel = (c) => COLS.find(([k]) => k === columnOf(c))?.[1] ?? STATUS[
 // ---- reactions and quotes: a quick answer to one of Claude's messages. Claude sees no timestamps of the dashboard,
 // so the reference is the message's first sentence (or the selected part), which Claude finds in its own context.
 // Only positive reactions; each one sends a short sentence with the reference.
-const REACTIONS = [['👍', 'I agree with this.'], ['✅', 'Yes, go ahead with this.'], ['🙏', 'Thanks, that helps.'], ['🎉', 'Great, that is exactly right.'], ['💡', 'Good idea, let us keep that.']];
+const REACTIONS = [['👍', 'I agree with this.'], ['✅', 'Yes, go ahead with this.'],
+  ['🌿', 'Yes, go ahead with this, but on a new git branch: create one named after it, switch to it and do the work there; do not merge it, I decide that later.'], ['🙏', 'Thanks, that helps.'], ['🎉', 'Great, that is exactly right.'], ['💡', 'Good idea, let us keep that.']];
 // requests about an answer: sent the same way, but asking Claude to do something with it
 const REQUESTS = [['🔁', 'Please say this again in other words, simpler and clearer.', 'Rephrase'], ['📝', 'Please summarize this in three to five short bullet points.', 'Summarize'],
   ['📊', 'Please turn this into an overview table (Markdown): one row per item or point, with the columns that fit the content, and nothing important left out.', 'Table']];
@@ -3644,12 +3680,13 @@ function barHtml(c) {
       ${ag.view?.hooks ? `<div class="ag-note">The hook is set up, but this session started before it: restart it to write to it (<code>/exit</code>, then <code>claude --resume ${esc(x.sessionId)}</code>).</div>` : setup('To write to it, set up the hook')}`;
     const state = x2.listening ? '<span class="dot on"></span>Listening: waiting for your message' : x2.waiting ? '<span class="dot"></span>Waiting for input in the terminal' : '<span class="dot on"></span>Working';
     // writing: the details fold into one line, so the conversation gets the panel ("Details" brings them back)
+    const look = `<button class="link term-v" type="button" data-term-look aria-pressed="${!!termView.look}" title="Terminal colors for the conversation (your messages stay highlighted)">▣ Terminal</button><button class="link term-v" type="button" data-term-fs="-1" title="Smaller text" aria-label="Smaller text">A−</button><button class="link term-v" type="button" data-term-fs="1" title="Larger text" aria-label="Larger text">A+</button>`;
     if (ag.termWrite && !ag.termDetails) return `<div class="ag-row term-compact"><span class="ag-note">✎ Writing to <b>${esc(xo ? xo.display : x2.prompt ? `“${x2.prompt.replace(/\s+/g, ' ').slice(0, 40)}${x2.prompt.length > 40 ? '…' : ''}”` : x2.sessionId.slice(0, 8))}</b> · ${state}</span>
-        <button class="link" type="button" data-ag-term-details aria-expanded="false" style="margin-left:auto" title="Show the session picker and the details again">Details ▾</button>
+        <span class="term-vs" style="margin-left:auto">${look}</span><button class="link" type="button" data-ag-term-details aria-expanded="false" title="Show the session picker and the details again">Details ▾</button>
         <button class="btn" type="button" data-ag-term-write aria-pressed="true" title="Back to read-only">Read only</button></div>${termLog.get(x2.sessionId)?.err ? `<div class="ag-note warn">✕ ${esc(termLog.get(x2.sessionId).err)}</div>` : ''}`;
     return `${top}
       <div class="ag-row"><span class="ag-note">${state} · last step ${ago(x2.t)}${x2.tool && !x2.waiting ? ` (${esc(x2.tool)})` : ''}</span>
-        ${ag.termWrite ? '<button class="link" type="button" data-ag-term-details aria-expanded="true" style="margin-left:auto" title="Fold the details into one line">Fewer details ▴</button>' : ''}
+        ${ag.termWrite ? `<span class="term-vs" style="margin-left:auto">${look}</span><button class="link" type="button" data-ag-term-details aria-expanded="true" title="Fold the details into one line">Fewer details ▴</button>` : ''}
         <button class="btn" type="button" data-ag-term-write aria-pressed="${ag.termWrite}" ${ag.termWrite ? '' : 'style="margin-left:auto"'} title="${ag.termWrite ? 'Back to read-only' : 'Write to this session as if you typed it there'}">${ag.termWrite ? 'Read only' : '✎ Write to it'}</button>
         ${ag.termWrite && cur && !x2.hookless && !x2.typeable ? `<button class="btn" type="button" data-ag-term-listen aria-pressed="${!!x2.listen}" title="When it is about to stop, it waits for your message instead (the terminal shows the hook running; Esc there takes the session back)">${x2.listen ? '👂 Listening · stop' : '👂 Keep it listening'}</button>` : ''}</div>
       ${ag.termWrite && x2.typeable ? `<div class="ag-note">Your message is typed into its Terminal tab and sent with Return, exactly as if you typed it there, also while it waits for input (one line; not while it asks you something there).</div>`
@@ -3689,6 +3726,7 @@ function renderAgentLive() {
     if ($('ag-text')) $('ag-text').placeholder = chatPlaceholder(c, ui.state ? { project: ui.state.project } : { project: '' });
     $('ag-chips').innerHTML = list.map((x) => `<button type="button" class="chip" role="tab" data-ag-convo="${esc(x.id)}" aria-selected="${x.id === c?.id}">${x.live ? '<span class="dot on"></span>' : ''}${x.session ? 'Session · ' : ''}${esc(x.label)}</button>`).join('');
     morphHtml($('ag-bar'), barHtml(c)); // morph: an open session picker stays open
+    termViewApply(c?.terminal && ag.term && ag.termWrite);
     const tx = c?.terminal && ag.term ? termSessions().find((y) => y.sessionId === ag.term) ?? (ag.view?.elsewhere ?? []).find((y) => y.sessionId === ag.term && !y.projectId) : null;
     const ro = c?.terminal && (ag.term ? (!tx || !ag.termWrite || tx.ended || (tx.hookless && !tx.typeable)) : !ag.view?.hooks); // a joined session is read-only until "Write to it"; an ended one or one without the hook stays so
     for (const el of document.querySelectorAll('#agent .ag-compose, #agent #ag-suggest')) el.hidden = !!ro;
@@ -3699,6 +3737,7 @@ function renderAgentLive() {
     if (atEnd || ag.stick) { th.scrollTop = th.scrollHeight; ag.stick = false; }
     $('ag-route').innerHTML = c?.terminal ? (ag.note.startsWith('✕') ? `<span style="color:var(--st-blocked)">${esc(ag.note)}</span>` : '') : 'Enter sends · Shift+Enter for a new line';
   } else {
+    termViewApply(false);
     if (!$('ag-body')) return;
     $('ag-note').textContent = ag.note;
     $('ag-note').className = 'ag-note' + (ag.note.startsWith('✕') ? ' warn' : '');
@@ -4620,6 +4659,7 @@ function scoutMax(on) {
   if (b) { b.setAttribute('aria-pressed', String(on)); b.textContent = on ? '⤡ Restore' : '⤢ Maximize'; b.title = on ? 'Back to the side panel (Esc)' : 'Use the whole window'; }
 }
 function scoutPanel(placeholder, max = false, attach = false) {
+  termViewApply(false);
   $('agent').hidden = false;
   document.body.classList.add('ag-open');
   $('agent').innerHTML = `<div class="ag-head"><h2 id="sc-title"></h2><button class="link ag-maxbtn" type="button" data-sc-max></button><button class="link" type="button" data-sc-close>Close ✕</button></div>
@@ -4710,6 +4750,7 @@ const EXPERT = [
   ['diagramTypes', 'Diagram types', [['System context (C4 level 1)', 1], ['Containers (C4 level 2)', 1], ['Components (C4 level 3)', 0], ['Sequence diagrams of the main flows', 1], ['Data model (ER)', 1], ['State machines', 0], ['Activity / flow charts', 0], ['Deployment', 0], ['Class diagrams', 0]]],
   ['engine', 'Container engine', [['Podman', 1], ['Docker', 0], ['None: install on the host', 0]], ONE],
   ['services', 'Tools and services', [['Tools not installed on the host run in a container', 1], [XP_CHECK, 1], ['Dev services (database, mail, …) in a compose file', 0], ['Pinned image versions', 1]]],
+  ['branches', 'Branches', [['Everything on main', 1], ['A branch per ticket, merged when the ticket is done', 0], ['A branch per milestone, merged when the milestone is done', 0]], ONE],
   ['git', 'Version control', [['Git, local only', 1], ['Git on GitHub', 0], ['Git on GitLab', 0], ['Git on another platform (Bitbucket, Gitea, …)', 0], ['No version control', 0]], ONE],
   ['visibility', 'Repository visibility', [['Private', 1], ['Public', 0]], ONE],
   ['license', 'License', [['None yet (decide later)', 1], ['MIT', 0], ['Apache-2.0', 0], ['BSD-3-Clause', 0], ['MPL-2.0', 0], ['GPL-3.0-or-later', 0], ['AGPL-3.0-or-later', 0], ['Proprietary (all rights reserved)', 0]], ONE],
