@@ -236,14 +236,32 @@ Before the first session:
   `.claude/settings.json`: nobody can answer permission prompts in a started session, so they are declined.
 - Run `claude` in the project folder once and accept the trust dialog; until then Claude Code ignores the
   project's permission rules (the panel warns about it).
-- For a session running in a terminal, install the hook once so the dashboard can see it and reach it:
-  `node tools/openspec-dashboard/agent-hook.mjs install <project>` (a running session picks it up after a restart).
+- To write to a session running in a terminal, set up the hook once (see below).
 
-**Join a session running in a terminal.** In **Chat › Terminal session**, the drop-down lists the Claude Code
-sessions running in the project (in a terminal or an IDE), with the last prompt you typed there, whether it is
-working or waiting for input, and when it last did something; ended ones stay in the list for a while. Pick one to
-join it: you see what it does, live (your prompts, Claude's replies and its steps). It is read-only until you press
-**✎ Write to it**: then your message reaches the session as if you typed it there, at its next step. A session that
+**Join a session running in a terminal.** **⌨** in the header (next to ⎇; its badge counts the running sessions)
+opens **Chat › Terminal session**. The drop-down lists the Claude Code sessions of the project (in a terminal or an
+IDE), with the last prompt you typed there, whether it is working or waiting for input, and when it last did
+something; ended ones stay in the list for 12 hours. Pick one to join it: you see what it does, live (your prompts,
+Claude's replies and its steps).
+
+Following a session works without any setup: the dashboard finds the running sessions in Claude Code's own records
+(`~/.claude/sessions`) and reads their transcripts. Writing to a session needs the dashboard's hook in the project:
+**Set up the hook** in the panel adds it (a few lines in `.claude/settings.local.json`, which is kept out of git
+through `.git/info/exclude`; or run `node tools/openspec-dashboard/agent-hook.mjs install <project>`). Sessions
+started after that can be written to; one that runs already is marked **◌ … read-only** in the list until you
+restart it (`/exit`, then `claude --resume <id>` continues it).
+
+The drop-down also lists sessions running in other folders. One in another project the dashboard follows is under
+**Other projects**: picking it switches to that project and joins the session there. One in a folder the dashboard
+does not follow is under **Session only**: you follow it read-only, without a board, roadmap or specs around it,
+and **Onboard it as a project…** opens the onboarding chat for its folder in the overview (or **Follow it as a
+project** when the folder has an `openspec/` already). **Set up the hook** works there too, without onboarding: it
+puts the hook into that folder, and after a restart of the session you can write to it and keep it listening like a
+session of the project.
+
+![A session in a folder the dashboard does not follow, read-only, with the offer to onboard it](images/dashboard-terminal-session-only.png)
+
+A session with the hook is read-only until you press **✎ Write to it**: then your message reaches the session as if you typed it there, at its next step. A session that
 waits for input in the terminal only takes it once you type there, unless you turn on **👂 Keep it listening**:
 then, when it is done, it waits for your message (the terminal shows the hook running; `Esc` there takes it back),
 and each of your messages continues it. **👂 Listening · stop** lets it finish. **Any session** sends to whichever
@@ -375,12 +393,21 @@ defaults; **+ add** takes your own entries:
 - **Container engine** (choose one): Podman (the default), Docker, or none (install on the host);
 - **Tools and services**: tools that are not installed on the host run in a container; check the local containers
   and images for services to reuse before installing anything; dev services in a compose file; pinned image
-  versions.
+  versions;
+- **Version control** (choose one): git, local only (the default); git on GitHub, on GitLab or on another platform;
+  or no version control;
+- **Repository visibility** (choose one, only with a platform): private (the default) or public;
+- **License** (choose one): none yet (the default), MIT, Apache-2.0, BSD-3-Clause, MPL-2.0, GPL-3.0-or-later,
+  AGPL-3.0-or-later, or proprietary.
 
 Claude gets them with your next message and plans with them (the first ticket sets up the chosen gates). **Create**
 makes them binding: they go into the project's `openspec/config.yaml` (the quality gate, the rules for tasks, what
 every review covers, the documentation, the diagram format and types) and its CLAUDE.md. Your choices are remembered for the
-next project.
+next project. Create also sets up version control as chosen (no `git init` without it) and adds the license: a
+`LICENSE` file with its text and the SPDX identifier in the README. With a platform, the hosting goes into
+CLAUDE.md, and the panel of the new project offers **Create it on GitHub**: an empty repository of the chosen
+visibility, made with the GitHub CLI (`gh`, signed in) and added as `origin`; nothing is pushed, and a public one
+asks first. For GitLab and other platforms the panel says what to run.
 
 With the container check on, the dashboard adds the list of your local containers and images to the message (it
 only lists them; nothing is started), and Claude suggests what fits, e.g. the Postgres that is already running for
@@ -389,6 +416,12 @@ the database and a mail catcher for the e-mails, instead of installing something
 brainstorm has the room again; **Show** opens it.
 
 ![Expert mode for a new project](images/dashboard-new-project-expert.png)
+
+**📎 Attach** (next to Send, or drop files on the panel) sends files with your message: a spec, notes, a sketch, a
+PDF, up to 5 files of 10 MB each. Claude reads them together with what you write; the message shows them as 📎.
+**Create** hands them to the setup as part of the brief, so CLAUDE.md, the configuration and the first tickets take
+them into account. The files stay in the dashboard's state folder (`~/.local/state/openspec-dashboard/attachments`)
+and are not copied into the project.
 
 ![Claude suggests reusing local containers for the new project](images/dashboard-new-project-containers.png)
 

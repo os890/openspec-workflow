@@ -41,6 +41,18 @@ export function findProjectRoot(dir) {
   }
 }
 
+// the folder a session belongs to: the OpenSpec project, or else the folder whose .claude settings hold this hook
+// (a folder the dashboard does not follow: "Session only" in its panel)
+const hasHook = (d) => ['settings.local.json', 'settings.json'].some((f) => { try { return fs.readFileSync(path.join(d, '.claude', f), 'utf8').includes('agent-hook.mjs'); } catch { return false; } });
+export function findHookRoot(dir) {
+  const p = findProjectRoot(dir);
+  if (p) return p;
+  for (let d = real(dir); ; d = path.dirname(d)) {
+    if (d !== os.homedir() && hasHook(d)) return d; // ~/.claude/settings.json is the user's global settings, not a folder's
+    if (path.dirname(d) === d) return null;
+  }
+}
+
 const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
 const writeJson = (f, v) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(v, null, 2) + '\n'); };
 
@@ -114,7 +126,7 @@ async function runHook() {
   for await (const chunk of process.stdin) raw += chunk;
   let input = {};
   try { input = JSON.parse(raw || '{}'); } catch { return; }
-  const root = findProjectRoot(input.cwd || process.cwd());
+  const root = findHookRoot(input.cwd || process.cwd());
   if (!root) return;
   const ev = input.hook_event_name;
   const sid = input.session_id || 'unknown';
@@ -152,9 +164,8 @@ async function runHook() {
 }
 
 // ---------------------------------------------------------------- install / uninstall
-function install(dir, remove = false) {
-  const root = findProjectRoot(dir);
-  if (!root) { console.error(`No openspec/ folder in ${path.resolve(dir)} or above.`); process.exit(1); }
+// writes (or removes) the hook in <root>/.claude/settings.local.json (git-ignored); also used by the dashboard's "Set it up"
+export function installHook(root, remove = false) {
   const file = path.join(root, '.claude', 'settings.local.json');
   const settings = readJson(file) ?? {};
   const self = fileURLToPath(import.meta.url);
@@ -167,6 +178,11 @@ function install(dir, remove = false) {
   }
   if (!Object.keys(settings.hooks).length) delete settings.hooks;
   writeJson(file, settings);
+  return file;
+}
+function install(dir, remove = false) {
+  const root = findProjectRoot(dir) ?? real(dir); // a folder without openspec/ works too (its sessions are "Session only")
+  const file = installHook(root, remove);
   console.log(`${remove ? 'Removed the dashboard hook from' : 'Added the dashboard hook to'} ${file}`);
   if (!remove) console.log('Sessions started from now on pick it up; a running session needs a restart (or a look at /hooks).');
 }

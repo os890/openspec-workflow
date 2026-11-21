@@ -1400,6 +1400,19 @@ body.board-max { overflow: hidden; }
 .ag-modes { display: flex; gap: 4px; flex-wrap: wrap; margin: 0 -6px; }
 .ag-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .ag-target select { flex: 1; min-width: 0; max-width: 100%; }
+.sc-files { display: flex; flex-wrap: wrap; gap: 6px; }
+.sc-files:empty { display: none; }
+.sc-file { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 3px 4px 3px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); }
+.agent-panel.drop .ag-compose { outline: 2px dashed var(--accent, #5b6cf0); outline-offset: 2px; border-radius: 10px; }
+.xp-g.xp-off { opacity: .45; }
+.xp-g.xp-off .xp-chip { pointer-events: none; }
+.np-repo { flex-wrap: wrap; margin-bottom: 6px; }
+.term-setup { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); font-size: 13px; }
+.term-only { margin: 6px 0 2px; font-size: 13px; line-height: 1.5; }
+.term-only .link { margin-left: 4px; }
+.term-setup p { margin: 6px 0 8px; color: var(--muted); line-height: 1.45; }
+#term-btn { position: relative; }
+#term-btn .tb-n { position: absolute; top: -5px; right: -5px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: var(--st-complete, #2e9d5b); color: #fff; font-size: 10px; line-height: 15px; font-weight: 600; }
 .term-pick { font: inherit; font-size: 13px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
 .msg.me.term-user { opacity: .92; }
 .ag-form textarea { width: 100%; min-height: 76px; resize: vertical; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--ink); padding: 9px 12px; font: inherit; font-size: 13.5px; }
@@ -1661,6 +1674,7 @@ body.ag-max { overflow: hidden; }
       </select>
       <button class="btn" id="agent-btn" type="button" data-chat-btn aria-controls="agent" hidden>Chat</button>
       <button class="btn" id="theme" type="button" aria-label="Toggle light or dark theme">◐</button>
+      <button class="btn" id="term-btn" type="button" aria-label="Terminal sessions" aria-controls="agent" title="Sessions running in a terminal or an IDE: join one, follow it live, write to it" hidden>⌨</button>
       <button class="btn" id="git-btn" type="button" aria-label="Git history" aria-controls="githist" title="Git history: the commits, branches and tags, and what each commit changed" hidden>⎇</button>
       <button class="btn" id="settings-btn" type="button" aria-label="Settings" title="Settings: local models and Podman" hidden>⚙</button>
     </div>
@@ -2896,7 +2910,14 @@ document.addEventListener('input', (e) => {
   if (f.dataset.nt === 'name' || f.dataset.nt === 'goal') { clearTimeout(ntTimer); ntTimer = setTimeout(() => ui.state && renderBoard(ui.state), 250); }
 });
 document.addEventListener('change', (e) => {
-  if (e.target.matches?.('[data-ag-term]')) { ag.term = e.target.value; ag.termWrite = false; ag.stick = true; renderAgentLive(); termPoll(true); return; }
+  if (e.target.matches?.('[data-ag-term]')) {
+    const other = (ag.view?.elsewhere ?? []).find((y) => y.sessionId === e.target.value && y.projectId);
+    if (other) { // a session of another followed project: switch to that project, its chat joins the session
+      const u = new URL(location.href);
+      u.searchParams.set('project', other.projectId); u.searchParams.set('panel', 'chat'); u.searchParams.set('term', other.sessionId); u.hash = '';
+      location.href = u.toString(); return;
+    }
+    ag.term = e.target.value; ag.termWrite = false; ag.stick = true; renderAgentLive(); termPoll(true); return; }
   const f = e.target.closest?.('select[data-nt]');
   if (f) ui.nt[f.dataset.nt] = f.value;
 });
@@ -3153,11 +3174,12 @@ const recentExternal = () => (ag.view?.sessions ?? []).filter((x) => !x.ended &&
 // ---- joining a session that runs in a terminal (or an IDE): pick it, see its transcript live (read-only), write to it
 const termLog = new Map(); // session id -> { entries, next (byte offset), cut, err }
 const termSessions = () => (ag.view?.sessions ?? []).filter((x) => !x.dashboardJob && x.transcript).sort((a, b) => (a.ended - b.ended) || b.t - a.t); // running first, ended ones stay readable
-const termLabel = (x) => `${x.ended ? '' : x.listening || x.listen ? '👂 ' : x.waiting ? '' : '● '}${x.prompt ? `“${x.prompt.replace(/\s+/g, ' ').slice(0, 48)}${x.prompt.length > 48 ? '…' : ''}”` : 'session'} · ${x.ended ? 'ended' : x.waiting ? 'waiting' : 'working'} · ${ago(x.t)} · ${x.sessionId.slice(0, 8)}`;
+const termLabel = (x) => `${x.hookless && !x.ended ? '◌ ' : x.ended ? '' : x.listening || x.listen ? '👂 ' : x.waiting ? '' : '● '}${x.prompt ? `“${x.prompt.replace(/\s+/g, ' ').slice(0, 48)}${x.prompt.length > 48 ? '…' : ''}”` : 'session'} · ${x.ended ? 'ended' : x.waiting ? 'waiting' : 'working'} · ${ago(x.t)} · ${x.sessionId.slice(0, 8)}${x.hookless && !x.ended ? ' · read-only' : ''}`;
 function termThreadHtml(sid) {
   const T = termLog.get(sid);
   if (!T) return '<div class="ag-empty">Loading the session…</div>';
-  const mine = (ag.view?.messages ?? []).filter((m) => m.session === sid).map((m) => ({ t: m.t, kind: 'mine', m }));
+  const xo = (ag.view?.elsewhere ?? []).find((y) => y.sessionId === sid && !y.projectId); // session only: its messages are in its folder's inbox
+  const mine = (xo ? xo.messages ?? [] : (ag.view?.messages ?? []).filter((m) => m.session === sid)).map((m) => ({ t: m.t, kind: 'mine', m, folder: xo?.folder }));
   const items = [...T.entries.filter((e) => !(e.kind === 'user' && /from the OpenSpec dashboard/.test(e.text))), ...mine].sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
   const out = T.cut ? ['<div class="ag-note" style="text-align:center">Earlier parts of this session are not shown.</div>'] : [];
   let steps = [];
@@ -3165,7 +3187,7 @@ function termThreadHtml(sid) {
   for (const e of items) {
     if (e.kind === 'tool' || e.kind === 'error') { steps.push(e); continue; }
     flush();
-    if (e.kind === 'mine') out.push(`<div class="msg me"><span class="ic-chip">from the dashboard</span>${esc(e.m.text)}<span class="meta">${hhmm(e.m.t)} · ${e.m.state === 'queued' ? `queued${e.m.state === 'queued' ? ` · <button class="link" type="button" data-ag-cancel="${esc(e.m.id)}">cancel</button>` : ''}` : 'delivered ' + hhmm(e.m.deliveredAt)}</span></div>`);
+    if (e.kind === 'mine') out.push(`<div class="msg me"><span class="ic-chip">from the dashboard</span>${esc(e.m.text)}<span class="meta">${hhmm(e.m.t)} · ${e.m.state === 'queued' ? `queued${e.m.state === 'queued' ? ` · <button class="link" type="button" data-ag-cancel="${esc(e.m.id)}" ${e.folder ? `data-folder="${esc(e.folder)}"` : ''}>cancel</button>` : ''}` : 'delivered ' + hhmm(e.m.deliveredAt)}</span></div>`);
     else if (e.kind === 'user') out.push(`<div class="msg me term-user">${esc(e.text)}<span class="meta">${e.t ? hhmm(e.t) : ''} · in the terminal</span></div>`);
     else out.push(`<div class="msg them ${e.sub ? 'sub' : ''}"><div class="md">${md(e.text)}</div><span class="meta">${e.t ? hhmm(e.t) : ''}</span></div>`);
   }
@@ -3206,7 +3228,7 @@ function conversations() {
     list.push({ id: 'session:' + g.sid, label: title(g.last.change), jobs: g.jobs, last: g.last, live: alive(g.last), session: true });
   }
   const ext = recentExternal();
-  if (v.hooks || ext.length || v.messages.some((m) => m.state === 'queued')) list.push({ id: 'terminal', label: 'Terminal session', live: ext.some((x) => Date.now() - x.t < 3 * 60e3), terminal: true });
+  list.push({ id: 'terminal', label: 'Terminal session', live: ext.some((x) => Date.now() - x.t < 3 * 60e3), terminal: true }); // always offered: without the hook it explains how to set it up
   return list;
 }
 
@@ -3315,6 +3337,12 @@ function reactionsIn(jobs) {
   return m;
 }
 function userMsgHtml(l) {
+  // attachments (new-project brainstorm): a chip with the file names; the paths stay out of sight
+  const att = l.text.match(/^\[Attached files \([^\n]*\n((?:- [^\n]*\n)*)\]\n([\s\S]*)$/);
+  if (att) {
+    const names = att[1].trim().split('\n').map((x) => x.match(/\(([^()]*), [\d.]+ [KM]?B\)$/)?.[1] ?? 'file');
+    return userMsgHtml({ ...l, text: att[2] }).replace('<div class="msg me">', `<div class="msg me"><span class="ic-chip" title="${esc(names.join('\n'))}">📎 ${esc(names.join(', '))}</span>`);
+  }
   // the server puts the list of local containers in front (expert mode, "check local containers"): a chip, the list as its tooltip
   const inv = l.text.match(/^\[Local containers and images \(([a-z]+)\), [^\n]*\n([\s\S]*?)\]\n([\s\S]*)$/);
   if (inv) return userMsgHtml({ ...l, text: inv[3] }).replace('<div class="msg me">', `<div class="msg me"><span class="ic-chip" title="${esc(inv[2])}">📦 with the list of local ${esc(inv[1])} containers and images</span>`);
@@ -3542,20 +3570,42 @@ function barHtml(c) {
   if (!c) return '';
   if (c.terminal) {
     const ext = recentExternal()[0];
-    if (!ag.view?.hooks) return `<div class="ag-note warn">The hook is not installed, so the dashboard cannot see or reach a session in a terminal: <code>${esc(ag.view?.hookInstall ?? '')}</code> (a running session picks it up after a restart)</div>`;
-    const ss = termSessions(), x = ss.find((y) => y.sessionId === ag.term);
-    const pick = `<select class="term-pick" data-ag-term aria-label="Session to join" title="Sessions running in a terminal or an IDE (seen by the hook in the last 12 hours)">
-      <option value="" ${ag.term ? '' : 'selected'}>Any session (the next one that takes a step)</option>
-      ${ss.map((y) => `<option value="${esc(y.sessionId)}" ${y.sessionId === ag.term ? 'selected' : ''}>${esc(termLabel(y))}</option>`).join('')}</select>`;
-    if (!x) return `<div class="ag-row ag-target">${pick}</div><div class="ag-note">${ss.length ? 'Pick a session to join it: you see what it does, live, and can write to it.' : ''} ${ext ? `<span class="dot on"></span>Active · last step ${ago(ext.t)}${ext.tool ? ` (${esc(ext.tool)})` : ''}` : '<span class="dot"></span>No session seen in the last 15 minutes; messages wait until one takes a step.'}</div>`;
-    if (x.ended) return `<div class="ag-row ag-target">${pick}</div><div class="ag-note"><span class="dot"></span>Ended ${ago(x.t)}. Continue it in a terminal: <code>claude --resume ${esc(x.sessionId)}</code></div>`;
-    const state = x.listening ? '<span class="dot on"></span>Listening: waiting for your message' : x.waiting ? '<span class="dot"></span>Waiting for input in the terminal' : '<span class="dot on"></span>Working';
-    return `<div class="ag-row ag-target">${pick}</div>
-      <div class="ag-row"><span class="ag-note">${state} · last step ${ago(x.t)}${x.tool && !x.waiting ? ` (${esc(x.tool)})` : ''}</span>
+    const ss = termSessions(), x = ss.find((y) => y.sessionId === ag.term), el = ag.view?.elsewhere ?? [];
+    const setup = (lead, f) => `<div class="term-setup"><b>${lead}</b>
+      <p>To write to a session, the dashboard needs its hook in the ${f ? 'folder' : 'project'}: a few lines in <code>.claude/settings.local.json</code>, which stays out of git. Sessions started after that can be written to; a session that is running already needs a restart (<code>claude --resume</code> continues it).</p>
+      <div class="ag-row"><button class="btn primary" type="button" data-ag-hook ${f ? `data-folder="${esc(f.folder)}"` : ''}>Set up the hook</button><span class="ag-note">or in a terminal: <code>${esc(f ? (ag.view?.hookInstall ?? '').replace(/ install .*$/, ` install ${f.display}`) : ag.view?.hookInstall ?? '')}</code></span></div>${ag.note ? `<div class="ag-note warn">${esc(ag.note)}</div>` : ''}</div>`;
+    const pick = `<select class="term-pick" data-ag-term aria-label="Session to join" title="Claude Code sessions in this project, in a terminal or an IDE (running, and ended in the last 12 hours)">
+      <option value="" ${ag.term ? '' : 'selected'}>${ss.length || el.length ? (ag.view?.hooks ? 'Any session (the next one that takes a step)' : `Pick a session (${ss.length})…`) : 'No session running yet'}</option>
+      ${(() => {
+        const opt = (y, label) => `<option value="${esc(y.sessionId)}" ${y.sessionId === ag.term ? 'selected' : ''}>${esc(label)}</option>`;
+        const other = el.filter((y) => y.projectId), only = el.filter((y) => !y.projectId);
+        if (!other.length && !only.length) return ss.map((y) => opt(y, termLabel(y))).join('');
+        return (ss.length ? `<optgroup label="This project">${ss.map((y) => opt(y, termLabel(y))).join('')}</optgroup>` : '')
+          + (other.length ? `<optgroup label="Other projects (switches there)">${other.map((y) => opt(y, `${y.projectLabel ?? y.display} · ${termLabel(y).replace(/ · read-only$/, '')}`)).join('')}</optgroup>` : '')
+          + (only.length ? `<optgroup label="Session only (not followed)">${only.map((y) => opt(y, `${y.display} · ${termLabel(y).replace(/ · read-only$/, '')}`)).join('')}</optgroup>` : '');
+      })()}</select>`;
+    // a session in a folder the dashboard does not follow ("Session only"): read-only, or with the hook in its folder
+    // writable like a session of this project
+    const xo = !x && el.find((y) => y.sessionId === ag.term && !y.projectId);
+    const xs = x ?? xo;
+    const top = xo ? `<div class="ag-row ag-target">${pick}</div><div class="term-only"><b>Session only</b> <code>${esc(xo.display)}</code> <span class="muted">· not followed, so there is no board, roadmap or specs for it, only this session</span>
+      ${xo.openspec ? '<button class="link" type="button" data-ag-adopt="follow">Follow it as a project</button>' : '<button class="link" type="button" data-ag-adopt="onboard">Onboard it as a project…</button>'}</div>` : `<div class="ag-row ag-target">${pick}</div>`;
+    if (xo?.hookless) return `${top}<div class="ag-note">${xo.waiting ? '<span class="dot"></span>Waiting for input' : '<span class="dot on"></span>Working'} · last activity ${ago(xo.t)} · read-only: this session runs without the dashboard's hook</div>
+      ${xo.hooks ? `<div class="ag-note">The hook is set up in this folder, but the session started before it: restart it to write to it (<code>/exit</code>, then <code>claude --resume ${esc(xo.sessionId)}</code>).</div>` : setup('To write to it, set up the hook in its folder', xo)}`;
+    if (!xs) return `<div class="ag-row ag-target">${pick}</div>${ag.view?.hooks
+      ? `<div class="ag-note">${ss.length ? 'Pick a session to join it: you see what it does, live, and can write to it.' : ''} ${ext ? `<span class="dot on"></span>Active · last step ${ago(ext.t)}${ext.tool ? ` (${esc(ext.tool)})` : ''}` : '<span class="dot"></span>No session seen in the last 15 minutes; messages wait until one takes a step.'}</div>`
+      : `<div class="ag-note">${ss.length ? 'Pick a session to follow it live, read-only.' : 'Sessions you start in this project (in a terminal or an IDE) show up here.'}</div>${setup('Write to a session as if you typed it there')}`}`;
+    const x2 = xs, cur = xs.elsewhere ? xs.hooksCurrent : ag.view.hooksCurrent;
+    if (x?.ended) return `<div class="ag-row ag-target">${pick}</div><div class="ag-note"><span class="dot"></span>Ended ${ago(x.t)}. Continue it in a terminal: <code>claude --resume ${esc(x.sessionId)}</code></div>`;
+    if (x?.hookless) return `<div class="ag-row ag-target">${pick}</div><div class="ag-note">${x.waiting ? '<span class="dot"></span>Waiting for input in the terminal' : '<span class="dot on"></span>Working'} · last activity ${ago(x.t)} · read-only: this session runs without the dashboard's hook</div>
+      ${ag.view?.hooks ? `<div class="ag-note">The hook is set up, but this session started before it: restart it to write to it (<code>/exit</code>, then <code>claude --resume ${esc(x.sessionId)}</code>).</div>` : setup('To write to it, set up the hook')}`;
+    const state = x2.listening ? '<span class="dot on"></span>Listening: waiting for your message' : x2.waiting ? '<span class="dot"></span>Waiting for input in the terminal' : '<span class="dot on"></span>Working';
+    return `${top}
+      <div class="ag-row"><span class="ag-note">${state} · last step ${ago(x2.t)}${x2.tool && !x2.waiting ? ` (${esc(x2.tool)})` : ''}</span>
         <button class="btn" type="button" data-ag-term-write aria-pressed="${ag.termWrite}" style="margin-left:auto" title="${ag.termWrite ? 'Back to read-only' : 'Write to this session as if you typed it there'}">${ag.termWrite ? 'Read only' : '✎ Write to it'}</button>
-        ${ag.termWrite && ag.view.hooksCurrent ? `<button class="btn" type="button" data-ag-term-listen aria-pressed="${!!x.listen}" title="When it is about to stop, it waits for your message instead (the terminal shows the hook running; Esc there takes the session back)">${x.listen ? '👂 Listening · stop' : '👂 Keep it listening'}</button>` : ''}</div>
-      ${ag.termWrite ? `<div class="ag-note">Your message reaches it at its next step, as if you typed it there. ${x.listen ? 'While it listens, a message also continues it when it is done.' : 'When it waits for input, the message arrives once you type there, or turn on <b>Keep it listening</b>.'}${ag.view.hooksCurrent ? '' : ` To let it listen, install the hook again: <code>${esc(ag.view.hookInstall)}</code>`}</div>` : '<div class="ag-note">Read-only: you see what the session does, live.</div>'}
-      ${termLog.get(x.sessionId)?.err ? `<div class="ag-note warn">✕ ${esc(termLog.get(x.sessionId).err)}</div>` : ''}`;
+        ${ag.termWrite && cur ? `<button class="btn" type="button" data-ag-term-listen aria-pressed="${!!x2.listen}" title="When it is about to stop, it waits for your message instead (the terminal shows the hook running; Esc there takes the session back)">${x2.listen ? '👂 Listening · stop' : '👂 Keep it listening'}</button>` : ''}</div>
+      ${ag.termWrite ? `<div class="ag-note">Your message reaches it at its next step, as if you typed it there. ${x2.listen ? 'While it listens, a message also continues it when it is done.' : 'When it waits for input, the message arrives once you type there, or turn on <b>Keep it listening</b>.'}${cur ? '' : ` To let it listen, the hook needs an update: <button class="link" type="button" data-ag-hook ${xs.elsewhere ? `data-folder="${esc(xs.folder)}"` : ''}>Update it</button> (then restart the session)`}</div>` : '<div class="ag-note">Read-only: you see what the session does, live.</div>'}
+      ${termLog.get(x2.sessionId)?.err ? `<div class="ag-note warn">✕ ${esc(termLog.get(x2.sessionId).err)}</div>` : ''}`;
   }
   if (c.brainstorm) {
     const idea = c.jobs.find((j) => j.idea)?.idea;
@@ -3589,7 +3639,8 @@ function renderAgentLive() {
     const c = list.find((x) => x.id === ag.convo) ?? list[0];
     $('ag-chips').innerHTML = list.map((x) => `<button type="button" class="chip" role="tab" data-ag-convo="${esc(x.id)}" aria-selected="${x.id === c?.id}">${x.live ? '<span class="dot on"></span>' : ''}${x.session ? 'Session · ' : ''}${esc(x.label)}</button>`).join('');
     morphHtml($('ag-bar'), barHtml(c)); // morph: an open session picker stays open
-    const ro = c?.terminal && ag.term && (!ag.termWrite || termSessions().find((y) => y.sessionId === ag.term)?.ended); // a joined session is read-only until "Write to it"; an ended one stays so
+    const tx = c?.terminal && ag.term ? termSessions().find((y) => y.sessionId === ag.term) ?? (ag.view?.elsewhere ?? []).find((y) => y.sessionId === ag.term && !y.projectId) : null;
+    const ro = c?.terminal && (ag.term ? (!tx || !ag.termWrite || tx.ended || tx.hookless) : !ag.view?.hooks); // a joined session is read-only until "Write to it"; an ended one or one without the hook stays so
     for (const el of document.querySelectorAll('#agent .ag-compose, #agent #ag-suggest')) el.hidden = !!ro;
     const th = $('ag-thread');
     const atEnd = th.scrollHeight - th.scrollTop - th.clientHeight < 60;
@@ -3615,6 +3666,8 @@ function updateAgentBtn() {
   const live = ag.view?.jobs.some((j) => j.kind === 'session' && alive(j)) || recentExternal().some((x) => Date.now() - x.t < 3 * 60e3);
   const queued = ag.view?.messages.filter((m) => m.state === 'queued').length ?? 0;
   const html = `${live ? '<span class="dot on"></span>' : ''}Chat${queued ? ` · ${queued} queued` : ''}`;
+  const tb = $('term-btn'), running = (ag.view?.sessions ?? []).filter((x) => !x.ended && !x.dashboardJob).length;
+  if (ag.view) { tb.hidden = false; const th = running ? `⌨<span class="tb-n">${running}</span>` : '⌨'; if (tb.innerHTML !== th) tb.innerHTML = th; tb.setAttribute('aria-expanded', String(ag.open && ag.panel === 'chat' && ag.convo === 'terminal')); }
   for (const b of document.querySelectorAll('[data-chat-btn]')) { b.hidden = false; if (b.innerHTML !== html) b.innerHTML = html; b.setAttribute('aria-expanded', String(ag.open && ag.panel === 'chat')); }
 }
 
@@ -3629,7 +3682,7 @@ async function agentSend(force = false, direct = null) {
     if (ag.panel === 'chat') {
       if (!text) return;
       const c = conversations().find((x) => x.id === ag.convo);
-      if (c?.terminal) await agentPost('message', { text, to: 'inbox', session: ag.term || undefined });
+      if (c?.terminal) { const xo = (ag.view?.elsewhere ?? []).find((y) => y.sessionId === ag.term && !y.projectId); await agentPost('message', { text, to: 'inbox', session: ag.term || undefined, ...(xo ? { folder: xo.folder } : {}) }); }
       else if (c?.session) await agentPost('message', { change: c.last.change, text, job: c.last.id });
       else await agentPost('chat', { text, mode: c?.brainstorm ? 'brainstorm' : 'assistant' });
       if (!direct) { ag.drafts['chat-' + ag.convo] = ''; ta.value = ''; rx.quote = null; showQuoteChip(); }
@@ -3665,6 +3718,7 @@ async function waitForSession(jobId) {
 }
 document.addEventListener('click', (e) => {
   const t = e.target;
+  if (t.closest('#term-btn')) { e.stopPropagation(); return ag.open && ag.panel === 'chat' && ag.convo === 'terminal' ? closeAgent() : openChat('terminal'); }
   const chatBtn = t.closest('[data-chat-btn]');
   if (chatBtn) { e.stopPropagation(); return ag.open && ag.panel === 'chat' ? closeAgent() : openChat(); }
   const chat = t.closest('[data-chat]');
@@ -3681,8 +3735,22 @@ document.addEventListener('click', (e) => {
     buildAgent();
     return $('ag-text')?.focus();
   }
+  const adopt = t.closest('[data-ag-adopt]');
+  if (adopt) {
+    const xo = (ag.view?.elsewhere ?? []).find((y) => y.sessionId === ag.term);
+    if (!xo) return;
+    adopt.disabled = true; ag.note = '';
+    const post = (body) => fetch('/api/discover', { method: 'POST', headers: { 'content-type': 'application/json', 'x-osd-token': AGENT_TOKEN }, body: JSON.stringify(body) }).then(async (r) => { const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`); return d; });
+    const go = (q) => { const u = new URL(location.href); for (const k of ['project', 'panel', 'term', 'overview', 'onboard']) u.searchParams.delete(k); for (const [k, v] of Object.entries(q)) u.searchParams.set(k, v); u.hash = ''; location.href = u.toString(); };
+    return post({ action: 'add', path: xo.folder })
+      .then((r) => (r.project ? go({ project: r.project, panel: 'chat', term: xo.sessionId })
+        : adopt.dataset.agAdopt === 'follow' ? post({ action: 'follow', path: r.path }).then((f) => go({ project: f.project, panel: 'chat', term: xo.sessionId }))
+        : go({ overview: '', onboard: r.path })))
+      .catch((err) => { ag.note = '✕ ' + err.message; renderAgentLive(); });
+  }
+  if (t.closest('[data-ag-hook]')) { ag.note = ''; return agentPost('hook', t.closest('[data-ag-hook]').dataset.folder ? { folder: t.closest('[data-ag-hook]').dataset.folder } : {}).then(() => { termPoll(true); }).catch((err) => { ag.note = '✕ ' + err.message; renderAgentLive(); }); }
   if (t.closest('[data-ag-term-write]')) { ag.termWrite = !ag.termWrite; renderAgentLive(); if (ag.termWrite) $('ag-text')?.focus(); return; }
-  if (t.closest('[data-ag-term-listen]')) { const x = termSessions().find((y) => y.sessionId === ag.term); return agentPost('listen', { session: ag.term, on: !x?.listen }).catch((err) => { ag.note = '✕ ' + err.message; renderAgentLive(); }); }
+  if (t.closest('[data-ag-term-listen]')) { const x = termSessions().find((y) => y.sessionId === ag.term) ?? (ag.view?.elsewhere ?? []).find((y) => y.sessionId === ag.term); return agentPost('listen', { session: ag.term, on: !x?.listen }).catch((err) => { ag.note = '✕ ' + err.message; renderAgentLive(); }); }
   const convo = t.closest('[data-ag-convo]');
   if (convo) { if ($('ag-text')) ag.drafts['chat-' + ag.convo] = $('ag-text').value; ag.convo = convo.dataset.agConvo; ag.stick = true; buildAgent(); return $('ag-text')?.focus(); }
   const mode = t.closest('[data-ag-mode]');
@@ -3698,7 +3766,7 @@ document.addEventListener('click', (e) => {
   const ctl = t.closest('[data-ag-control]');
   if (ctl) return agentPost('control', { job: ctl.dataset.job, action: ctl.dataset.agControl }).catch((err) => { ag.note = '✕ ' + err.message; renderAgentLive(); });
   const cancel = t.closest('[data-ag-cancel]');
-  if (cancel) return agentPost('cancel', { id: cancel.dataset.agCancel }).catch(() => {});
+  if (cancel) return agentPost('cancel', { id: cancel.dataset.agCancel, ...(cancel.dataset.folder ? { folder: cancel.dataset.folder } : {}) }).catch(() => {});
 }, true);
 document.addEventListener('input', (e) => {
   if (e.target.id !== 'ag-text') return;
@@ -4296,7 +4364,7 @@ document.addEventListener('keydown', (e) => {
   if (gh.commits[i]) ghSelect(gh.commits[i].h);
 }, true);
 // the chat and the other panels take the same place
-document.addEventListener('click', (e) => { if (gh.open && e.target.closest?.('[data-chat-btn], [data-agent], [data-sc-open], [data-np-open]')) ghClose(); }, true);
+document.addEventListener('click', (e) => { if (gh.open && e.target.closest?.('[data-chat-btn], #term-btn, [data-agent], [data-sc-open], [data-np-open]')) ghClose(); }, true);
 
 // ------------------------------------------------------------ several projects
 // ?project=<id> shows one project; with several projects and no ?project= the overview is the start page.
@@ -4495,7 +4563,7 @@ function scoutMax(on) {
   const b = $('agent').querySelector('[data-sc-max]');
   if (b) { b.setAttribute('aria-pressed', String(on)); b.textContent = on ? '⤡ Restore' : '⤢ Maximize'; b.title = on ? 'Back to the side panel (Esc)' : 'Use the whole window'; }
 }
-function scoutPanel(placeholder, max = false) {
+function scoutPanel(placeholder, max = false, attach = false) {
   $('agent').hidden = false;
   document.body.classList.add('ag-open');
   $('agent').innerHTML = `<div class="ag-head"><h2 id="sc-title"></h2><button class="link ag-maxbtn" type="button" data-sc-max></button><button class="link" type="button" data-sc-close>Close ✕</button></div>
@@ -4503,8 +4571,9 @@ function scoutPanel(placeholder, max = false) {
     <div class="ag-thread" id="ag-thread" aria-live="polite"></div>
     <div class="ag-compose">
       <div data-quote-slot>${quoteChipHtml()}</div>
+      ${attach ? '<div class="sc-files" id="sc-files"></div>' : ''}
       <textarea id="sc-text" rows="2" placeholder="${esc(placeholder)}"></textarea>
-      <div class="ag-tools"><button class="btn primary" type="button" data-sc-send style="margin-left:auto">Send</button></div>
+      <div class="ag-tools">${attach ? '<button class="btn" type="button" data-sc-attach title="Attach files for Claude to read with your message: a spec, notes, a sketch, a PDF (up to 10 MB each; you can also drop them here)">📎 Attach</button><input type="file" id="sc-file" multiple hidden>' : ''}<button class="btn primary" type="button" data-sc-send style="margin-left:auto">Send</button></div>
     </div>
     <div class="ag-note ag-route" id="sc-route">Enter sends · Shift+Enter for a new line</div>`;
   scoutMax(max);
@@ -4516,13 +4585,42 @@ function openNewProject() {
   sc.parentInput = sc.parent ? (d?.newChats.find((x) => x.parent === sc.parent)?.display ?? d?.display ?? '') : (d?.display ?? d?.home ?? '~');
   let max = true;
   try { max = localStorage.getItem('osd-np-max') !== '0'; } catch {}
-  scoutPanel('Describe the project you have in mind', max);
+  scoutPanel('Describe the project you have in mind', max, true);
+  sc.pending = [];
+  renderFiles();
   sc.stick = true;
   renderScout();
   $('sc-text').focus();
   if (ui.overview) renderOverview(ui.overview);
 }
 const sc_projects = new Map();
+// files to attach to the next message of the new-project brainstorm (sent with it, then listed for Create)
+const fileSize = (n) => (n < 1024 ? `${n} B` : n < 1 << 20 ? `${Math.round(n / 1024)} KB` : `${(n / (1 << 20)).toFixed(1)} MB`);
+function renderFiles() {
+  const el = $('sc-files');
+  if (!el) return;
+  el.innerHTML = (sc.pending ?? []).map((f, i) => `<span class="sc-file">📎 ${esc(f.name)} <span class="muted">${fileSize(f.size)}</span><button type="button" class="link" data-sc-unattach="${i}" aria-label="Remove ${esc(f.name)}">✕</button></span>`).join('');
+}
+function addFiles(list) {
+  for (const f of list) {
+    if (f.size > 10 << 20) { $('sc-route').innerHTML = `<span style="color:var(--st-blocked)">✕ ${esc(f.name)} is larger than 10 MB</span>`; continue; }
+    if ((sc.pending ??= []).length >= 5) { $('sc-route').innerHTML = '<span style="color:var(--st-blocked)">✕ At most 5 files per message</span>'; break; }
+    sc.pending.push(f);
+  }
+  renderFiles();
+  $('sc-text')?.focus();
+}
+document.addEventListener('click', (e) => {
+  if (!sc.open || sc.mode !== 'new') return;
+  if (e.target.closest?.('[data-sc-attach]')) { e.stopPropagation(); return $('sc-file')?.click(); }
+  const un = e.target.closest?.('[data-sc-unattach]');
+  if (un) { e.stopPropagation(); sc.pending.splice(Number(un.dataset.scUnattach), 1); renderFiles(); }
+}, true);
+document.addEventListener('change', (e) => { if (e.target.id === 'sc-file') { addFiles([...e.target.files]); e.target.value = ''; } });
+for (const [type, fn] of [['dragover', (e) => { e.preventDefault(); $('agent').classList.add('drop'); }], ['dragleave', (e) => { if (!e.relatedTarget || !$('agent').contains(e.relatedTarget)) $('agent').classList.remove('drop'); }],
+  ['drop', (e) => { e.preventDefault(); $('agent').classList.remove('drop'); addFiles([...(e.dataTransfer?.files ?? [])]); }]]) {
+  document.addEventListener(type, (e) => { if (sc.open && sc.mode === 'new' && e.target.closest?.('#agent') && e.dataTransfer?.types?.includes('Files')) fn(e); });
+}
 function projectMd(text, key) {
   const parts = text.split(/```project[^\n]*\n([\s\S]*?)(?:```|$)/);
   return parts.map((p, i) => {
@@ -4556,7 +4654,17 @@ const EXPERT = [
   ['diagramTypes', 'Diagram types', [['System context (C4 level 1)', 1], ['Containers (C4 level 2)', 1], ['Components (C4 level 3)', 0], ['Sequence diagrams of the main flows', 1], ['Data model (ER)', 1], ['State machines', 0], ['Activity / flow charts', 0], ['Deployment', 0], ['Class diagrams', 0]]],
   ['engine', 'Container engine', [['Podman', 1], ['Docker', 0], ['None: install on the host', 0]], ONE],
   ['services', 'Tools and services', [['Tools not installed on the host run in a container', 1], [XP_CHECK, 1], ['Dev services (database, mail, …) in a compose file', 0], ['Pinned image versions', 1]]],
+  ['git', 'Version control', [['Git, local only', 1], ['Git on GitHub', 0], ['Git on GitLab', 0], ['Git on another platform (Bitbucket, Gitea, …)', 0], ['No version control', 0]], ONE],
+  ['visibility', 'Repository visibility', [['Private', 1], ['Public', 0]], ONE],
+  ['license', 'License', [['None yet (decide later)', 1], ['MIT', 0], ['Apache-2.0', 0], ['BSD-3-Clause', 0], ['MPL-2.0', 0], ['GPL-3.0-or-later', 0], ['AGPL-3.0-or-later', 0], ['Proprietary (all rights reserved)', 0]], ONE],
 ];
+// version control, hosting and license, as the server takes them with Create (visibility only matters on a platform)
+function xpRepo() {
+  const g = [...xp.groups.git.on][0] ?? '', lic = [...xp.groups.license.on][0] ?? '';
+  const vcs = /^No version/.test(g) ? 'none' : /local only/.test(g) ? 'local' : /GitHub/.test(g) ? 'github' : /GitLab/.test(g) ? 'gitlab' : 'other';
+  return { vcs, platformName: vcs === 'other' ? g.replace(/^Git on (another platform )?/, '') : undefined, visibility: [...xp.groups.visibility.on][0] === 'Public' ? 'public' : 'private', license: /^None yet/.test(lic) ? '' : lic };
+}
+const xpHosted = () => ['github', 'gitlab', 'other'].includes(xpRepo().vcs);
 const xp = (() => {
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem('osd-expert') || 'null'); } catch {}
@@ -4565,7 +4673,7 @@ const xp = (() => {
 })();
 const xpSave = () => { try { localStorage.setItem('osd-expert', JSON.stringify({ open: xp.open, on: Object.fromEntries(Object.entries(xp.groups).map(([k, g]) => [k, [...g.on]])), custom: Object.fromEntries(Object.entries(xp.groups).map(([k, g]) => [k, g.custom])) })); } catch {} };
 function xpSummary() { // what is chosen, per group, as plain lines
-  return EXPERT.map(([k, label]) => { const g = xp.groups[k]; const on = [...g.on]; return on.length ? `${label}: ${on.join('; ')}` : null; }).filter(Boolean);
+  return EXPERT.map(([k, label]) => { const g = xp.groups[k]; const on = [...g.on]; return on.length && !(k === 'visibility' && !xpHosted()) ? `${label}: ${on.join('; ')}` : null; }).filter(Boolean);
 }
 // with "check local containers" chosen, the server adds the list of local containers and images (of the chosen engine)
 const xpContainers = () => (xp.open && xp.groups.services.on.has(XP_CHECK) ? { inventory: true, engine: /docker/i.test([...xp.groups.engine.on][0] ?? '') ? 'docker' : 'podman' } : {});
@@ -4579,8 +4687,9 @@ function xpHtml() {
     const g = xp.groups[k];
     const all = [...items.map(([l]) => l), ...g.custom];
     const one = EXPERT.find(([x]) => x === k)[3]?.one;
-    return `<div class="xp-g"><div class="xp-h">${esc(label)} <span class="muted">${one ? 'choose one' : `${g.on.size} of ${all.length}`}</span></div><div class="xp-chips">${all.map((l) => `<button type="button" class="xp-chip" data-xp="${esc(k)}" data-xp-item="${esc(l)}" aria-pressed="${g.on.has(l)}">${esc(l)}</button>`).join('')}<input class="xp-add" data-xp-add="${esc(k)}" placeholder="+ add" spellcheck="false"></div></div>`;
-  }).join('')}<div class="ag-note">Claude gets these with your next message and plans with them (with the check of local containers, it also gets the list of your local containers and images); Create writes them into the project's <code>openspec/config.yaml</code> and CLAUDE.md.</div></div>`;
+    const off = k === 'visibility' && !xpHosted(); // only with a platform
+    return `<div class="xp-g ${off ? 'xp-off' : ''}"><div class="xp-h">${esc(label)} <span class="muted">${off ? 'only with a platform' : one ? 'choose one' : `${g.on.size} of ${all.length}`}</span></div><div class="xp-chips">${all.map((l) => `<button type="button" class="xp-chip" data-xp="${esc(k)}" data-xp-item="${esc(l)}" aria-pressed="${g.on.has(l)}">${esc(l)}</button>`).join('')}<input class="xp-add" data-xp-add="${esc(k)}" placeholder="+ add" spellcheck="false"></div></div>`;
+  }).join('')}<div class="ag-note">Claude gets these with your next message and plans with them (with the check of local containers, it also gets the list of your local containers and images); Create writes them into the project's <code>openspec/config.yaml</code> and CLAUDE.md, sets up git as chosen and adds the license; a repository on GitHub is created only when you press the button for it afterwards.</div></div>`;
 }
 document.addEventListener('click', (e) => {
   const t = e.target;
@@ -4614,11 +4723,12 @@ function renderNewProject() {
   $('sc-title').innerHTML = 'New project<span class="sc-path">brainstorm it, then create it</span>';
   const cr = sc.create;
   morphHtml($('sc-bar'), `<div class="ag-row np-row"><label class="np-parent">Create in <input id="np-parent" value="${esc(sc.parentInput ?? '')}" spellcheck="false" autocomplete="off" ${jobs.length ? 'readonly title="Start a new brainstorm to choose another folder"' : ''}></label>
-      <button class="link xp-toggle" type="button" data-xp-toggle aria-pressed="${xp.open}" title="Quality gates, task checks, review topics, workflow steps, documentation, diagram format and types, and containers for the new project">⚙ Expert mode</button>
+      <button class="link xp-toggle" type="button" data-xp-toggle aria-pressed="${xp.open}" title="Quality gates, task checks, review topics, workflow steps, documentation, diagram format and types, containers, version control and license for the new project">⚙ Expert mode</button>
       ${jobs.length ? '<button class="link" type="button" data-np-fresh>New brainstorm</button>' : ''}</div>
     ${xpHtml()}
     ${cr ? `<div class="ag-row np-create"><span class="ag-note">Create</span><code>${esc((sc.parentInput ?? '').replace(/\/$/, ''))}/</code><input id="np-name" value="${esc(cr.name)}" spellcheck="false" autocomplete="off">
-      <button class="btn primary" type="button" data-np-go ${sc.busy ? 'disabled' : ''}>Create and set up</button><button class="link" type="button" data-np-cancel>Cancel</button></div>` : ''}
+      <button class="btn primary" type="button" data-np-go ${sc.busy ? 'disabled' : ''}>Create and set up</button><button class="link" type="button" data-np-cancel>Cancel</button></div>
+      ${sc.attached?.length ? `<div class="ag-note np-att">📎 The setup reads ${sc.attached.length === 1 ? 'the attached file' : `the ${sc.attached.length} attached files`} too: ${sc.attached.map((f) => esc(f.name)).join(', ')} (they stay outside the project)</div>` : ''}` : ''}
     <div class="ag-note ${sc.note.startsWith('✕') ? 'warn' : ''}">${esc(sc.note || 'Brainstorming · read-only · nothing is created until you press Create.')}</div>`);
   const th = $('ag-thread');
   const atEnd = th.scrollHeight - th.scrollTop - th.clientHeight < 60;
@@ -4643,14 +4753,19 @@ function renderScout() {
   const { chat, onboard } = discJobs(c);
   $('sc-title').innerHTML = `${labelHtml(candLabel(c))}<span class="sc-path" title="${esc(c.path)}">${esc(c.display)}</span>`;
   const running = onboard && alive(onboard);
-  morphHtml($('sc-bar'), c.followed
+  const rp = c.repo, host = rp ? (rp.platform === 'github' ? 'GitHub' : rp.platform === 'gitlab' ? 'GitLab' : rp.name) : '';
+  const repoRow = !rp ? '' : `<div class="ag-row np-repo"><span class="ag-note">Repository: ${esc(host)}, ${esc(rp.visibility)}</span>${rp.url
+    ? `<span class="disc-ok">✓ ${/^https:/.test(rp.url) ? `<a href="${esc(rp.url)}" target="_blank" rel="noopener">${esc(rp.url.replace(/^https:\/\//, ''))}</a>` : 'created'}</span><span class="ag-note">added as <code>origin</code>; nothing is pushed: <code>git push -u origin HEAD</code> after your first commit</span>`
+    : rp.platform === 'github' ? `<button class="btn" type="button" data-sc-repo>Create it on GitHub</button><span class="ag-note">an empty ${esc(rp.visibility)} repository named <code>${esc(c.name)}</code>, added as <code>origin</code> (with the gh CLI); nothing is pushed</span>`
+    : `<span class="ag-note">create an empty ${esc(rp.visibility)} repository on ${esc(host)}, then: <code>git remote add origin &lt;its url&gt;</code></span>`}</div>`;
+  morphHtml($('sc-bar'), repoRow + (c.followed
     ? `<div class="ag-row"><span class="disc-ok">✓ Onboarded and followed.</span><a class="btn primary" href="${esc(hrefFor(c.projectId))}">Open it</a><button class="btn" type="button" data-sc-next>Next candidate →</button></div>`
     : running ? `<div class="ag-row"><span class="ag-note"><span class="ag-spin"></span>Onboarding in the background; the project appears in the list once <code>openspec/</code> is set up. Nothing is committed.</span></div>`
     : `<div class="ag-row sc-decide"><span class="ag-note">Decision:</span>
         <button class="btn primary" type="button" data-sc-onboard ${c.openspec ? 'disabled' : ''}>Onboard it</button>
         <button class="btn" type="button" data-sc-skip>Skip → next candidate</button>
         ${onboard?.status === 'failed' ? `<span class="ag-note warn">✕ ${esc(onboard.error ?? 'Onboarding failed')}</span>` : ''}</div>
-       ${sc.note ? `<div class="ag-note ${sc.note.startsWith('✕') ? 'warn' : ''}">${esc(sc.note)}</div>` : ''}`);
+       ${sc.note ? `<div class="ag-note ${sc.note.startsWith('✕') ? 'warn' : ''}">${esc(sc.note)}</div>` : ''}`));
   const jobs = [...chat, ...(onboard ? [onboard] : [])].sort((a, b) => a.startedAt - b.startedAt);
   const th = $('ag-thread');
   const atEnd = th.scrollHeight - th.scrollTop - th.clientHeight < 60;
@@ -4665,15 +4780,25 @@ function nextCandidate(after) {
 async function scoutSend(direct = null) {
   const ta = $('sc-text');
   const typed = ta?.value.trim();
-  const text = direct ?? (typed ? withQuote(typed) : '');
+  const files = sc.mode === 'new' && !direct ? [...(sc.pending ?? [])] : [];
+  const text = direct ?? (typed ? withQuote(typed) : files.length ? `See the attached file${files.length > 1 ? 's' : ''}.` : '');
   if (!text || sc.busy) return;
   sc.busy = true;
   try {
     if (sc.mode === 'new') {
+      const payload = await Promise.all(files.map((f) => new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve({ name: f.name, data: String(r.result).replace(/^data:[^,]*,/, '') });
+        r.onerror = () => reject(new Error(`Cannot read ${f.name}.`));
+        r.readAsDataURL(f);
+      })));
       const parentInput = $('np-parent')?.value.trim() || sc.parentInput;
       const sum = xp.open ? xpSummary().join(' · ') : '';
       const withXp = sum && (sc.fresh || sum !== xp.sent) ? `[Workflow details (expert mode): ${sum.replace(/[\]\n]/g, ' ')}]\n${text}` : text;
-      const r = await discPost({ action: 'newchat', parent: parentInput, text: withXp, fresh: sc.fresh, ...(withXp !== text ? xpContainers() : {}) });
+      const r = await discPost({ action: 'newchat', parent: parentInput, text: withXp, fresh: sc.fresh, ...(withXp !== text ? xpContainers() : {}), ...(payload.length ? { files: payload } : {}) });
+      if (sc.fresh) sc.attached = [];
+      sc.attached = [...(sc.attached ?? []), ...(r.files ?? [])]; // they go with Create too
+      sc.pending = []; renderFiles();
       if (sum) { xp.sent = sum; if (!xp.fold) { xp.fold = true; renderScout(); } } // the brainstorm gets the room again
       Object.assign(sc, { parent: r.parent, parentInput, fresh: false });
     } else await discPost({ action: 'chat', path: sc.path, text });
@@ -4696,7 +4821,7 @@ document.addEventListener('change', (e) => {
 });
 document.addEventListener('click', (e) => {
   const t = e.target;
-  const hit = t.closest?.('[data-disc], [data-sc-open], [data-sc-close], [data-sc-max], [data-sc-send], [data-sc-onboard], [data-sc-skip], [data-sc-next], [data-np-open], [data-np-fresh], [data-np-create], [data-np-go], [data-np-cancel]');
+  const hit = t.closest?.('[data-disc], [data-sc-open], [data-sc-close], [data-sc-max], [data-sc-send], [data-sc-onboard], [data-sc-skip], [data-sc-next], [data-np-open], [data-np-fresh], [data-np-create], [data-np-go], [data-np-cancel], [data-sc-repo]');
   if (!hit) return;
   e.stopPropagation();
   if (hit.matches('[data-np-open]')) return openNewProject();
@@ -4705,7 +4830,7 @@ document.addEventListener('click', (e) => {
     if (sc.mode === 'new') try { localStorage.setItem('osd-np-max', sc.max ? '1' : '0'); } catch {}
     return $('sc-text')?.focus();
   }
-  if (hit.matches('[data-np-fresh]')) { Object.assign(sc, { fresh: true, create: null, note: '' }); return renderScout(); }
+  if (hit.matches('[data-np-fresh]')) { Object.assign(sc, { fresh: true, create: null, note: '', attached: [] }); return renderScout(); }
   if (hit.matches('[data-np-cancel]')) { sc.create = null; return renderScout(); }
   if (hit.matches('[data-np-create]')) {
     const pj = sc_projects.get(hit.dataset.npCreate);
@@ -4717,7 +4842,7 @@ document.addEventListener('click', (e) => {
   if (hit.matches('[data-np-go]')) {
     const name = $('np-name')?.value.trim();
     sc.busy = true; sc.note = 'Creating…'; renderScout();
-    return discPost({ action: 'create', parent: sc.parent ?? sc.parentInput, name, brief: sc.create.brief, workflow: xp.open ? xpSummary() : null, ...xpContainers() })
+    return discPost({ action: 'create', parent: sc.parent ?? sc.parentInput, name, brief: sc.create.brief, workflow: xp.open ? xpSummary() : null, ...xpContainers(), ...(xp.open ? { repo: xpRepo() } : {}), attachments: (sc.attached ?? []).map((f) => f.path) })
       .then((r) => { sc.busy = false; sc.create = null; openScout(r.path); })
       .catch((err) => { sc.busy = false; sc.note = '✕ ' + err.message; renderScout(); });
   }
@@ -4727,6 +4852,12 @@ document.addEventListener('click', (e) => {
   const act = (body, okNote = '') => discPost(body).then(() => { sc.note = okNote; }).catch((err) => { sc.note = '✕ ' + err.message; }).finally(() => { if (ui.overview) renderOverview(ui.overview); if (sc.open) renderScout(); });
   if (hit.matches('[data-disc]')) return act({ action: hit.dataset.disc, path: hit.dataset.path });
   if (hit.matches('[data-sc-onboard]')) return act({ action: 'onboard', path: sc.path });
+  if (hit.matches('[data-sc-repo]')) {
+    const c = candidate(sc.path);
+    if (c?.repo?.visibility === 'public' && !confirm(`Create the PUBLIC repository "${c.name}" on GitHub? Everything you push to it is visible to everyone.`)) return;
+    hit.disabled = true;
+    return act({ action: 'repo', path: sc.path }, '');
+  }
   if (hit.matches('[data-sc-skip], [data-sc-next]')) {
     const next = nextCandidate(sc.path);
     const done = () => (next ? openScout(next.path) : closeScout());
@@ -4745,12 +4876,14 @@ function startProject() {
   if (AGENT_TOKEN && PARAMS.get('panel')?.startsWith('ticket:')) { // ?panel=ticket:<change> opens a ticket's panel
     Object.assign(ag, { open: true, panel: 'ticket', target: PARAMS.get('panel').slice(7), max: ag.max || PARAMS.has('max') }); $('agent').hidden = false; document.body.classList.add('ag-open');
   }
+  if (AGENT_TOKEN && PARAMS.get('term')) { ag.convo = 'terminal'; ag.term = PARAMS.get('term'); } // ?term=<session id> joins that session
   if (AGENT_TOKEN && PARAMS.get('panel') === 'chat') { ag.open = true; ag.panel = 'chat'; ag.stick = true; ag.max = ag.max || PARAMS.has('max'); $('agent').hidden = false; document.body.classList.add('ag-open'); } // ?panel=chat opens the chat, &max maximized
   if (SNAPSHOT && AGENT_TOKEN) fetch(withProject('/api/agent')).then((r) => r.json()).then((v) => { ag.view = v; renderAgentLive(); });
   if (SNAPSHOT) fetch(withProject('/api/state')).then((r) => r.json()).then((d) => { $('conn').innerHTML = `<span class="dot"></span>snapshot ${hhmm(d.scannedAt)}`; accept(d); });
   else connect();
 }
 function startOverview() {
+  $('term-btn').hidden = true;
   document.querySelectorAll('[data-chat-btn]').forEach((b) => b.remove()); // the chat belongs to a project; candidates have their own
   document.querySelector('.main').hidden = true;
   $('board').hidden = true;
@@ -4761,7 +4894,11 @@ function startOverview() {
   }
   const es = new EventSource('/events?overview=1');
   es.onopen = () => { $('conn').innerHTML = '<span class="dot on"></span>live'; };
-  es.onmessage = (ev) => { const d = JSON.parse(ev.data); $('conn').innerHTML = `<span class="dot on"></span>live · ${hhmm(d.scannedAt)}`; renderOverview(d); };
+  let onboardFrom = AGENT_TOKEN ? PARAMS.get('onboard') : null; // ?onboard=<folder>: "Onboard it as a project…" from a session-only session
+  es.onmessage = (ev) => {
+    const d = JSON.parse(ev.data); $('conn').innerHTML = `<span class="dot on"></span>live · ${hhmm(d.scannedAt)}`; renderOverview(d);
+    if (onboardFrom && candidate(onboardFrom)) { const p = onboardFrom; onboardFrom = null; const u = new URL(location.href); u.searchParams.delete('onboard'); history.replaceState(null, '', u.pathname + u.search); openScout(p); }
+  };
   es.onerror = () => { $('conn').innerHTML = '<span class="dot off"></span>disconnected, retrying…'; };
   setInterval(() => ui.overview && renderOverview(ui.overview), 30000);
 }

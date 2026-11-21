@@ -209,12 +209,16 @@ What makes it more than a status page:
   `CLAUDE.md` or `AGENTS.md`, lets you chat with Claude about whether one is worth it, and sets up OpenSpec there
   in the background (nothing committed). Or **start a new project**: brainstorm it with Claude, and once you agree
   it is created with its roadmap and followed from then on; an **expert mode** sets its quality gates, task checks,
-  review topics, workflow steps, documentation, diagram format (Mermaid by default) and types, and container engine up front,
+  review topics, workflow steps, documentation, diagram format (Mermaid by default) and types, container engine,
+  version control (local, GitHub, GitLab, …, public or private) and license up front, takes attached files (a spec,
+  notes, a PDF) as part of the idea,
   and lets Claude check your local containers for a service to reuse (e.g. a running Postgres) before anything is
   installed on the host. Projects you are done with can be **archived** or **unfollowed**, so they cost nothing
   while they rest.
-- **Join a session running in a terminal**: pick it from a list, follow what it does live (read-only by default),
-  and write to it as if you typed there; it can even wait for your next message when it is done.
+- **Join a session running in a terminal** (⌨ in the header): pick it from a list, follow what it does live
+  (read-only by default, no setup needed), and write to it as if you typed there once the hook is set up (one
+  click); it can even wait for your next message when it is done. Sessions in other projects switch there; one in
+  a folder that is not followed yet can be followed on its own and onboarded with one click.
 - **Git history** of the project: the commits with a graph of branches, tags and remote branches, and each commit's
   message, files and diff, read-only; **openspec/ only** shows just the commits that changed the specs.
 - **Ten styles**, from Flat and Glass to Clay, Paper, Blackboard or a green-screen Terminal.

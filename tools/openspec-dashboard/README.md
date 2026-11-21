@@ -77,11 +77,25 @@ setup as an onboarding, with the agreed brief: `CLAUDE.md`, `README.md`, `opensp
 draft per ticket, no application code, nothing committed. When it is done the project is followed like an
 onboarded one.
 
+**📎 Attach** (or dropping files on the panel) sends up to 5 files of 10 MB with a message of the brainstorm. The
+server keeps them in `$XDG_STATE_HOME/openspec-dashboard/attachments/` (not in the project), names their paths in the
+message (the chat shows a 📎 chip with the names) and lets Claude read that folder (`--add-dir`); **Create** lists
+them in the brief as "Attached files", and the setup reads them from there.
+
+With expert mode, **Create** also takes the version control (no `git init` with "No version control"), the license
+(the setup writes `LICENSE` with its text and the SPDX identifier in the README) and the hosting (noted in
+CLAUDE.md, the brief's "Repository" section). The setup never creates a remote or pushes; for GitHub, the new
+project's panel offers **Create it on GitHub** afterwards: `gh repo create <name> --private|--public --source .
+--remote origin` (needs the GitHub CLI, signed in; a public repository asks first; nothing is pushed). For GitLab and
+other platforms it shows what to run.
+
 **⚙ Expert mode** in that panel sets the workflow the project starts with: quality gates, what every task is
 checked for, what every change is reviewed for, the workflow steps, the documentation to keep, the diagram format
 (Mermaid, PlantUML or both; one choice) and the diagram types to draw (C4 context and containers, sequence, ER,
-state, deployment, …), the container engine (Podman, Docker or none; one choice) and how tools
-and services are run, as toggle chips with defaults and your own entries (remembered in the browser). With "Check
+state, deployment, …), the container engine (Podman, Docker or none; one choice), how tools
+and services are run, version control (git local only, on GitHub, GitLab or another platform, or none; one choice),
+the repository's visibility (private or public; only with a platform) and the license (none yet, MIT, Apache-2.0,
+BSD-3-Clause, MPL-2.0, GPL-3.0-or-later, AGPL-3.0-or-later or proprietary), as toggle chips with defaults and your own entries (remembered in the browser). With "Check
 local containers and images for services to reuse" on, the server adds the list of local containers and images
 (`ps -a` and `images` of the chosen engine; nothing is started) to the message, so Claude suggests reusing e.g. a
 running database instead of installing one; the chat shows it as a 📦 chip with the list as its tooltip, and
@@ -238,8 +252,20 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
   - **Session · <ticket>**: every session started from the dashboard is a conversation with its steps and replies.
     Your messages go straight to it; you can end it after the current turn or stop it, and a message to an ended
     session continues it. `claude --resume <session-id>` takes it over in a terminal.
-  - **Terminal session**: join a session running elsewhere (a terminal, an IDE): a drop-down lists the sessions the
-    hook below has seen in the last 12 hours (running ones first, with the last prompt typed there, working or
+  - **Terminal session** (also **⌨** in the header, with the number of running sessions): join a session running
+    elsewhere (a terminal, an IDE). The drop-down lists the project's sessions of the last 12 hours: the ones the
+    hook below reports, and also those it has not seen (no hook, or started before it), found in Claude Code's own
+    records: `~/.claude/sessions/<pid>.json` (session id, folder, idle or busy; the process must still run) for the
+    running ones and the interactive transcripts in `~/.claude/projects/<folder>/` for the ended ones (`claude -p`
+    runs are left out). Those can only be followed, marked ◌ … read-only; **Set up the hook** writes the hook into
+    `.claude/settings.local.json` and lists that file in `.git/info/exclude`. Running sessions in other folders are
+    listed too: under **Other projects** (picking one switches to that project with `?panel=chat&term=<session>`) and
+    **Session only** (a folder that is not followed: read-only, with **Onboard it as a project…**, which adds the
+    folder as a candidate and opens its onboarding chat, or **Follow it** when it has `openspec/`). The hook works in
+    such a folder too: **Set up the hook** there (or `agent-hook.mjs install <folder>`) installs it in that folder, the
+    hook then uses the folder with the hook in its `.claude` settings as the session's root when there is no
+    `openspec/` above, and the panel writes to that folder's inbox (messages and listening as for the project).
+    `OPENSPEC_DASHBOARD_CLAUDE_DIR` reads these records from another folder than `~/.claude`. The list shows running ones first, with the last prompt typed there, working or
     waiting, last step); a joined session shows its transcript live, read-only, until **✎ Write to it**; then
     messages go to that session only, as if typed there. **👂 Keep it listening** makes the session wait for a
     message when it is done instead of stopping. **Any session** sends to the next session that takes a step.

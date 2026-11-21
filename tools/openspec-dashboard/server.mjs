@@ -39,7 +39,7 @@ import { fileURLToPath } from 'node:url';
 import { execFile, spawn } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import os from 'node:os';
-import { inboxDir, readInbox, queueMessage, recordDelivered, cancelMessage, formatMessages, setListening, listenFile, STOP_TIMEOUT } from './agent-hook.mjs';
+import { inboxDir, readInbox, queueMessage, recordDelivered, cancelMessage, formatMessages, setListening, listenFile, STOP_TIMEOUT, installHook, findHookRoot } from './agent-hook.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -875,6 +875,87 @@ function trusted(root) {
   return !!(trustCache.projects[real] ?? trustCache.projects[root])?.hasTrustDialogAccepted; // a trusted parent does not count
 }
 
+const cleanUser = (t) => {
+  t = String(t ?? '').replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
+  if (/^<(local-command-stdout|local-command-caveat|local-command-stderr|task-notification|bash-stdout|bash-stderr)>/.test(t)) return ''; // Claude Code's own, not typed
+  const cmd = t.match(/<command-name>([^<]*)<\/command-name>/);
+  if (cmd) return `${cmd[1]} ${t.match(/<command-args>([^<]*)<\/command-args>/)?.[1] ?? ''}`.trim();
+  return t.slice(0, 6000);
+};
+// ---- Claude Code's own records of its sessions, for sessions the hook has not seen (no hook, started before it, or in
+// another folder): ~/.claude/sessions/<pid>.json for the running ones (session id, folder, idle or busy) and the
+// transcripts in ~/.claude/projects/<folder>/ (for the ended ones). They can be followed read-only; writing needs the hook.
+// OPENSPEC_DASHBOARD_CLAUDE_DIR points this at another folder than ~/.claude (used for the documentation screenshots).
+const CLAUDE_DIR = process.env.OPENSPEC_DASHBOARD_CLAUDE_DIR || path.join(os.homedir(), '.claude');
+const CLAUDE_PROJECT_DIRS = [...new Set([path.join(os.homedir(), '.claude', 'projects'), path.join(CLAUDE_DIR, 'projects')])];
+const realOf = (d) => { try { return fs.realpathSync(d); } catch { return path.resolve(d); } };
+const encDir = (d) => path.join(CLAUDE_DIR, 'projects', String(d).replace(/[^a-zA-Z0-9]/g, '-'));
+const headCache = new Map(); // transcript -> { mtime, prompt, headless }
+function transcriptInfo(file) {
+  const st = fs.statSync(file, { throwIfNoEntry: false });
+  if (!st) return null;
+  const c = headCache.get(file);
+  if (c && c.mtime === st.mtimeMs) return c;
+  const readAt = (pos, len) => { const b = Buffer.alloc(len); const fd = fs.openSync(file, 'r'); try { fs.readSync(fd, b, 0, len, pos); } finally { fs.closeSync(fd); } return b.toString('utf8'); };
+  const info = { mtime: st.mtimeMs, prompt: null, headless: false };
+  try {
+    info.headless = /"entrypoint":\s*"sdk-/.test(readAt(0, Math.min(st.size, 16384))); // claude -p (the dashboard's own runs, scripts)
+    for (const l of readAt(Math.max(0, st.size - 262144), Math.min(st.size, 262144)).split('\n').reverse()) {
+      if (!/"type":\s*"user"/.test(l)) continue;
+      let m; try { m = JSON.parse(l); } catch { continue; }
+      if (m.isSidechain || m.isMeta || m.isCompactSummary) continue;
+      const ct = m.message?.content;
+      const t = cleanUser(typeof ct === 'string' ? ct : Array.isArray(ct) ? ct.filter((x) => x.type === 'text').map((x) => x.text).join('\n') : '');
+      // the last prompt typed there: not Claude Code's own lines (a summary after compaction, an interruption, a /command)
+      if (t && !/^(<|\/|\[Request interrupted|This session is being continued from a previous conversation)/.test(t) && !/from the OpenSpec dashboard/.test(t)) { info.prompt = t.slice(0, 200); break; }
+    }
+  } catch { /* unreadable: listed without a prompt */ }
+  headCache.set(file, info);
+  return info;
+}
+let runningCache = { t: 0, list: [] };
+function runningSessions() {
+  if (Date.now() - runningCache.t < 3000) return runningCache.list;
+  const out = [];
+  const dir = path.join(CLAUDE_DIR, 'sessions');
+  for (const f of (() => { try { return fs.readdirSync(dir); } catch { return []; } })()) {
+    if (!f.endsWith('.json')) continue;
+    const d = jsonOf(readSync(path.join(dir, f)), null);
+    if (!d?.sessionId || !d.cwd || !Number.isInteger(d.pid) || (d.kind && d.kind !== 'interactive')) continue;
+    try { process.kill(d.pid, 0); } catch (e) { if (e.code !== 'EPERM') continue; } // the process is gone
+    const tf = [encDir(d.cwd), encDir(realOf(d.cwd))].map((x) => path.join(x, `${d.sessionId}.jsonl`)).find((x) => fs.existsSync(x)) ?? null;
+    const ti = tf ? transcriptInfo(tf) : null;
+    out.push({ sessionId: d.sessionId, t: Math.max(d.updatedAt ?? 0, ti?.mtime ?? 0), cwd: d.cwd, transcript: tf, prompt: ti?.prompt ?? null, waiting: d.status !== 'busy', ended: false });
+  }
+  runningCache = { t: Date.now(), list: out };
+  return out;
+}
+const hooksIn = (dir) => ['settings.local.json', 'settings.json'].some((f) => readSync(path.join(dir, '.claude', f)).includes('agent-hook.mjs'));
+// installed before joining existed: the Stop hook's timeout is too short to wait for a message while listening
+const hooksCurrentIn = (dir) => ['settings.local.json', 'settings.json'].some((f) => {
+  const stop = (jsonOf(readSync(path.join(dir, '.claude', f)), {})?.hooks?.Stop ?? []).flatMap((h) => h.hooks ?? []).find((x) => String(x.command ?? '').includes('agent-hook.mjs'));
+  return (stop?.timeout ?? 0) >= STOP_TIMEOUT;
+});
+// the inbox of a folder that is not followed (its hook writes heartbeats there and takes the messages from there)
+const inboxCache = new Map();
+const inboxOf = (dir) => { const c = inboxCache.get(dir); if (c && Date.now() - c.t < 2000) return c.v; const v = readInbox(dir); inboxCache.set(dir, { t: Date.now(), v }); return v; };
+// writes the hook into <dir>/.claude/settings.local.json and keeps that file out of git (.git/info/exclude, a local file)
+function setupHook(dir, remove) {
+  const file = installHook(dir, !!remove);
+  const gitDir = path.join(dir, '.git');
+  if (!remove && fs.statSync(gitDir, { throwIfNoEntry: false })?.isDirectory()) {
+    const ex = path.join(gitDir, 'info', 'exclude');
+    const cur = readSync(ex);
+    if (!cur.split('\n').some((l) => l.trim() === '/.claude/settings.local.json' || l.trim() === '.claude/settings.local.json')) {
+      fs.mkdirSync(path.dirname(ex), { recursive: true });
+      fs.appendFileSync(ex, `${cur && !cur.endsWith('\n') ? '\n' : ''}/.claude/settings.local.json\n`);
+    }
+  }
+  return file;
+}
+// the followed project a folder belongs to (the deepest one)
+const ownerOf = (d) => { const x = realOf(d); return projects.filter((p) => { const r = realOf(p.root); return x === r || x.startsWith(r + path.sep); }).sort((a, b) => b.root.length - a.root.length)[0] ?? null; };
+
 function createAgent(project) {
   const root = project.root;
   const jobs = [];
@@ -882,12 +963,10 @@ function createAgent(project) {
   let timer = null;
   let lastJson = '';
   const hookFile = path.join(HERE, 'agent-hook.mjs');
-  const hooksInstalled = () => ['settings.local.json', 'settings.json'].some((f) => readSync(path.join(root, '.claude', f)).includes('agent-hook.mjs'));
-  // installed before joining existed: the Stop hook's timeout is too short to wait for a message while listening
-  const hooksCurrent = () => ['settings.local.json', 'settings.json'].some((f) => {
-    const stop = (jsonOf(readSync(path.join(root, '.claude', f)), {})?.hooks?.Stop ?? []).flatMap((h) => h.hooks ?? []).find((x) => String(x.command ?? '').includes('agent-hook.mjs'));
-    return (stop?.timeout ?? 0) >= STOP_TIMEOUT;
-  });
+  const hooksInstalled = () => hooksIn(root);
+  const hooksCurrent = () => hooksCurrentIn(root);
+  // folders Claude may read besides the project (the attachments of a new-project brainstorm)
+  const addDirArgs = () => (project.addDirs ?? []).filter((d) => fs.existsSync(d)).flatMap((d) => ['--add-dir', d]);
   const liveSession = () => jobs.find((j) => j.kind === 'session' && j.child && (j.status === 'running' || j.status === 'idle'));
   const rel = (s) => String(s).split(root + path.sep).join('');
 
@@ -898,7 +977,8 @@ function createAgent(project) {
       stt: { available: stt.available, image: stt.image, language: STT_LANGUAGE },
       rephrase: rephraseState(),
       hookInstall: `node ${displayPath(hookFile)} install ${displayPath(root)}`,
-      sessions: inbox.sessions.filter((x) => now - x.t < 12 * 3600e3).slice(0, 12).map((x) => ({ ...x, transcript: !!x.transcript, listen: fs.existsSync(listenFile(root, x.sessionId)) && (jsonOf(readSync(listenFile(root, x.sessionId)), {})?.until ?? 0) > now })),
+      elsewhere: elsewhere().map(({ transcript: tr, ...x }) => ({ ...x, transcript: !!tr })),
+      sessions: allSessions().map((x) => ({ ...x, transcript: !!x.transcript, listen: !x.hookless && fs.existsSync(listenFile(root, x.sessionId)) && (jsonOf(readSync(listenFile(root, x.sessionId)), {})?.until ?? 0) > now })),
       messages: inbox.messages,
       jobs: jobs.slice(-25).map(({ child, planIds, ...j }) => ({ ...j, log: j.log.slice(-250) })),
     };
@@ -1176,6 +1256,7 @@ function createAgent(project) {
       '---',
       '<Markdown brief: purpose and users; scope of the first version; out of scope; conventions; milestone M1 "<title>" with the ordered tickets as `change-name`: goal (depends on …)>',
       '```',
+      'If the user attaches files, read them with the Read tool before you answer: they belong to what the user writes (a spec, notes, a sketch, an existing document). Say briefly what you take from them.',
       'If the user sends workflow details from expert mode (quality gates, task checks, review topics, workflow steps, documentation, diagram format and types, container engine, tools and services), plan with them: the quality gate command and the first ticket set up those gates, the documentation is planned as chosen and the chosen diagram types are drawn in the chosen format, tools that are not installed on the host run in containers of the chosen engine, and the brief gets a short "Workflow" section with them.',
       'If a list of the local containers and images is given, check it for services the project can use (a database, a message broker, a mail catcher, object storage, a local model, …) and suggest reusing one, by its image, instead of installing something on the host or pulling another image; say why it fits. It is a list only: do not start, stop or change containers.',
       'Revise the block when the user asks for changes. If it does not converge, say so plainly and write no block. Answer like in a chat: short, in Markdown, in the language the user writes in.',
@@ -1185,7 +1266,7 @@ function createAgent(project) {
   function onboardPrompt(brief) {
     const skill = fs.existsSync(SKILL_MD) ? `read ${SKILL_MD} and follow its setup part (and the references it points to)` : 'use the openspec-ticket-workflow skill if it is available';
     if (brief) return [
-      'This project was just created: an empty folder with git initialised. Set it up for OpenSpec and the OpenSpec ticket workflow from the brief the user agreed on in a brainstorming:',
+      'This project was just created: an empty folder, with git initialised unless the brief says it has no version control. Set it up for OpenSpec and the OpenSpec ticket workflow from the brief the user agreed on in a brainstorming:',
       '', brief, '',
       'Start by writing your plan with your task tools (TaskCreate and TaskUpdate; TodoWrite in older versions): 5 to 12 steps in the order you will do them, in plain words with an activeForm (the dashboard shows them to the user as the progress). Keep them current: mark a step in_progress when you start it and completed when it is done; add a step when you find more to do.',
       'Create CLAUDE.md (purpose, stack, conventions, the quality gate, and that work goes ticket by ticket with the workflow) and a short README.md.',
@@ -1194,6 +1275,8 @@ function createAgent(project) {
       'Write openspec/config.yaml (context, conventions, the quality gate), roadmap.md with the milestone and the tickets of the brief in their order and dependencies, and a backlog draft in openspec/backlog/ for every ticket. There are no specs yet.',
       'If the brief has a "Local containers" section, it only lists what this machine has: reuse what the brief chose from it (name the image in CLAUDE.md), but do not copy the list into any file.',
       'If the brief has a "Workflow" section, make it binding (the documentation to keep, the diagram format, the diagram types to draw and keep current, and the container engine go into CLAUDE.md and the rules in openspec/config.yaml; tools that are not installed on the host run in containers): its quality gates are part of the quality gate command (and the first ticket sets them up), what every task is checked for goes into the rules for tasks, what every change is reviewed for into the rules and guidance for the review of every change, and the workflow steps into the ticket workflow in openspec/config.yaml; repeat them briefly in CLAUDE.md.',
+      'If the brief has a "Repository" section, follow it: a license goes into a LICENSE file with its official text, word for word (copyright: the name from `git config --get user.name` and this year; if you cannot reproduce the text reliably, write the SPDX identifier and the link to the official text and tell the user), and its SPDX identifier into the README (and the build file once there is one); with no license chosen, write no LICENSE file. Note the hosting (platform and visibility) in CLAUDE.md, and for a public repository that nothing secret or private may be committed. Do not create the remote repository and do not push: the user creates the empty repository from the dashboard (it is only added as origin) and pushes the commits themselves. With no version control, leave out what needs commits and say so in CLAUDE.md.',
+      'If the brief has an "Attached files" section, read those files first: the user attached them to the brainstorm, and they are part of the brief. Take what matters from them into CLAUDE.md, openspec/config.yaml and the backlog drafts; do not copy the files into the project.',
       'Do not write application code: the skeleton is the first ticket. Do not commit: leave every change uncommitted for the user to review.',
       'Nobody can answer permission prompts: if a step needs a permission you do not have, skip it and say so at the end.',
       'End with a short summary: what you created, what the user should check first, and the first ticket to start.',
@@ -1222,8 +1305,8 @@ function createAgent(project) {
     job.prompt = onboardPrompt(brief);
     job.onExit = (j) => { if (j.status === 'done' && fs.existsSync(path.join(root, 'openspec'))) onDone?.(); };
     push(job, 'prompt', job.prompt);
-    const tools = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'TodoWrite', 'Bash(git status:*)', 'Bash(git log:*)', 'Bash(ls:*)', 'Bash(mkdir:*)', ...(USE_CLI ? [`Bash(${CLI}:*)`] : [])];
-    const base = ['-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits', '--permission-prompts', 'none', ...modelArgs()];
+    const tools = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'TodoWrite', 'Bash(git status:*)', 'Bash(git log:*)', 'Bash(git config --get:*)', 'Bash(ls:*)', 'Bash(mkdir:*)', ...(USE_CLI ? [`Bash(${CLI}:*)`] : [])];
+    const base = ['-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits', '--permission-prompts', 'none', ...modelArgs(), ...addDirArgs()];
     if (scout) { job.sessionId = scout.sessionId; launch(job, [...base, '--resume', scout.sessionId, '--allowedTools', ...tools], job.prompt, false); }
     else { job.sessionId = randomUUID(); launch(job, [...base, '--session-id', job.sessionId, '-n', `onboard ${project.name}`, '--allowedTools', ...tools], job.prompt, false); }
     return job;
@@ -1249,7 +1332,7 @@ function createAgent(project) {
     job.idea = idea || (prev?.idea ?? null);
     push(job, 'user', text);
     const base = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--tools', 'Read,Grep,Glob',
-      '--permission-prompts', 'none', ...modelArgs()];
+      '--permission-prompts', 'none', ...modelArgs(), ...addDirArgs()];
     if (prev?.sessionId) {
       job.sessionId = prev.sessionId;
       job.resumedFrom = prev.id;
@@ -1266,10 +1349,18 @@ function createAgent(project) {
     for (const j of jobs) if (j.kind === 'chat' && j.child && j.status === 'idle' && Date.now() - (j.lastActivity ?? 0) > 20 * 60e3) j.child.stdin.end();
   }, 60e3);
 
-  function message({ change, text, job: jobId, to, session }) {
+  function message({ change, text, job: jobId, to, session, folder }) {
     text = String(text ?? '').trim();
     if (!text) throw httpError(400, 'The message is empty.');
     const msg = { id: `${Date.now()}-${randomBytes(3).toString('hex')}`, change: change || null, text, t: Date.now() };
+    if (folder) { // a "Session only" session with the hook in its folder
+      const dir = folderOf({ folder });
+      const x = elsewhere().find((y) => y.sessionId === String(session ?? '') && y.folder === dir && !y.hookless);
+      if (!x) throw httpError(404, 'That session cannot take messages (no hook in it yet).');
+      queueMessage(dir, { ...msg, session: x.sessionId });
+      inboxCache.delete(dir); changed(0);
+      return { queued: true };
+    }
     const target = jobId ? jobs.find((j) => j.id === jobId) : null;
     if (target && target.kind === 'session' && !target.child) {
       // the session has ended: continue it with this message
@@ -1300,22 +1391,74 @@ function createAgent(project) {
     return { queued: true };
   }
   // ---- joining a session running in a terminal: its transcript (read-only) and listening
-  const sessionOf = (sid) => inbox.sessions.find((x) => x.sessionId === String(sid ?? ''));
+  // a session of this project, or (read-only) one running in another folder: "Session only" in the panel
+  const sessionOf = (sid) => allSessions().find((x) => x.sessionId === String(sid ?? '')) ?? elsewhere().find((x) => x.sessionId === String(sid ?? ''));
   function listen({ session, on }) {
     const x = sessionOf(session);
     if (!x || x.dashboardJob) throw httpError(404, 'No such session.');
-    setListening(root, x.sessionId, !!on);
+    if (x.hookless) throw httpError(409, 'This session runs without the hook; set it up and restart the session first.');
+    setListening(x.elsewhere ? x.folder : root, x.sessionId, !!on);
+    if (x.elsewhere) inboxCache.delete(x.folder);
     reloadInbox();
     return { listening: !!on };
   }
-  const CLAUDE_PROJECTS = path.join(os.homedir(), '.claude', 'projects');
-  const cleanUser = (t) => {
-    t = String(t ?? '').replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
-    if (/^<(local-command-stdout|local-command-caveat|local-command-stderr|task-notification|bash-stdout|bash-stderr)>/.test(t)) return ''; // Claude Code's own, not typed
-    const cmd = t.match(/<command-name>([^<]*)<\/command-name>/);
-    if (cmd) return `${cmd[1]} ${t.match(/<command-args>([^<]*)<\/command-args>/)?.[1] ?? ''}`.trim();
-    return t.slice(0, 6000);
+  // "Set it up" in Chat › Terminal session: the hook goes into .claude/settings.local.json, which stays out of git
+  // (listed in .git/info/exclude, a local file, so the project's .gitignore is not touched)
+  // with `folder`: the folder of a "Session only" session (one the dashboard lists, nothing else)
+  const folderOf = (body) => {
+    if (!body?.folder) return root;
+    const x = elsewhere().find((y) => !y.projectId && y.folder === String(body.folder));
+    if (!x) throw httpError(404, 'No session runs in that folder.');
+    return x.folder;
   };
+  function hook({ remove, folder } = {}) {
+    const dir = folderOf({ folder });
+    const file = setupHook(dir, remove);
+    inboxCache.delete(dir);
+    changed(0);
+    return { file: displayPath(file), installed: !remove };
+  }
+  // the hook's sessions first (they can be written to), then the ones only found on disk
+  function foundSessions() {
+    const seen = new Set(jobs.map((j) => j.sessionId));
+    const out = runningSessions().filter((x) => !seen.has(x.sessionId) && inRoot(x.cwd)).map((x) => { seen.add(x.sessionId); return { ...x, hookless: true }; });
+    for (const dir of new Set([encDir(root), encDir(realOf(root))])) {
+      let names = []; try { names = fs.readdirSync(dir); } catch { continue; }
+      for (const n of names) {
+        const sid = n.replace(/\.jsonl$/, '');
+        if (!n.endsWith('.jsonl') || seen.has(sid)) continue;
+        const file = path.join(dir, n);
+        const st = fs.statSync(file, { throwIfNoEntry: false });
+        if (!st || Date.now() - st.mtimeMs > 12 * 3600e3) continue;
+        const ti = transcriptInfo(file);
+        if (!ti || ti.headless) continue;
+        seen.add(sid);
+        out.push({ sessionId: sid, t: st.mtimeMs, cwd: root, transcript: file, prompt: ti.prompt, waiting: false, ended: true, hookless: true });
+      }
+    }
+    return out;
+  }
+  const inRoot = (d) => { const r = realOf(root), x = realOf(d); return x === r || x.startsWith(r + path.sep); };
+  // running sessions in other folders: of another followed project (the panel switches there) or of none ("Session only")
+  function elsewhere() {
+    return runningSessions().filter((x) => !inRoot(x.cwd)).map((x) => {
+      const owner = ownerOf(x.cwd);
+      const folder = owner ? owner.root : findHookRoot(x.cwd) ?? realOf(x.cwd);
+      const e = { ...x, hookless: true, elsewhere: true, projectId: owner?.id ?? null, projectLabel: owner ? labelOf(owner.root) : null, folder, display: homeDisplay(folder), openspec: fs.existsSync(path.join(folder, 'openspec')) };
+      if (owner) return e;
+      // session only: with the hook in that folder, it can be written to like a session of this project
+      const ib = inboxOf(folder), hb = ib.sessions.find((y) => y.sessionId === x.sessionId && !y.ended);
+      const lf = jsonOf(readSync(listenFile(folder, x.sessionId)), null);
+      return { ...e, hooks: hooksIn(folder), hooksCurrent: hooksCurrentIn(folder), messages: ib.messages.filter((m) => m.session === x.sessionId),
+        ...(hb ? { hookless: false, waiting: hb.waiting, listening: hb.listening, tool: hb.tool, t: Math.max(x.t, hb.t), listen: (lf?.until ?? 0) > Date.now() } : {}) };
+    });
+  }
+  function allSessions() {
+    const now = Date.now();
+    const hooked = inbox.sessions.filter((x) => now - x.t < 12 * 3600e3);
+    const ids = new Set(hooked.map((x) => x.sessionId));
+    return [...hooked, ...foundSessions().filter((x) => !ids.has(x.sessionId))].sort((a, b) => b.t - a.t).slice(0, 16);
+  }
   function transcriptEntries(line) {
     let m; try { m = JSON.parse(line); } catch { return []; }
     if (m.isMeta || !m.message) return [];
@@ -1337,9 +1480,9 @@ function createAgent(project) {
   function transcript({ session, from }) {
     const x = sessionOf(session);
     if (!x?.transcript) throw httpError(404, 'No transcript known for this session (the hook records it with its next step).');
-    let file, base = CLAUDE_PROJECTS;
-    try { file = fs.realpathSync(x.transcript); base = fs.realpathSync(CLAUDE_PROJECTS); } catch { throw httpError(404, 'The transcript is gone.'); }
-    if (!file.startsWith(base + path.sep) || !file.endsWith('.jsonl')) throw httpError(403, 'Not a Claude Code transcript.');
+    let file;
+    try { file = fs.realpathSync(x.transcript); } catch { throw httpError(404, 'The transcript is gone.'); }
+    if (!CLAUDE_PROJECT_DIRS.some((d) => file.startsWith(realOf(d) + path.sep)) || !file.endsWith('.jsonl')) throw httpError(403, 'Not a Claude Code transcript.');
     const size = fs.statSync(file).size, MAX = 2 << 20;
     let start = Math.max(0, Number(from) || 0), cut = false;
     if (start > size) start = 0;
@@ -1368,8 +1511,10 @@ function createAgent(project) {
     changed(0);
     return { ok: true };
   }
-  function cancel({ id }) {
-    if (!cancelMessage(root, String(id ?? ''))) throw httpError(409, 'The message was delivered already.');
+  function cancel({ id, folder }) {
+    const dir = folderOf({ folder });
+    if (!cancelMessage(dir, String(id ?? ''))) throw httpError(409, 'The message was delivered already.');
+    inboxCache.delete(dir);
     reloadInbox();
     return { ok: true };
   }
@@ -1398,7 +1543,7 @@ function createAgent(project) {
   const busy = () => jobs.some((j) => j.child && ['starting', 'running'].includes(j.status) && j.kind !== 'chat');
   sttListeners.add(() => changed(0));
   rpListeners.add(() => changed(0));
-  return { view, ask, chat, start, message, control, cancel, brief, startWatching, stopWatching, busy, onboard, listen, transcript };
+  return { view, ask, chat, start, message, control, cancel, brief, startWatching, stopWatching, busy, onboard, listen, transcript, hook };
 }
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => { for (const c of children) { try { c.kill('SIGTERM'); } catch { /* gone */ } } process.exit(0); });
@@ -2305,11 +2450,47 @@ function projectAction(body) {
 }
 const scouts = new Map();
 const newChats = new Map(); // parent folder -> pseudo project for brainstorming a new project there
+// files attached to a new-project brainstorm: kept in the dashboard's state folder (not in the project), one folder per parent
+const attachDir = (parent) => path.join(STATE_DIR, 'attachments', createHash('sha256').update(parent).digest('hex').slice(0, 16));
+const ATTACH_MAX = 10 << 20;
+async function saveAttachments(parent, files) {
+  if (!Array.isArray(files) || !files.length) return [];
+  if (files.length > 5) throw httpError(400, 'Attach at most 5 files at a time.');
+  const dir = attachDir(parent);
+  await fsp.mkdir(dir, { recursive: true });
+  const out = [];
+  for (const f of files) {
+    const name = path.basename(String(f?.name ?? 'file')).replace(/[^\w.\- ]+/g, '_').slice(-120) || 'file';
+    const data = Buffer.from(String(f?.data ?? ''), 'base64');
+    if (!data.length) throw httpError(400, `${name} is empty.`);
+    if (data.length > ATTACH_MAX) throw httpError(413, `${name} is larger than 10 MB.`);
+    const file = path.join(dir, `${Date.now().toString(36)}-${randomBytes(2).toString('hex')}-${name}`);
+    await fsp.writeFile(file, data);
+    out.push({ name, path: file, size: data.length });
+  }
+  return out;
+}
+const kb = (n) => (n < 1024 ? `${n} B` : n < 1 << 20 ? `${Math.round(n / 1024)} KB` : `${(n / (1 << 20)).toFixed(1)} MB`);
+// "Create the repository": GitHub through the gh CLI (signed in); other platforms get the commands to run
+async function createRepo(c) {
+  const r = c.repo;
+  if (!r || r.url) throw httpError(409, r?.url ? 'The repository exists already.' : 'No hosting was chosen for this project.');
+  if (r.platform !== 'github') throw httpError(400, 'Only GitHub repositories can be created from here (with the gh CLI).');
+  const run = (args) => new Promise((resolve) => execFile('gh', args, { cwd: c.path, timeout: 60000, env: { ...process.env, GH_PROMPT_DISABLED: '1', NO_COLOR: '1' } }, (err, stdout, stderr) => resolve({ err, out: String(stdout), errText: String(stderr) })));
+  const auth = await run(['auth', 'status']);
+  if (auth.err?.code === 'ENOENT') throw httpError(409, 'The GitHub CLI (gh) is not installed.');
+  if (auth.err) throw httpError(409, 'The GitHub CLI is not signed in: run gh auth login.');
+  const res = await run(['repo', 'create', c.name, r.visibility === 'public' ? '--public' : '--private', '--source', c.path, '--remote', 'origin']);
+  if (res.err) throw httpError(502, (res.errText || res.out || res.err.message).trim().split('\n').at(-1).slice(0, 300));
+  r.url = (res.out + res.errText).match(/https:\/\/github\.com\/[\w.-]+\/[\w.-]+/)?.[0] ?? 'created';
+  overviewChanged();
+  return { url: r.url };
+}
 const expandHome = (d) => path.resolve(String(d ?? '').trim().replace(/^~(?=$|\/)/, os.homedir()));
 const homeDisplay = (d) => (d.startsWith(os.homedir() + path.sep) ? '~' + d.slice(os.homedir().length) : d);
 function newChatFor(dir) {
   let p = newChats.get(dir);
-  if (!p) { p = { id: 'new-project', root: dir, name: path.basename(dir), clients: new Set(), state: null }; p.agent = createAgent(p); newChats.set(dir, p); }
+  if (!p) { p = { id: 'new-project', root: dir, name: path.basename(dir), clients: new Set(), state: null, addDirs: [attachDir(dir)] }; fs.mkdirSync(p.addDirs[0], { recursive: true }); p.agent = createAgent(p); newChats.set(dir, p); }
   return p;
 }
 function scoutFor(dir) {
@@ -2380,31 +2561,67 @@ async function discoveryAction(body) {
     finally { disc.scanning = false; overviewChanged(); }
     return { found: disc.candidates.length };
   }
+  // "Session only" in the panel: the folder of a session the dashboard does not follow becomes a candidate to onboard
+  if (action === 'add') {
+    const dir = expandHome(p);
+    if (!fs.statSync(dir, { throwIfNoEntry: false })?.isDirectory()) throw httpError(404, `${homeDisplay(dir)} is not a folder.`);
+    const owner = ownerOf(dir);
+    if (owner && realOf(owner.root) === realOf(dir)) return { project: owner.id };
+    if (!disc.candidates.some((c) => c.path === dir)) {
+      const names = new Set(fs.readdirSync(dir));
+      const markers = AGENT_MARKERS.filter((m) => names.has(m));
+      const ct = await git(dir, ['log', '-1', '--format=%ct']);
+      disc.candidates.unshift({ path: dir, real: realOf(dir), name: path.basename(dir), display: displayPath(dir), markers, about: aboutOf(await readText(path.join(dir, 'README.md'))) ?? (markers[0] ? aboutOf(await readText(path.join(dir, markers[0]))) : null), lastCommit: ct?.trim() ? Number(ct.trim()) * 1000 : null });
+      disc.skipped.delete(dir);
+      overviewChanged();
+    }
+    return { path: dir };
+  }
   if (action === 'newchat' || action === 'create') {
     const parent = expandHome(body.parent);
     if (!body.parent || !fs.statSync(parent, { throwIfNoEntry: false })?.isDirectory()) throw httpError(404, 'Choose an existing folder to create the project in, e.g. ~/code.');
     // expert mode "check local containers": the list goes with the message (Claude reads it, it starts nothing)
     const inv = body.inventory ? await containerInventory(body.engine) : null;
-    if (action === 'newchat') { const r = newChatFor(parent).agent.chat({ text: inv ? `[Local containers and images (${inv.engine}), to check for services the project can use:\n${inv.text}]\n${text}` : text, fresh, mode: 'newproject' }); return { ...r, parent }; }
+    if (action === 'newchat') {
+      const np = newChatFor(parent);
+      const files = await saveAttachments(parent, body.files);
+      let msg = inv ? `[Local containers and images (${inv.engine}), to check for services the project can use:\n${inv.text}]\n${text}` : text;
+      if (files.length) msg = `[Attached files (read them; they belong to this message):\n${files.map((f) => `- ${f.path} (${f.name}, ${kb(f.size)})`).join('\n')}\n]\n${msg}`;
+      const r = np.agent.chat({ text: msg, fresh, mode: 'newproject' });
+      return { ...r, parent, files: files.map(({ name, path: fp, size }) => ({ name, path: fp, size })) };
+    }
     const name = String(body.name ?? '').trim();
     if (!/^[a-z0-9][a-z0-9._-]*$/.test(name)) throw httpError(400, 'The folder name must be lower case: letters, digits, ".", "_" or "-".');
     if (!String(body.brief ?? '').trim()) throw httpError(400, 'The brief is empty.');
     const dir = path.join(parent, name);
     if (fs.existsSync(dir)) throw httpError(409, `${homeDisplay(dir)} exists already.`);
+    // expert mode: version control (none, local, or hosted on a platform, public or private) and the license
+    const vcs = ['none', 'local', 'github', 'gitlab', 'other'].includes(body.repo?.vcs) ? body.repo.vcs : 'local';
+    const visibility = body.repo?.visibility === 'public' ? 'public' : 'private';
+    const license = String(body.repo?.license ?? '').replace(/\s+/g, ' ').slice(0, 100);
+    const platform = body.repo?.platformName ? String(body.repo.platformName).replace(/\s+/g, ' ').slice(0, 80) : vcs;
+    const dirOk = attachDir(parent) + path.sep;
+    const attached = (Array.isArray(body.attachments) ? body.attachments : []).map(String).filter((f) => f.startsWith(dirOk) && fs.existsSync(f)).slice(0, 20);
     await fsp.mkdir(dir);
-    await git(dir, ['init', '-q']);
+    if (vcs !== 'none') await git(dir, ['init', '-q']);
     let brief = String(body.brief).slice(0, 20000);
+    if (body.repo) brief += `\n\n## Repository (chosen in expert mode)\n\n- Version control: ${vcs === 'none' ? 'none (no git)' : vcs === 'local' ? 'git, local only (no remote)' : `git, hosted on ${platform === 'github' ? 'GitHub' : platform === 'gitlab' ? 'GitLab' : platform} as a ${visibility} repository`}\n- License: ${license || 'none chosen yet'}\n`;
+    if (attached.length) brief += `\n\n## Attached files\n\n${attached.map((f) => `- ${f}`).join('\n')}\n`;
     // expert mode: the chosen workflow details go with the brief, as its "Workflow" section
     const wf = Array.isArray(body.workflow) ? body.workflow.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.replace(/\s+/g, ' ').slice(0, 1000)).slice(0, 12) : [];
     if (wf.length) brief += `\n\n## Workflow (chosen in expert mode)\n\n${wf.map((x) => `- ${x}`).join('\n')}\n`;
     if (inv) brief += `\n\n## Local containers (${inv.engine}, when the project was created)\n\n${inv.text}\n`;
     disc.candidates.unshift({ path: dir, real: dir, name, display: homeDisplay(dir), markers: [], about: brief.split('\n').find((l) => l.trim() && !/^(#|[a-z ]+:)/i.test(l.trim()))?.trim().slice(0, 200) ?? null, lastCommit: null, created: true });
-    const job = await scoutFor(dir).agent.onboard({ brief, onDone: () => adopt(dir) });
+    const sp = scoutFor(dir);
+    if (attached.length) sp.addDirs = [attachDir(parent)]; // the onboarding reads the attachments where they are
+    if (['github', 'gitlab', 'other'].includes(vcs)) disc.candidates[0].repo = { platform: vcs, name: platform, visibility };
+    const job = await sp.agent.onboard({ brief, onDone: () => adopt(dir) });
     overviewChanged();
     return { path: dir, job: job.id };
   }
   const c = disc.candidates.find((x) => x.path === p);
   if (!c) throw httpError(404, 'Not a candidate of the last scan.');
+  if (action === 'repo') return createRepo(c);
   if (action === 'skip' || action === 'unskip') { action === 'skip' ? disc.skipped.add(c.path) : disc.skipped.delete(c.path); saveDisc(); overviewChanged(); return { ok: true }; }
   if (action === 'follow') {
     if (!fs.existsSync(path.join(c.path, 'openspec'))) throw httpError(409, 'It has no openspec/ folder yet; onboard it first.');
@@ -2452,12 +2669,12 @@ const json = (res, body) => { res.writeHead(200, { 'content-type': 'application/
 // With --agent the page carries a token for the agent actions; only pages served under our own host name get it
 // (no DNS rebinding), and only requests from such a page (same Origin, token header) may start anything.
 const OWN_HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`, `[::1]:${PORT}`]);
-async function readBody(req) {
+async function readBody(req, max = 100_000) {
   let raw = '';
-  for await (const chunk of req) { raw += chunk; if (raw.length > 100_000) throw httpError(413, 'Too large.'); }
+  for await (const chunk of req) { raw += chunk; if (raw.length > max) throw httpError(413, 'Too large.'); }
   try { return JSON.parse(raw || '{}'); } catch { throw httpError(400, 'Expected JSON.'); }
 }
-const AGENT_ACTIONS = { ask: 'ask', chat: 'chat', start: 'start', message: 'message', control: 'control', cancel: 'cancel', listen: 'listen', transcript: 'transcript' };
+const AGENT_ACTIONS = { ask: 'ask', chat: 'chat', start: 'start', message: 'message', control: 'control', cancel: 'cancel', listen: 'listen', transcript: 'transcript', hook: 'hook' };
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
@@ -2498,7 +2715,7 @@ const server = http.createServer(async (req, res) => {
       const origin = req.headers.origin;
       if (req.headers['x-osd-token'] !== TOKEN || (origin && !OWN_HOSTS.has(new URL(origin).host))) { res.writeHead(403); return res.end('forbidden'); }
       try {
-        return json(res, await WRITES[url.pathname](projectFor(url), await readBody(req)));
+        return json(res, await WRITES[url.pathname](projectFor(url), await readBody(req, url.pathname === '/api/discover' ? 40 << 20 : 100_000))); // the new-project brainstorm takes attachments
       } catch (e) {
         res.writeHead(e.status ?? 500, { 'content-type': 'application/json' });
         return res.end(JSON.stringify({ error: e.message }));
