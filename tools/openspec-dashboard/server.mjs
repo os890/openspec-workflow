@@ -2816,6 +2816,10 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   try {
     if (AGENT && !OWN_HOSTS.has(req.headers.host)) { res.writeHead(403); return res.end('unknown host'); }
+    if (url.pathname === '/logo.svg') { // the tab icon and the logo in the header
+      res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'max-age=86400' });
+      return res.end(await fsp.readFile(path.join(HERE, 'logo.svg')));
+    }
     if (url.pathname === '/' || url.pathname === '/index.html') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
       const html = await fsp.readFile(INDEX, 'utf8');

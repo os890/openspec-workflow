@@ -1,3 +1,5 @@
+<img src="tools/openspec-dashboard/logo.svg" alt="" width="72" align="right">
+
 # OpenSpec ticket workflow
 
 A reusable way to build software ticket by ticket with [OpenSpec](https://github.com/Fission-AI/OpenSpec) and
@@ -230,6 +232,8 @@ What makes it more than a status page:
 - **Git history** of the project: the commits with a graph of branches, tags and remote branches, and each commit's
   message, files and diff, read-only; **openspec/ only** shows just the commits that changed the specs.
 - **Ten styles**, from Flat and Glass to Clay, Paper, Blackboard or a green-screen Terminal.
+- **An app of its own**: `launcher.mjs install` puts the dashboard with its logo into Launchpad and the Dock
+  (macOS) or the application menu (Linux); one click starts it if needed and opens it.
 
 | Charts | Brainstorming an idea next to the backlog |
 |---|---|
