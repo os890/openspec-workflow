@@ -3172,13 +3172,15 @@ async function agentPost(action, body) {
 }
 const recentExternal = () => (ag.view?.sessions ?? []).filter((x) => !x.ended && !x.dashboardJob && Date.now() - x.t < 15 * 60e3);
 // ---- joining a session that runs in a terminal (or an IDE): pick it, see its transcript live (read-only), write to it
+const typedHere = new Set(); // messages typed into a session's terminal from this page (marked in its transcript)
 const termLog = new Map(); // session id -> { entries, next (byte offset), cut, err }
 const termSessions = () => (ag.view?.sessions ?? []).filter((x) => !x.dashboardJob && x.transcript).sort((a, b) => (a.ended - b.ended) || b.t - a.t); // running first, ended ones stay readable
-const termLabel = (x) => `${x.hookless && !x.ended ? '◌ ' : x.ended ? '' : x.listening || x.listen ? '👂 ' : x.waiting ? '' : '● '}${x.prompt ? `“${x.prompt.replace(/\s+/g, ' ').slice(0, 48)}${x.prompt.length > 48 ? '…' : ''}”` : 'session'} · ${x.ended ? 'ended' : x.waiting ? 'waiting' : 'working'} · ${ago(x.t)} · ${x.sessionId.slice(0, 8)}${x.hookless && !x.ended ? ' · read-only' : ''}`;
+const termLabel = (x) => `${x.hookless && !x.ended && !x.typeable ? '◌ ' : x.ended ? '' : x.listening || x.listen ? '👂 ' : x.waiting ? '' : '● '}${x.prompt ? `“${x.prompt.replace(/\s+/g, ' ').slice(0, 48)}${x.prompt.length > 48 ? '…' : ''}”` : 'session'} · ${x.ended ? 'ended' : x.waiting ? 'waiting' : 'working'} · ${ago(x.t)} · ${x.sessionId.slice(0, 8)}${x.hookless && !x.ended && !x.typeable ? ' · read-only' : ''}`;
 function termThreadHtml(sid) {
   const T = termLog.get(sid);
   if (!T) return '<div class="ag-empty">Loading the session…</div>';
   const xo = (ag.view?.elsewhere ?? []).find((y) => y.sessionId === sid && !y.projectId); // session only: its messages are in its folder's inbox
+  const sx = xo ?? termSessions().find((y) => y.sessionId === sid), waitingNow = sx?.waiting && !sx?.listening;
   const mine = (xo ? xo.messages ?? [] : (ag.view?.messages ?? []).filter((m) => m.session === sid)).map((m) => ({ t: m.t, kind: 'mine', m, folder: xo?.folder }));
   const items = [...T.entries.filter((e) => !(e.kind === 'user' && /from the OpenSpec dashboard/.test(e.text))), ...mine].sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
   const out = T.cut ? ['<div class="ag-note" style="text-align:center">Earlier parts of this session are not shown.</div>'] : [];
@@ -3187,8 +3189,8 @@ function termThreadHtml(sid) {
   for (const e of items) {
     if (e.kind === 'tool' || e.kind === 'error') { steps.push(e); continue; }
     flush();
-    if (e.kind === 'mine') out.push(`<div class="msg me"><span class="ic-chip">from the dashboard</span>${esc(e.m.text)}<span class="meta">${hhmm(e.m.t)} · ${e.m.state === 'queued' ? `queued${e.m.state === 'queued' ? ` · <button class="link" type="button" data-ag-cancel="${esc(e.m.id)}" ${e.folder ? `data-folder="${esc(e.folder)}"` : ''}>cancel</button>` : ''}` : 'delivered ' + hhmm(e.m.deliveredAt)}</span></div>`);
-    else if (e.kind === 'user') out.push(`<div class="msg me term-user">${esc(e.text)}<span class="meta">${e.t ? hhmm(e.t) : ''} · in the terminal</span></div>`);
+    if (e.kind === 'mine') out.push(`<div class="msg me"><span class="ic-chip">from the dashboard</span>${esc(e.m.text)}<span class="meta">${hhmm(e.m.t)} · ${e.m.state === 'queued' ? `${waitingNow ? 'queued: arrives with the next prompt typed in its terminal' : 'queued: arrives with its next step'}${e.m.state === 'queued' ? ` · <button class="link" type="button" data-ag-cancel="${esc(e.m.id)}" ${e.folder ? `data-folder="${esc(e.folder)}"` : ''}>cancel</button>` : ''}` : 'delivered ' + hhmm(e.m.deliveredAt)}</span></div>`);
+    else if (e.kind === 'user') out.push(`<div class="msg me term-user">${typedHere.has(e.text.trim()) ? '<span class="ic-chip">typed from the dashboard</span>' : ''}${esc(e.text)}<span class="meta">${e.t ? hhmm(e.t) : ''} · in the terminal</span></div>`);
     else out.push(`<div class="msg them ${e.sub ? 'sub' : ''}"><div class="md">${md(e.text)}</div><span class="meta">${e.t ? hhmm(e.t) : ''}</span></div>`);
   }
   flush();
@@ -3590,21 +3592,22 @@ function barHtml(c) {
     const xs = x ?? xo;
     const top = xo ? `<div class="ag-row ag-target">${pick}</div><div class="term-only"><b>Session only</b> <code>${esc(xo.display)}</code> <span class="muted">· not followed, so there is no board, roadmap or specs for it, only this session</span>
       ${xo.openspec ? '<button class="link" type="button" data-ag-adopt="follow">Follow it as a project</button>' : '<button class="link" type="button" data-ag-adopt="onboard">Onboard it as a project…</button>'}</div>` : `<div class="ag-row ag-target">${pick}</div>`;
-    if (xo?.hookless) return `${top}<div class="ag-note">${xo.waiting ? '<span class="dot"></span>Waiting for input' : '<span class="dot on"></span>Working'} · last activity ${ago(xo.t)} · read-only: this session runs without the dashboard's hook</div>
+    if (xo?.hookless && !xo.typeable) return `${top}<div class="ag-note">${xo.waiting ? '<span class="dot"></span>Waiting for input' : '<span class="dot on"></span>Working'} · last activity ${ago(xo.t)} · read-only: this session runs without the dashboard's hook</div>
       ${xo.hooks ? `<div class="ag-note">The hook is set up in this folder, but the session started before it: restart it to write to it (<code>/exit</code>, then <code>claude --resume ${esc(xo.sessionId)}</code>).</div>` : setup('To write to it, set up the hook in its folder', xo)}`;
     if (!xs) return `<div class="ag-row ag-target">${pick}</div>${ag.view?.hooks
       ? `<div class="ag-note">${ss.length ? 'Pick a session to join it: you see what it does, live, and can write to it.' : ''} ${ext ? `<span class="dot on"></span>Active · last step ${ago(ext.t)}${ext.tool ? ` (${esc(ext.tool)})` : ''}` : '<span class="dot"></span>No session seen in the last 15 minutes; messages wait until one takes a step.'}</div>`
       : `<div class="ag-note">${ss.length ? 'Pick a session to follow it live, read-only.' : 'Sessions you start in this project (in a terminal or an IDE) show up here.'}</div>${setup('Write to a session as if you typed it there')}`}`;
     const x2 = xs, cur = xs.elsewhere ? xs.hooksCurrent : ag.view.hooksCurrent;
     if (x?.ended) return `<div class="ag-row ag-target">${pick}</div><div class="ag-note"><span class="dot"></span>Ended ${ago(x.t)}. Continue it in a terminal: <code>claude --resume ${esc(x.sessionId)}</code></div>`;
-    if (x?.hookless) return `<div class="ag-row ag-target">${pick}</div><div class="ag-note">${x.waiting ? '<span class="dot"></span>Waiting for input in the terminal' : '<span class="dot on"></span>Working'} · last activity ${ago(x.t)} · read-only: this session runs without the dashboard's hook</div>
+    if (x?.hookless && !x.typeable) return `<div class="ag-row ag-target">${pick}</div><div class="ag-note">${x.waiting ? '<span class="dot"></span>Waiting for input in the terminal' : '<span class="dot on"></span>Working'} · last activity ${ago(x.t)} · read-only: this session runs without the dashboard's hook</div>
       ${ag.view?.hooks ? `<div class="ag-note">The hook is set up, but this session started before it: restart it to write to it (<code>/exit</code>, then <code>claude --resume ${esc(x.sessionId)}</code>).</div>` : setup('To write to it, set up the hook')}`;
     const state = x2.listening ? '<span class="dot on"></span>Listening: waiting for your message' : x2.waiting ? '<span class="dot"></span>Waiting for input in the terminal' : '<span class="dot on"></span>Working';
     return `${top}
       <div class="ag-row"><span class="ag-note">${state} · last step ${ago(x2.t)}${x2.tool && !x2.waiting ? ` (${esc(x2.tool)})` : ''}</span>
         <button class="btn" type="button" data-ag-term-write aria-pressed="${ag.termWrite}" style="margin-left:auto" title="${ag.termWrite ? 'Back to read-only' : 'Write to this session as if you typed it there'}">${ag.termWrite ? 'Read only' : '✎ Write to it'}</button>
-        ${ag.termWrite && cur ? `<button class="btn" type="button" data-ag-term-listen aria-pressed="${!!x2.listen}" title="When it is about to stop, it waits for your message instead (the terminal shows the hook running; Esc there takes the session back)">${x2.listen ? '👂 Listening · stop' : '👂 Keep it listening'}</button>` : ''}</div>
-      ${ag.termWrite ? `<div class="ag-note">Your message reaches it at its next step, as if you typed it there. ${x2.listen ? 'While it listens, a message also continues it when it is done.' : 'When it waits for input, the message arrives once you type there, or turn on <b>Keep it listening</b>.'}${cur ? '' : ` To let it listen, the hook needs an update: <button class="link" type="button" data-ag-hook ${xs.elsewhere ? `data-folder="${esc(xs.folder)}"` : ''}>Update it</button> (then restart the session)`}</div>` : '<div class="ag-note">Read-only: you see what the session does, live.</div>'}
+        ${ag.termWrite && cur && !x2.hookless && !x2.typeable ? `<button class="btn" type="button" data-ag-term-listen aria-pressed="${!!x2.listen}" title="When it is about to stop, it waits for your message instead (the terminal shows the hook running; Esc there takes the session back)">${x2.listen ? '👂 Listening · stop' : '👂 Keep it listening'}</button>` : ''}</div>
+      ${ag.termWrite && x2.typeable ? `<div class="ag-note">Your message is typed into its Terminal tab and sent with Return, exactly as if you typed it there, also while it waits for input (one line; not while it asks you something there).</div>`
+      : ag.termWrite ? `<div class="ag-note">Your message reaches it at its next step, as if you typed it there. ${x2.listening ? 'It is listening: your message continues it right away.' : x2.waiting ? `It is waiting for input in the terminal, so it takes no step: the message arrives with the next prompt typed there.${x2.listen ? ' After that answer it listens and takes your messages directly.' : ' <b>Keep it listening</b> lets it take your messages directly after its next answer.'}` : x2.listen ? 'When it is done, it waits for your messages instead of stopping.' : '<b>Keep it listening</b> lets it wait for your messages when it is done, instead of stopping.'}${cur ? '' : ` To let it listen, the hook needs an update: <button class="link" type="button" data-ag-hook ${xs.elsewhere ? `data-folder="${esc(xs.folder)}"` : ''}>Update it</button> (then restart the session)`}</div>` : '<div class="ag-note">Read-only: you see what the session does, live.</div>'}
       ${termLog.get(x2.sessionId)?.err ? `<div class="ag-note warn">✕ ${esc(termLog.get(x2.sessionId).err)}</div>` : ''}`;
   }
   if (c.brainstorm) {
@@ -3640,7 +3643,7 @@ function renderAgentLive() {
     $('ag-chips').innerHTML = list.map((x) => `<button type="button" class="chip" role="tab" data-ag-convo="${esc(x.id)}" aria-selected="${x.id === c?.id}">${x.live ? '<span class="dot on"></span>' : ''}${x.session ? 'Session · ' : ''}${esc(x.label)}</button>`).join('');
     morphHtml($('ag-bar'), barHtml(c)); // morph: an open session picker stays open
     const tx = c?.terminal && ag.term ? termSessions().find((y) => y.sessionId === ag.term) ?? (ag.view?.elsewhere ?? []).find((y) => y.sessionId === ag.term && !y.projectId) : null;
-    const ro = c?.terminal && (ag.term ? (!tx || !ag.termWrite || tx.ended || tx.hookless) : !ag.view?.hooks); // a joined session is read-only until "Write to it"; an ended one or one without the hook stays so
+    const ro = c?.terminal && (ag.term ? (!tx || !ag.termWrite || tx.ended || (tx.hookless && !tx.typeable)) : !ag.view?.hooks); // a joined session is read-only until "Write to it"; an ended one or one without the hook stays so
     for (const el of document.querySelectorAll('#agent .ag-compose, #agent #ag-suggest')) el.hidden = !!ro;
     const th = $('ag-thread');
     const atEnd = th.scrollHeight - th.scrollTop - th.clientHeight < 60;
@@ -3682,7 +3685,12 @@ async function agentSend(force = false, direct = null) {
     if (ag.panel === 'chat') {
       if (!text) return;
       const c = conversations().find((x) => x.id === ag.convo);
-      if (c?.terminal) { const xo = (ag.view?.elsewhere ?? []).find((y) => y.sessionId === ag.term && !y.projectId); await agentPost('message', { text, to: 'inbox', session: ag.term || undefined, ...(xo ? { folder: xo.folder } : {}) }); }
+      if (c?.terminal) {
+        const xo = (ag.view?.elsewhere ?? []).find((y) => y.sessionId === ag.term && !y.projectId);
+        const tx = termSessions().find((y) => y.sessionId === ag.term) ?? xo;
+        if (tx?.typeable) { await agentPost('type', { session: ag.term, text }); typedHere.add(text.replace(/\s*\n\s*/g, ' ').trim()); ag.stick = true; termPoll(true); }
+        else await agentPost('message', { text, to: 'inbox', session: ag.term || undefined, ...(xo ? { folder: xo.folder } : {}) });
+      }
       else if (c?.session) await agentPost('message', { change: c.last.change, text, job: c.last.id });
       else await agentPost('chat', { text, mode: c?.brainstorm ? 'brainstorm' : 'assistant' });
       if (!direct) { ag.drafts['chat-' + ag.convo] = ''; ta.value = ''; rx.quote = null; showQuoteChip(); }

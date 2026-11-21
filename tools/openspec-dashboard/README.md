@@ -254,7 +254,10 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     Your messages go straight to it; you can end it after the current turn or stop it, and a message to an ended
     session continues it. `claude --resume <session-id>` takes it over in a terminal.
   - **Terminal session** (also **⌨** in the header, with the number of running sessions): join a session running
-    elsewhere (a terminal, an IDE). The drop-down lists the project's sessions of the last 12 hours: the ones the
+    elsewhere (a terminal, an IDE). On macOS, a session running in Terminal is written to by typing: the server finds
+    its tty (`ps`), checks that Claude Code is the foreground process there and that it is not asking something (a
+    permission prompt in the tab's contents), and types the message with AppleScript (`do script … in` the tab with
+    that tty), one line, sent with Return; no hook needed, and it works while the session waits at its prompt. The drop-down lists the project's sessions of the last 12 hours: the ones the
     hook below reports, and also those it has not seen (no hook, or started before it), found in Claude Code's own
     records: `~/.claude/sessions/<pid>.json` (session id, folder, idle or busy; the process must still run) for the
     running ones and the interactive transcripts in `~/.claude/projects/<folder>/` for the ended ones (`claude -p`
@@ -369,7 +372,10 @@ shows prompts, replies, steps and errors; Claude Code's own messages (`<task-not
 out. **Keep it listening** writes `listen/<session>.json` in the inbox; while it exists, the Stop hook waits (up to
 its timeout of 30 minutes, which `install` sets) for a message for that session and hands it over as the reason to
 continue. A hook installed before this has a 10-second Stop timeout; the panel asks to run `install` again. Queued
-messages can be cancelled until they are delivered.
+messages can be cancelled until they are delivered. No hook runs while a session waits at its prompt (also right
+after it started or was resumed), so a message for it waits for the next prompt typed there; listening only takes
+effect at the end of its next answer. Whether a session works or waits comes from Claude Code's own record
+(`~/.claude/sessions/<pid>.json`: `idle`, `busy`) when there is one, else from the hook's last event.
 
 **Sessions started from the dashboard** run without anyone to answer permission prompts, so prompts are declined.
 Allow what the ticket workflow needs (the quality gate, `openspec`, `git add`/`git commit`) in the project's

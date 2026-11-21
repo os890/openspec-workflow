@@ -245,7 +245,16 @@ something; ended ones stay in the list for 12 hours. Pick one to join it: you se
 Claude's replies and its steps).
 
 Following a session works without any setup: the dashboard finds the running sessions in Claude Code's own records
-(`~/.claude/sessions`) and reads their transcripts. Writing to a session needs the dashboard's hook in the project:
+(`~/.claude/sessions`) and reads their transcripts.
+
+**Writing to a session in macOS Terminal needs no setup either.** **✎ Write to it** types your message into the
+session's Terminal tab and sends it with Return, exactly as if you typed it there, also while the session waits at
+its prompt; the transcript marks it as *typed from the dashboard*. It goes as one line (line breaks become spaces).
+The dashboard only types while Claude Code itself is in the foreground of that tab (never into a shell), and not
+while the session asks you something there, such as a permission, since Return would answer it. Terminal may ask
+once whether the dashboard may control it.
+
+For sessions elsewhere (an IDE, another terminal app), writing needs the dashboard's hook in the project:
 **Set up the hook** in the panel adds it (a few lines in `.claude/settings.local.json`, which is kept out of git
 through `.git/info/exclude`; or run `node tools/openspec-dashboard/agent-hook.mjs install <project>`). Sessions
 started after that can be written to; one that runs already is marked **◌ … read-only** in the list until you
@@ -261,10 +270,12 @@ session of the project.
 
 ![A session in a folder the dashboard does not follow, read-only, with the offer to onboard it](images/dashboard-terminal-session-only.png)
 
-A session with the hook is read-only until you press **✎ Write to it**: then your message reaches the session as if you typed it there, at its next step. A session that
-waits for input in the terminal only takes it once you type there, unless you turn on **👂 Keep it listening**:
-then, when it is done, it waits for your message (the terminal shows the hook running; `Esc` there takes it back),
-and each of your messages continues it. **👂 Listening · stop** lets it finish. **Any session** sends to whichever
+With the hook, a session is read-only until you press **✎ Write to it**: then your message reaches the session as if you typed it there, at its next step. A session that
+waits for input in the terminal takes no steps, so your message arrives with the next prompt typed there (the
+message says so while it is queued). **👂 Keep it listening** changes that from the session's next answer on: when
+it is done, it waits for your message instead of stopping (the terminal shows the hook running; `Esc` there takes it
+back), and each of your messages continues it. A session that is already waiting needs one prompt in its terminal
+first. **👂 Listening · stop** lets it finish. **Any session** sends to whichever
 session takes the next step.
 
 ![Joined a session running in a terminal: its prompt, steps and answer, and a question sent from the dashboard](images/dashboard-terminal-session.png)

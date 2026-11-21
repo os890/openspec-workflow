@@ -140,7 +140,7 @@ async function runHook() {
     transcript: input.transcript_path || prev.transcript || null, cwd: input.cwd || prev.cwd || null,
     // the label in the dashboard: the last prompt the user typed (not Claude Code's own, like <task-notification>)
     prompt: ev === 'UserPromptSubmit' && input.prompt && !/^\s*</.test(input.prompt) ? String(input.prompt).slice(0, 200) : prev.prompt ?? null,
-    waiting: ev === 'Stop', ...extra,
+    waiting: ev === 'Stop' || ev === 'SessionStart', ...extra, // a session that just started (or was resumed) waits for its first prompt
   });
   beat();
 

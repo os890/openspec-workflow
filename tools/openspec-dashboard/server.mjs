@@ -925,7 +925,7 @@ function runningSessions() {
     try { process.kill(d.pid, 0); } catch (e) { if (e.code !== 'EPERM') continue; } // the process is gone
     const tf = [encDir(d.cwd), encDir(realOf(d.cwd))].map((x) => path.join(x, `${d.sessionId}.jsonl`)).find((x) => fs.existsSync(x)) ?? null;
     const ti = tf ? transcriptInfo(tf) : null;
-    out.push({ sessionId: d.sessionId, t: Math.max(d.updatedAt ?? 0, ti?.mtime ?? 0), cwd: d.cwd, transcript: tf, prompt: ti?.prompt ?? null, waiting: d.status !== 'busy', ended: false });
+    out.push({ sessionId: d.sessionId, pid: d.pid, t: Math.max(d.updatedAt ?? 0, ti?.mtime ?? 0), cwd: d.cwd, transcript: tf, prompt: ti?.prompt ?? null, waiting: d.status === 'idle', ended: false, typeable: typeableOf(d.pid) });
   }
   runningCache = { t: Date.now(), list: out };
   return out;
@@ -952,6 +952,54 @@ function setupHook(dir, remove) {
     }
   }
   return file;
+}
+// ---- typing into the terminal a session runs in (macOS Terminal, scripted with AppleScript): the message arrives
+// exactly like a prompt typed there, also while the session waits at its prompt (where no hook runs)
+const runCmd = (cmd, args) => new Promise((resolve) => execFile(cmd, args, { timeout: 15000 }, (err, out, errOut) => resolve({ err, out: String(out ?? ''), errOut: String(errOut ?? '') })));
+const termApps = new Map(); // pid -> 'Terminal' | null (the app its terminal belongs to), filled in the background
+function typeableOf(pid) {
+  if (process.platform !== 'darwin') return false;
+  if (!termApps.has(pid)) {
+    termApps.set(pid, null);
+    (async () => {
+      for (let p = pid, i = 0; i < 12 && p > 1; i++) {
+        const r = (await runCmd('ps', ['-o', 'ppid=,comm=', '-p', String(p)])).out.trim().match(/^(\d+)\s+(.*)$/);
+        if (!r) break;
+        if (/(^|\/)Terminal$/.test(r[2]) && i > 0) { termApps.set(pid, 'Terminal'); runningCache.t = 0; return; }
+        p = Number(r[1]);
+      }
+    })();
+  }
+  return termApps.get(pid) === 'Terminal';
+}
+const TYPE_SCRIPT = `on run argv
+  set theTty to item 1 of argv
+  tell application "Terminal"
+    repeat with w in windows
+      repeat with t in tabs of w
+        if tty of t is theTty then
+          if item 2 of argv is "check" then return contents of t
+          do script (item 3 of argv) in t
+          return "typed"
+        end if
+      end repeat
+    end repeat
+  end tell
+  return "no tab"
+end run`;
+async function typeInto(pid, text) {
+  if (!typeableOf(pid)) throw httpError(409, 'This session does not run in macOS Terminal; the message can only go through the hook.');
+  const ps = (await runCmd('ps', ['-o', 'tty=,stat=', '-p', String(pid)])).out.trim().split(/\s+/);
+  if (!ps[0] || ps[0] === '??') throw httpError(409, 'The session has ended.');
+  if (!ps[1]?.includes('+')) throw httpError(409, 'Claude Code is not in the foreground of its terminal right now.');
+  const tty = `/dev/${ps[0]}`;
+  const check = await runCmd('osascript', ['-e', TYPE_SCRIPT, tty, 'check', '']);
+  if (check.err) throw httpError(502, `Terminal cannot be scripted: ${(check.errOut || check.err.message).trim().slice(0, 200)}`);
+  if (check.out.trim() === 'no tab') throw httpError(409, 'Its Terminal tab was not found.');
+  const tail = check.out.replace(/\s+$/, '').split('\n').slice(-30).join('\n');
+  if (/Do you want to|\b1\. Yes\b|❯ 1\./.test(tail)) throw httpError(409, 'The session is asking something in its terminal (e.g. a permission); answer it there first.');
+  const r = await runCmd('osascript', ['-e', TYPE_SCRIPT, tty, 'type', text]);
+  if (r.err || r.out.trim() !== 'typed') throw httpError(502, `Typing failed: ${(r.errOut || r.out || r.err?.message || '').trim().slice(0, 200)}`);
 }
 // the followed project a folder belongs to (the deepest one)
 const ownerOf = (d) => { const x = realOf(d); return projects.filter((p) => { const r = realOf(p.root); return x === r || x.startsWith(r + path.sep); }).sort((a, b) => b.root.length - a.root.length)[0] ?? null; };
@@ -1393,6 +1441,15 @@ function createAgent(project) {
   // ---- joining a session running in a terminal: its transcript (read-only) and listening
   // a session of this project, or (read-only) one running in another folder: "Session only" in the panel
   const sessionOf = (sid) => allSessions().find((x) => x.sessionId === String(sid ?? '')) ?? elsewhere().find((x) => x.sessionId === String(sid ?? ''));
+  // "Write to it" for a session in macOS Terminal: typed into its tab (one line, sent with Return)
+  async function type({ session, text }) {
+    text = String(text ?? '').replace(/\s*\n\s*/g, ' ').trim().slice(0, 4000);
+    if (!text) throw httpError(400, 'The message is empty.');
+    const x = sessionOf(session);
+    if (!x || x.ended || !x.pid) throw httpError(404, 'No running session with that id.');
+    await typeInto(x.pid, text);
+    return { typed: true };
+  }
   function listen({ session, on }) {
     const x = sessionOf(session);
     if (!x || x.dashboardJob) throw httpError(404, 'No such session.');
@@ -1450,12 +1507,14 @@ function createAgent(project) {
       const ib = inboxOf(folder), hb = ib.sessions.find((y) => y.sessionId === x.sessionId && !y.ended);
       const lf = jsonOf(readSync(listenFile(folder, x.sessionId)), null);
       return { ...e, hooks: hooksIn(folder), hooksCurrent: hooksCurrentIn(folder), messages: ib.messages.filter((m) => m.session === x.sessionId),
-        ...(hb ? { hookless: false, waiting: hb.waiting, listening: hb.listening, tool: hb.tool, t: Math.max(x.t, hb.t), listen: (lf?.until ?? 0) > Date.now() } : {}) };
+        ...(hb ? { hookless: false, waiting: hb.listening ? false : x.waiting, listening: hb.listening, tool: hb.tool, t: Math.max(x.t, hb.t), listen: (lf?.until ?? 0) > Date.now() } : {}) };
     });
   }
   function allSessions() {
     const now = Date.now();
-    const hooked = inbox.sessions.filter((x) => now - x.t < 12 * 3600e3);
+    // Claude Code's own idle/busy is more exact than the hook's last event (no hook runs while a session waits)
+    const live = new Map(runningSessions().map((x) => [x.sessionId, x]));
+    const hooked = inbox.sessions.filter((x) => now - x.t < 12 * 3600e3).map((x) => { const l = live.get(x.sessionId); return l && !x.ended ? { ...x, waiting: x.listening ? false : l.waiting, pid: l.pid, typeable: l.typeable } : x; });
     const ids = new Set(hooked.map((x) => x.sessionId));
     return [...hooked, ...foundSessions().filter((x) => !ids.has(x.sessionId))].sort((a, b) => b.t - a.t).slice(0, 16);
   }
@@ -1543,7 +1602,7 @@ function createAgent(project) {
   const busy = () => jobs.some((j) => j.child && ['starting', 'running'].includes(j.status) && j.kind !== 'chat');
   sttListeners.add(() => changed(0));
   rpListeners.add(() => changed(0));
-  return { view, ask, chat, start, message, control, cancel, brief, startWatching, stopWatching, busy, onboard, listen, transcript, hook };
+  return { view, ask, chat, start, message, control, cancel, brief, startWatching, stopWatching, busy, onboard, listen, transcript, hook, type };
 }
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => { for (const c of children) { try { c.kill('SIGTERM'); } catch { /* gone */ } } process.exit(0); });
@@ -2681,7 +2740,7 @@ async function readBody(req, max = 100_000) {
   for await (const chunk of req) { raw += chunk; if (raw.length > max) throw httpError(413, 'Too large.'); }
   try { return JSON.parse(raw || '{}'); } catch { throw httpError(400, 'Expected JSON.'); }
 }
-const AGENT_ACTIONS = { ask: 'ask', chat: 'chat', start: 'start', message: 'message', control: 'control', cancel: 'cancel', listen: 'listen', transcript: 'transcript', hook: 'hook' };
+const AGENT_ACTIONS = { ask: 'ask', chat: 'chat', start: 'start', message: 'message', control: 'control', cancel: 'cancel', listen: 'listen', transcript: 'transcript', hook: 'hook', type: 'type' };
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
@@ -2766,7 +2825,7 @@ const server = http.createServer(async (req, res) => {
       if (!action || req.method !== 'POST') { res.writeHead(404); return res.end('not found'); }
       if (req.headers['x-osd-token'] !== TOKEN || (origin && !OWN_HOSTS.has(new URL(origin).host))) { res.writeHead(403); return res.end('forbidden'); }
       try {
-        const out = p.agent[action](await readBody(req));
+        const out = await p.agent[action](await readBody(req));
         return json(res, out.log ? { id: out.id } : out);
       } catch (e) {
         if (!e.status) throw e;

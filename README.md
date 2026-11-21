@@ -216,8 +216,8 @@ What makes it more than a status page:
   installed on the host. Projects you are done with can be **archived** or **unfollowed**, so they cost nothing
   while they rest.
 - **Join a session running in a terminal** (⌨ in the header): pick it from a list, follow what it does live
-  (read-only by default, no setup needed), and write to it as if you typed there once the hook is set up (one
-  click); it can even wait for your next message when it is done. Sessions in other projects switch there; one in
+  (read-only by default, no setup needed), and write to it: in macOS Terminal the message is typed right into the
+  session, also while it waits, without any setup; elsewhere through a hook (one click); it can even wait for your next message when it is done. Sessions in other projects switch there; one in
   a folder that is not followed yet can be followed on its own and onboarded with one click.
 - **Git history** of the project: the commits with a graph of branches, tags and remote branches, and each commit's
   message, files and diff, read-only; **openspec/ only** shows just the commits that changed the specs.
