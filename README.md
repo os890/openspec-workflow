@@ -14,6 +14,10 @@ The repository contains:
   through the workflow and sets it up in a new project.
 - [`openspec-dashboard`](tools/openspec-dashboard/README.md), a live local dashboard to follow the progress of the
   changes while agents work on them.
+- a sample OpenSpec context for a todo app, [`examples/todo-app`](examples/todo-app), and a short
+  [user guide](docs/user-guide.md) with screenshots.
+
+New here? Start with the [user guide](docs/user-guide.md).
 
 ## The workflow
 
@@ -169,6 +173,8 @@ node <path-to>/tools/openspec-dashboard/server.mjs
 Shows the change being worked on with its current task, the milestone, an activity feed and a board of all
 changes, updated live from the files and the `openspec` CLI. No dependencies; see its
 [README](tools/openspec-dashboard/README.md).
+
+![OpenSpec dashboard on the todo-app sample](docs/images/dashboard-overview.png)
 
 ## Rendering the diagrams
 

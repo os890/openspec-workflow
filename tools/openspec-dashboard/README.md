@@ -19,7 +19,7 @@ node <path-to>/tools/openspec-dashboard/server.mjs  # opens http://127.0.0.1:459
   tasks and status changes, with a chart of tasks done over time.
 - **Board**: all changes in six columns derived from the files, filterable by milestone. **⤢ Full screen**
   (or `#board` in the address) shows only the board, still live; clicking a card opens its details in a side
-  panel, `Esc` closes it.
+  panel (`#board:<change>` links to it directly), `Esc` closes it.
 
 Everything updates within a second of a file change (file watching + Server-Sent Events).
 

@@ -506,7 +506,7 @@ function renderMilestone(s) {
       <span class="sw" style="--st:${stVar(c.status)}"></span><span class="n">${esc(title(c.name))}</span>
       <span class="s num">${c.tasks ? `${c.tasks.done}/${c.tasks.total}` : STATUS[c.status].label.toLowerCase()}</span></button></li>`).join('')}</ul>
     <div class="ms-next">${next ? `Then <b>${esc(next.m.id)}</b> ${esc(next.m.title)} · ${next.cs.length} changes` : 'Last milestone'}<br>
-      Overall <span class="num">${s.changes.filter(isDone).length}/${s.changes.length}</span> changes · <span class="num">${td.done}/${td.total}</span> tasks written so far</div>`;
+      Overall <span class="num">${s.changes.filter(isDone).length}/${s.changes.filter((c) => c.status !== 'parking').length}</span> changes · <span class="num">${td.done}/${td.total}</span> tasks written so far</div>`;
 }
 
 function renderFeed(s) {
@@ -600,7 +600,7 @@ function renderBoard(s) {
       ${max ? `<span class="board-live">${$('conn').innerHTML}</span>` : ''}
       <span class="muted num" style="font-size:12.5px">${s.changes.filter(isDone).length} of ${s.changes.filter((c) => c.status !== 'parking').length} changes done · ${s.totals.done}/${s.totals.total} tasks</span>
       ${s.changes.filter((c) => c.status === 'parking').map((c) => `<button type="button" class="btn" data-pick="${esc(c.name)}" title="Parking lot: deferred items, never archived">Parking lot · ${c.tasks ? `${c.tasks.total - c.tasks.done} open` : esc(c.name)}</button>`).join('')}
-      <span class="ms-filter">${msBtn('', '<b>All</b>', s.changes)}${s.milestones.map((m) => msBtn(m.id, `<b>${esc(m.id)}</b>${esc(m.title)}`, s.changes.filter((c) => c.milestone === m.id))).join('')}</span>
+      <span class="ms-filter">${msBtn('', '<b>All</b>', s.changes.filter((c) => c.status !== 'parking'))}${s.milestones.map((m) => msBtn(m.id, `<b>${esc(m.id)}</b>${esc(m.title)}`, s.changes.filter((c) => c.milestone === m.id))).join('')}</span>
       <button class="btn board-toggle" type="button" data-max aria-pressed="${max}" title="${max ? 'Back to the dashboard (Esc)' : 'Show the board across the whole window'}">${max ? 'Exit full screen ✕' : '⤢ Full screen'}</button>
     </div>
     ${now}
@@ -672,6 +672,7 @@ function pick(name) {
   if (ui.boardMax) {
     ui.drawer = name || null;
     ui.drawerScroll = 0;
+    history.replaceState(null, '', ui.drawer ? '#board:' + encodeURIComponent(ui.drawer) : '#board');
     return renderBoard(ui.state);
   }
   const auto = currentChange(ui.state)?.name;
@@ -684,7 +685,7 @@ document.addEventListener('click', (e) => {
   const ms = e.target.closest('[data-ms]');
   if (ms) { ui.ms = ms.dataset.ms; try { localStorage.setItem('osd-ms', ui.ms); } catch {} return renderBoard(ui.state); }
   if (e.target.closest('[data-max]')) return setMax(!ui.boardMax);
-  if (e.target.closest('[data-close-drawer]')) { ui.drawer = null; return renderBoard(ui.state); }
+  if (e.target.closest('[data-close-drawer]')) { ui.drawer = null; history.replaceState(null, '', '#board'); return renderBoard(ui.state); }
   const p = e.target.closest('[data-pick]');
   if (p) return pick(p.dataset.pick);
   const tab = e.target.closest('[data-tab]');
@@ -702,14 +703,19 @@ $('theme').addEventListener('click', () => {
 });
 window.addEventListener('hashchange', () => {
   const h = decodeURIComponent(location.hash.slice(1));
-  if (h === 'board') { if (!ui.boardMax) setMax(true); return; }
+  if (h === 'board' || h.startsWith('board:')) {
+    if (!ui.boardMax) setMax(true);
+    ui.drawer = h.startsWith('board:') ? h.slice(6) : null;
+    history.replaceState(null, '', location.hash);
+    return renderBoard(ui.state);
+  }
   if (ui.boardMax) { ui.boardMax = false; ui.drawer = null; document.body.classList.remove('board-max'); }
   if (h !== ui.pinned) ui.pinned = h;
   render();
 });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || !ui.boardMax) return;
-  if (ui.drawer) { ui.drawer = null; renderBoard(ui.state); } else setMax(false);
+  if (ui.drawer) { ui.drawer = null; history.replaceState(null, '', '#board'); renderBoard(ui.state); } else setMax(false);
 });
 // keep scroll positions of the drawer and the columns across live re-renders
 document.addEventListener('scroll', (e) => {
@@ -717,7 +723,11 @@ document.addEventListener('scroll', (e) => {
   if (t.id === 'drawer') ui.drawerScroll = t.scrollTop;
   else if (t.dataset?.col) ui.colScroll.set(t.dataset.col, t.scrollTop);
 }, true);
-if (location.hash === '#board') { ui.boardMax = true; ui.pinned = ''; document.body.classList.add('board-max'); }
+// #board = full-screen board, #board:<change> = with that change's details open
+if (location.hash === '#board' || location.hash.startsWith('#board:')) {
+  ui.boardMax = true; ui.pinned = ''; document.body.classList.add('board-max');
+  if (location.hash.startsWith('#board:')) ui.drawer = decodeURIComponent(location.hash.slice(7));
+}
 setInterval(() => ui.state && (renderHeader(ui.state), renderFeed(ui.state)), 30000);
 
 if (new URLSearchParams(location.search).has('snapshot')) {

@@ -1,0 +1,36 @@
+schema: spec-driven
+
+context: |
+  Product: "Todo" - a small web app to keep a personal todo list, later shared between users.
+
+  Stack: TypeScript, Node.js 22, Fastify, SQLite (better-sqlite3), React 19 with Vite. pnpm only.
+  Tests: Vitest (unit, component, API), Playwright (E2E).
+
+  Quality gate: `pnpm verify` runs lint, type check, unit/API/component tests with coverage thresholds,
+  the production build and the Playwright E2E suite. Never lower a threshold to make a change pass.
+
+  REST under /api/v1, errors as problem+json (RFC 9457). Dates without time are ISO 8601 dates (YYYY-MM-DD).
+
+  Delivery: one OpenSpec change = one ticket = one commit. Deferred findings, known issues and trade-offs go to the
+  change `parking-lot`. Future work lives as drafts in openspec/backlog/ and openspec/roadmap.md.
+
+rules:
+  proposal:
+    - Name the area(s) touched and state what is out of scope.
+  specs:
+    - Organize capabilities by area, e.g. tasks/task-list.
+  tasks:
+    - Every task states its acceptance criterion as "verify: ..." (a test, command or observable behaviour); spec scenarios are the ticket's acceptance criteria.
+    - Every task group ends with the tests that prove it.
+    - The final task is always "`pnpm verify` is green".
+
+operations:
+  apply:
+    guidance:
+      - "Ticket workflow, in this order: (1) elaborate the change just in time (continue/ff) if it is still a draft; (2) implement with tests, ticking each task in tasks.md as soon as it is verified; (3) pnpm verify green; (4) acceptance check: a fresh agent runs /openspec-verify-change read-only and reports, per spec scenario, satisfied or not with test evidence and, per task, whether its verify criterion is met; close gaps by Pareto (rest to parking-lot or roadmap candidates); (5) stage the ticket and have a fresh review agent review ONLY the staged diff; (6) have another fresh agent confirm or reject every finding and classify confirmed ones as pareto or minor; (7) fix pareto findings; behaviour changes go through the spec and become roadmap candidates, items owned by a planned change go to its backlog draft, code-quality minors go to parking-lot; (8) if docs are affected, a fresh docs agent and a separate diagram agent update them; (9) pnpm verify green; (10) archive the change and commit the ticket (one commit)."
+      - "Never lower a quality-gate threshold to make a ticket pass."
+      - "Changes are created just in time: a change is created (openspec new change + draft as proposal) only when its work starts."
+  archive:
+    guidance:
+      - "Archive a ticket's change in the same commit that completes it."
+      - "parking-lot is never archived; triage it at every milestone and promote items to real changes early."
