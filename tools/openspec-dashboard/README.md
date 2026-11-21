@@ -39,7 +39,8 @@ CLI calls for all projects run one at a time.
   folds empty columns into narrow strips, so the open work gets the space.
 - **Backlog**: the roadmap as a list per milestone, like the backlog of an issue tracker, with area, prerequisites,
   progress and status per change. The change you opened last stays highlighted, so you find your place again.
-  With `--agent`, changes that have not started can be reordered (see below).
+  With `--agent`, changes that have not started can be reordered, and new tickets and ideas can be added or
+  brainstormed (see below).
 - **Charts**: how the work flows over time (see below).
 
 Everything updates within a second of a file change (file watching + Server-Sent Events).
@@ -79,6 +80,41 @@ every *Depends on* reference in the table follows the change it points to. A mov
 change before one of its hard prerequisites, pass a change that has started, or leave the milestone, and when the
 file changed since it was read. Nothing else in the file is touched.
 
+## New tickets, ideas and brainstorming (with `--agent`)
+
+**＋ New ticket** in the backlog opens a form: name (kebab-case), area, milestone, prerequisites, a one-line goal
+and the proposal. Then:
+
+- **Add to roadmap** writes `openspec/backlog/<name>.md` and a roadmap row at the end of the milestone. The row
+  gets the next free number after the milestone's last row (`9` → `9a`, `9a` → `9b`), so no other number changes;
+  without a milestone it gets the next number at the end of the table. The ticket is ready to start (**Start a
+  session…**).
+- **Save as idea** writes only the draft, marked as an idea that needs refinement, and no roadmap row. Ideas are
+  listed in their own group at the end of the backlog (and as a chip on the board) and count nowhere else: not on
+  the board, in the totals, in "next up" or in the charts. **Plan…** adds an idea to the roadmap, **Delete**
+  removes it.
+- If the name is a ticket that is planned but has not started, **Update draft** replaces its proposal and keeps
+  its row.
+
+**💡 Brainstorm** (in the backlog, on an idea as **Refine**, or in the form as **Brainstorm it first**) opens a
+brainstorming conversation in the chat. Claude asks questions, challenges assumptions, checks the roadmap, the
+specs and the code for overlaps and prerequisites, and keeps the ticket to one reviewable slice. It works
+read-only. Once you agree, it writes the ticket as a card in the chat; nothing is saved until you press **Review and
+save…**, which opens the form with the ticket filled in. A brainstorming that ends without a good ticket leaves no
+trace in the project.
+
+An idea is an ordinary backlog draft with a marker after its title, so it stays readable for people and agents:
+
+```markdown
+# Proposal
+
+> **Idea**: needs refinement before it is planned.
+> Goal: Todos that repeat daily, weekly or monthly.
+
+## Why
+…
+```
+
 ## Charts
 
 **Charts** (next to Board and Backlog, or `?view=charts`) shows, for the milestone picked above or all changes:
@@ -113,6 +149,7 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
   - **Assistant**: chat about the project (plan, specs, code, progress, ideas). It reads the project with
     read-only tools (Read, Grep, Glob), never changes it, knows the project status when the chat starts and
     remembers the conversation; **New chat** starts over.
+  - **💡 Brainstorm**: shape an idea into a ticket (see above); **New brainstorm** starts over.
   - **Session · <ticket>**: every session started from the dashboard is a conversation with its steps and replies.
     Your messages go straight to it; you can end it after the current turn or stop it, and a message to an ended
     session continues it. `claude --resume <session-id>` takes it over in a terminal.

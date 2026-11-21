@@ -18,6 +18,8 @@
 // are kept per project in a history file outside the project (default: $XDG_STATE_HOME or ~/.local/state, under
 // openspec-dashboard/), so the activity feed and the chart survive restarts.
 // The charts view asks /api/timeline, which merges that history with `git log` of openspec/ (read-only).
+// With --agent the backlog can also be reordered and take new tickets and ideas (roadmap.md, backlog/), and the
+// chat has a brainstorming mode that shapes an idea into a ticket; only the user's click saves it.
 //
 // --agent adds an agent panel: ask read-only questions, send messages to a working Claude Code session and start a
 // session on a ticket. It runs the local `claude` command (Claude Code, with its own login), only on 127.0.0.1, and
@@ -259,12 +261,17 @@ async function readChange(root, dir, name, location, archivedAt = null) {
   };
 }
 
-// A planned change that has not been started yet: openspec/backlog/<name>.md holds its draft proposal.
+// A planned change that has not been started yet: openspec/backlog/<name>.md holds its draft proposal. A draft
+// whose first lines carry the idea marker (written by the dashboard's "New idea" and brainstorming) and that has
+// no row in the roadmap is an idea: it still needs refinement before it is planned.
+const IDEA_MARK = '> **Idea**: needs refinement before it is planned.';
+const ideaGoal = (md) => (md ?? '').split('\n').slice(0, 8).join('\n').match(/^>\s*Goal:\s*(.+)$/m)?.[1].trim() ?? null;
+const isIdeaMd = (md) => /^>\s*\*\*Idea\*\*/m.test((md ?? '').split('\n').slice(0, 6).join('\n'));
 async function readBacklog(root, file, name) {
   const st = await statOf(file);
   const md = await readText(file);
   return {
-    name, location: 'backlog', archivedAt: null, dir: relTo(root, file), created: null, skipSpecs: false,
+    name, location: 'backlog', idea: isIdeaMd(md), ideaGoal: ideaGoal(md), archivedAt: null, dir: relTo(root, file), created: null, skipSpecs: false,
     artifacts: { proposal: true, design: false, specs: 0, tasks: false },
     why: sectionParagraph(md, 'Why'),
     specs: { files: [], requirements: 0, scenarios: 0 },
@@ -278,12 +285,14 @@ function statusOf(c) {
   if (c.location === 'archive') return 'archived';
   if (c.location === 'missing') return 'missing';
   if (c.parkingLot) return 'parking';
+  if (c.idea && !c.inRoadmap) return 'idea';
   if (c.tasks && c.tasks.total > 0 && c.tasks.done === c.tasks.total) return 'complete';
   if (c.tasks && c.tasks.done > 0) return 'in-progress';
   if (c.artifacts.tasks || c.artifacts.design || c.artifacts.specs) return 'specified';
   return 'proposed';
 }
 const isDone = (c) => c && (c.status === 'archived' || c.status === 'complete');
+const isTicket = (c) => c.status !== 'parking' && c.status !== 'idea'; // ideas are not planned yet
 
 // ---------------------------------------------------------------- timeline for the charts (git + recorded history)
 // The charts need to know when each change reached each status and when each task was checked off. Two sources:
@@ -583,7 +592,7 @@ function createProject(root, id, historyFile, onChange) {
       changes.push({ ...c, ...r, inRoadmap: true });
     }
     let extra = 1000;
-    for (const c of found.values()) changes.push({ ...c, order: null, seq: extra++, context: '', dependsOn: [], softDependsOn: [], dependsRaw: '', goal: c.why ?? '', inRoadmap: false });
+    for (const c of found.values()) changes.push({ ...c, order: null, seq: extra++, context: '', dependsOn: [], softDependsOn: [], dependsRaw: '', goal: c.ideaGoal ?? c.why ?? '', inRoadmap: false });
 
     const byOrder = new Map(changes.filter((c) => c.inRoadmap).map((c) => [c.order, c]));
     for (const c of changes) {
@@ -596,9 +605,9 @@ function createProject(root, id, historyFile, onChange) {
       c.blockedBy = c.dependsOn.filter((o) => !isDone(byOrder.get(o)));
       c.dependents = c.inRoadmap ? changes.filter((x) => x.dependsOn.includes(c.order)).map((x) => x.order) : [];
     }
-    const nextUp = changes.find((c) => !isDone(c) && c.blockedBy.length === 0 && c.status !== 'missing' && c.status !== 'parking');
+    const nextUp = changes.find((c) => !isDone(c) && c.blockedBy.length === 0 && c.status !== 'missing' && isTicket(c));
 
-    const tickets = changes.filter((c) => c.status !== 'parking');
+    const tickets = changes.filter(isTicket);
     const totals = {
       done: tickets.reduce((a, c) => a + (c.tasks?.done ?? 0), 0),
       total: tickets.reduce((a, c) => a + (c.tasks?.total ?? 0), 0),
@@ -673,7 +682,8 @@ function createProject(root, id, historyFile, onChange) {
       id, name: s.project, displayPath: displayPath(root),
       totals: s.totals,
       counts,
-      changes: s.changes.filter((c) => c.status !== 'parking').length,
+      changes: s.changes.filter(isTicket).length,
+      ideas: s.changes.filter((c) => c.status === 'idea').length,
       done: s.changes.filter(isDone).length,
       current: cur && {
         name: cur.name, status: cur.status, order: cur.inRoadmap ? cur.order : null, milestone: cur.milestone,
@@ -884,6 +894,7 @@ function createAgent(project) {
     const c = changeOf(change);
     if (!c) throw httpError(404, `No change "${change}".`);
     if (c.status === 'archived' || c.status === 'parking') throw httpError(409, `${c.name} is ${c.status === 'archived' ? 'archived already' : 'the parking lot'}.`);
+    if (c.status === 'idea' && !force) throw httpError(409, `${c.name} is an idea that still needs refinement; plan it in the roadmap first (or brainstorm it).`, { needsForce: true });
     const live = liveSession();
     if (live) throw httpError(409, `A session started here is still working on ${live.change}. End or stop it first.`);
     if (!force) {
@@ -905,12 +916,52 @@ function createAgent(project) {
   }
 
   // ---- chat: the project assistant, independent of a ticket
-  const liveChat = () => jobs.find((j) => j.kind === 'chat' && j.child);
+  const chatMode = (j) => j.mode ?? 'assistant';
+  const liveChat = (mode) => jobs.find((j) => j.kind === 'chat' && chatMode(j) === mode && j.child);
+  // Brainstorming shapes an idea into one ticket. The model stays read-only; when the user and it agree, it writes
+  // the ticket as a fenced ```ticket block, and only the user's click in the dashboard saves it.
+  function brainstormSystem(idea) {
+    const st = project.state;
+    const ms = (st?.milestones ?? []).map((m) => `${m.id} "${m.title}" (rows ${m.from}–${m.to})`).join(', ');
+    return [
+      `You are a brainstorming partner in the OpenSpec dashboard of the project "${project.name}". Together with the user you shape an idea into one ticket (an OpenSpec change), or find out that it is not worth doing, already covered, or should be split.`,
+      'Work read-only: read and search files (openspec/roadmap.md, openspec/specs/, openspec/backlog/, the code) to check overlaps, prerequisites and what exists; never change a file.',
+      'How to brainstorm: ask at most three focused questions at a time; challenge assumptions; offer options with their trade-offs; keep a ticket to one reviewable vertical slice and say when it should be split; point out related or conflicting roadmap entries by their number.',
+      idea ? `The user wants to refine the idea in openspec/backlog/${idea}.md; read it first.` : '',
+      ms ? `Milestones: ${ms}. A row with a letter (8a, 10b) was added later and belongs to the milestone of its number.` : '',
+      'When the ticket is clear and the user agrees (or asks for it), write it as one fenced code block with the info string "ticket", in this form, and nothing after the block except one short sentence:',
+      '```ticket',
+      'name: <kebab-case change name starting with a verb, e.g. add-recurring-todos>',
+      'area: <area or bounded context, as in the roadmap>',
+      'milestone: <milestone id such as M1, or none>',
+      'depends on: <roadmap numbers of hard prerequisites, e.g. 3, 5, or —>',
+      'goal: <one line, as in the roadmap Goal column>',
+      '---',
+      '# Proposal',
+      '',
+      '## Why',
+      '',
+      '<two or three sentences>',
+      '',
+      '## What Changes',
+      '',
+      '- <capabilities added or changed, checkable by a reviewer>',
+      '',
+      'Out of scope: <what it deliberately does not do>.',
+      '',
+      '## Capabilities',
+      '',
+      '### New Capabilities',
+      '- `<area>/<capability>`: <one line>',
+      '```',
+      'Revise the block when the user asks for changes. If the brainstorming ends without a good ticket, say so plainly and write no block. Answer like in a chat: short, in Markdown, in the language the user writes in.',
+    ].filter(Boolean).join('\n');
+  }
   function chatSystem() {
     const st = project.state;
     const active = st?.changes.filter((c) => ['in-progress', 'complete', 'specified'].includes(c.status)) ?? [];
     const status = st ? [
-      `${st.changes.filter(isDone).length} of ${st.changes.filter((c) => c.status !== 'parking').length} changes done, ${st.totals.done}/${st.totals.total} tasks checked.`,
+      `${st.changes.filter(isDone).length} of ${st.changes.filter(isTicket).length} changes done, ${st.totals.done}/${st.totals.total} tasks checked.`,
       active.length ? `Work not archived yet: ${active.map((c) => `${c.name} (${c.status}${c.tasks ? `, ${c.tasks.done}/${c.tasks.total} tasks` : ''})`).join(', ')}.` : '',
       st.nextUp ? `Next ticket the roadmap allows: ${st.nextUp}.` : '',
     ].filter(Boolean).join(' ') : '';
@@ -922,10 +973,12 @@ function createAgent(project) {
       'Answer like in a chat: short, in Markdown, with file references where they help.',
     ].filter(Boolean).join('\n');
   }
-  function chat({ text, fresh }) {
+  function chat({ text, fresh, mode = 'assistant', idea }) {
     text = String(text ?? '').trim();
     if (!text) throw httpError(400, 'The message is empty.');
-    let job = liveChat();
+    if (!['assistant', 'brainstorm'].includes(mode)) throw httpError(400, 'Unknown chat mode.');
+    if (idea && !changeOf(idea)) throw httpError(404, `No idea "${idea}".`);
+    let job = liveChat(mode);
     if (job && fresh) { job.child.stdin.end(); job = null; }
     if (job) {
       push(job, 'user', text);
@@ -934,8 +987,10 @@ function createAgent(project) {
       changed(0);
       return { job: job.id };
     }
-    const prev = fresh ? null : [...jobs].reverse().find((j) => j.kind === 'chat');
+    const prev = fresh ? null : [...jobs].reverse().find((j) => j.kind === 'chat' && chatMode(j) === mode);
     job = newJob('chat', null, null);
+    job.mode = mode;
+    job.idea = idea || (prev?.idea ?? null);
     push(job, 'user', text);
     const base = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--tools', 'Read,Grep,Glob',
       '--permission-prompts', 'none', ...modelArgs()];
@@ -945,7 +1000,8 @@ function createAgent(project) {
       launch(job, [...base, '--resume', prev.sessionId], userLine(text), true);
     } else {
       job.sessionId = randomUUID();
-      launch(job, [...base, '--session-id', job.sessionId, '-n', `dashboard chat ${project.name}`, '--append-system-prompt', chatSystem()], userLine(text), true);
+      const sys = mode === 'brainstorm' ? brainstormSystem(job.idea) : chatSystem();
+      launch(job, [...base, '--session-id', job.sessionId, '-n', `dashboard ${mode === 'brainstorm' ? 'brainstorm' : 'chat'} ${project.name}`, '--append-system-prompt', sys], userLine(text), true);
     }
     return { job: job.id };
   }
@@ -1315,6 +1371,121 @@ function remapDeps(raw, map) {
   const soft = softDependsOn.length ? `(${fmtNums(softDependsOn.map(m))})` : '';
   return [hard, soft].filter(Boolean).join(', ') || '—';
 }
+// ---------------------------------------------------------------- new tickets and ideas (with --agent)
+// "New idea" and brainstorming save a draft proposal to openspec/backlog/<name>.md, either
+//   - as an idea: with the idea marker and no roadmap row (it still needs refinement), or
+//   - planned: without the marker and with a roadmap row at the end of the chosen milestone, so it can be started.
+// A row added to a milestone gets the next free label after its last row (9 → 9a, 9a → 9b), so no other number
+// changes; without a milestone it gets the next whole number at the end of the table.
+const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const cell = (v) => String(v ?? '').replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ').trim();
+async function writeAtomic(file, text) {
+  await fsp.mkdir(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  await fsp.writeFile(tmp, text);
+  await fsp.rename(tmp, file);
+}
+// An idea keeps its one-line goal in the marker block, so planning it later starts from it.
+function proposalText(body, idea, goal) {
+  let md = String(body ?? '').replace(/\r\n/g, '\n').trim();
+  md = md.split('\n').filter((l, i) => !(i < 8 && /^>\s*(\*\*Idea\*\*|Goal:)/.test(l))).join('\n').trim(); // drop an old marker
+  if (!/^#\s/.test(md)) md = `# Proposal\n\n${md}`;
+  if (idea) {
+    const mark = IDEA_MARK + (String(goal ?? '').trim() ? `\n> Goal: ${cell(goal)}` : '');
+    const nl = md.indexOf('\n');
+    md = nl < 0 ? `${md}\n\n${mark}` : `${md.slice(0, nl)}\n\n${mark}\n${md.slice(nl)}`;
+  }
+  return md.replace(/\n{3,}/g, '\n\n') + '\n';
+}
+function insertRoadmapRow(md, { name, area, dependsOn, goal, milestone }) {
+  const lines = md.split('\n');
+  const rows = [];
+  let header = -1;
+  lines.forEach((l, i) => {
+    const m = l.match(ROADMAP_ROW);
+    if (m) rows.push({ line: i, order: m[1] });
+    else if (header < 0 && /^\|.*\|\s*$/.test(l) && /order/i.test(l)) header = i;
+  });
+  if (!rows.length && header < 0) throw httpError(409, 'openspec/roadmap.md has no table to add the row to.');
+  const { milestones } = parseRoadmap(md);
+  const labels = new Set(rows.map((r) => r.order));
+  let label, at;
+  const ms = milestone ? milestones.find((m) => m.id === milestone) : null;
+  if (milestone && !ms) throw httpError(400, `No milestone ${milestone}.`);
+  if (ms) {
+    const inMs = rows.filter((r) => orderNum(r.order) >= ms.from && orderNum(r.order) <= ms.to);
+    const last = inMs.at(-1);
+    const lastNum = last ? orderNum(last.order) : ms.from - 1;
+    if (lastNum < ms.to && !labels.has(String(lastNum + 1))) label = String(lastNum + 1);
+    else {
+      let c = 'a';
+      while (labels.has(`${lastNum}${c}`) && c < 'z') c = String.fromCharCode(c.charCodeAt(0) + 1);
+      label = `${lastNum}${c}`;
+    }
+    at = last ? last.line + 1 : (rows.find((r) => orderNum(r.order) > ms.to)?.line ?? (rows.at(-1)?.line ?? header + 1) + 1);
+  } else {
+    label = String(Math.max(0, ...rows.map((r) => orderNum(r.order))) + 1);
+    at = (rows.at(-1)?.line ?? header + 1) + 1;
+  }
+  const cols = header >= 0 ? lines[header].split('|').length - 2 : 5;
+  const cells = [label, `\`${name}\``, cell(area) || '—', cell(dependsOn) || '—', cell(goal)];
+  while (cells.length < cols) cells.push('');
+  lines.splice(at, 0, `| ${cells.join(' | ')} |`);
+  return { md: lines.join('\n'), label };
+}
+async function addToBacklog(project, { name, area, milestone, dependsOn, goal, body, mode, replaces }) {
+  name = String(name ?? '').trim();
+  if (!NAME_RE.test(name)) throw httpError(400, 'The name must be kebab-case (lower-case words joined by "-"), e.g. add-recurring-todos.');
+  if (!['roadmap', 'idea', 'update'].includes(mode)) throw httpError(400, 'Save it as an idea or add it to the roadmap.');
+  if (mode === 'update') { // a planned ticket that has not started: only its draft is replaced, the roadmap row stays
+    const c = (project.state?.changes ?? []).find((x) => x.name === name);
+    if (!c || c.location !== 'backlog' || !c.inRoadmap) throw httpError(409, 'Only the draft of a planned ticket that has not started can be updated.');
+    if (!String(body ?? '').trim()) throw httpError(400, 'The proposal is empty.');
+    await writeAtomic(path.join(project.root, 'openspec', 'backlog', `${name}.md`), proposalText(body, false));
+    project.schedule(0);
+    return { saved: name, mode, order: c.order };
+  }
+  if (mode === 'roadmap' && !String(goal ?? '').trim()) throw httpError(400, 'A planned ticket needs a goal (one line for the roadmap).');
+  const changes = project.state?.changes ?? [];
+  const old = replaces ? changes.find((c) => c.name === replaces) : null;
+  if (replaces && (!old || old.status !== 'idea')) throw httpError(409, `${replaces} is not an idea any more.`);
+  const clash = changes.find((c) => c.name === name && c.name !== replaces);
+  if (clash) throw httpError(409, `There is already a change "${name}" (${clash.inRoadmap ? '#' + clash.order + ', ' : ''}${clash.status}); pick another name${clash.location === 'backlog' && clash.inRoadmap ? ' or update its draft' : ''}.`);
+  const deps = parseDeps(String(dependsOn ?? '').replace(/^\s*—\s*$/, ''));
+  const known = new Set(changes.filter((c) => c.inRoadmap).map((c) => c.order));
+  const unknown = [...deps.dependsOn, ...deps.softDependsOn].filter((o) => !known.has(o));
+  if (mode === 'roadmap' && unknown.length) throw httpError(400, `No roadmap row ${unknown.map((o) => '#' + o).join(', ')}.`);
+  const file = path.join(project.root, 'openspec', 'backlog', `${name}.md`);
+  // without a new text, a promoted idea keeps its own
+  const oldText = old && !String(body ?? '').trim() ? await readText(path.join(project.root, 'openspec', 'backlog', `${old.name}.md`)) : null;
+  const text = proposalText(String(body ?? '').trim() || oldText || `# Proposal\n\n## Why\n\n${goal ?? ''}\n`, mode === 'idea', goal);
+  let label = null;
+  if (mode === 'roadmap') {
+    const rmFile = path.join(project.root, 'openspec', 'roadmap.md');
+    const st = await statOf(rmFile);
+    const md = await readText(rmFile);
+    if (md === null) throw httpError(404, 'There is no openspec/roadmap.md to plan the ticket in; save it as an idea.');
+    const out = insertRoadmapRow(md, { name, area, dependsOn: String(dependsOn ?? '').trim(), goal, milestone: milestone || null });
+    label = out.label;
+    const now = await statOf(rmFile);
+    if (now && st && now.mtimeMs !== st.mtimeMs) throw httpError(409, 'roadmap.md changed meanwhile; try again.');
+    await writeAtomic(file, text);
+    await writeAtomic(rmFile, out.md);
+  } else {
+    await writeAtomic(file, text);
+  }
+  if (old && old.name !== name) await fsp.unlink(path.join(project.root, 'openspec', 'backlog', `${old.name}.md`)).catch(() => {});
+  project.schedule(0);
+  return { saved: name, mode, order: label };
+}
+async function removeIdea(project, { name }) {
+  const c = (project.state?.changes ?? []).find((x) => x.name === name);
+  if (!c || c.status !== 'idea') throw httpError(409, `${name} is not an idea; only ideas can be deleted here.`);
+  await fsp.unlink(path.join(project.root, 'openspec', 'backlog', `${name}.md`));
+  project.schedule(0);
+  return { removed: name };
+}
+
 const NOT_STARTED = new Set(['proposed', 'missing']);
 async function moveInRoadmap(project, { change, before }) {
   const file = path.join(project.root, 'openspec', 'roadmap.md');
@@ -1471,12 +1642,13 @@ const server = http.createServer(async (req, res) => {
       const html = await fsp.readFile(INDEX, 'utf8');
       return res.end(AGENT ? html.replace('<meta name="osd-agent" content="">', `<meta name="osd-agent" content="${TOKEN}">`) : html);
     }
-    if (url.pathname === '/api/roadmap/move' && req.method === 'POST') {
+    const WRITES = { '/api/roadmap/move': moveInRoadmap, '/api/backlog/add': addToBacklog, '/api/backlog/remove': removeIdea };
+    if (WRITES[url.pathname] && req.method === 'POST') {
       if (!AGENT) { res.writeHead(404); return res.end('start the dashboard with --agent'); }
       const origin = req.headers.origin;
       if (req.headers['x-osd-token'] !== TOKEN || (origin && !OWN_HOSTS.has(new URL(origin).host))) { res.writeHead(403); return res.end('forbidden'); }
       try {
-        return json(res, await moveInRoadmap(projectFor(url), await readBody(req)));
+        return json(res, await WRITES[url.pathname](projectFor(url), await readBody(req)));
       } catch (e) {
         res.writeHead(e.status ?? 500, { 'content-type': 'application/json' });
         return res.end(JSON.stringify({ error: e.message }));

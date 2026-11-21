@@ -309,6 +309,29 @@ span.ch-warn { color: var(--st-progress); }
   border-radius: 8px; padding: 6px 10px; font-size: 12px; line-height: 1.45; max-width: 320px; }
 .ch-tip .h { font-weight: 700; }
 .board.max .charts { padding-bottom: 8px; }
+/* backlog: new tickets and ideas */
+.bl-tools { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.nt-done { font-size: 13px; display: inline-flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 6px 12px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--st-complete) 12%, var(--surface)); }
+.nt { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 14px 16px; box-shadow: var(--shadow); }
+.nt-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 10px; }
+.nt-head .muted { font-size: 12.5px; }
+.nt-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 12px; }
+.nt-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); min-width: 0; }
+.nt-grid label.wide { grid-column: 1 / -1; }
+.nt-grid input, .nt-grid select, .nt-grid textarea { font: inherit; font-size: 13.5px; font-weight: 400; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; min-width: 0; }
+.nt-grid textarea { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.5; resize: vertical; }
+.nt-grid input:focus, .nt-grid select:focus, .nt-grid textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+.nt-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+.nt-note { font-size: 12.5px; color: var(--muted); } .nt-note.warn { color: var(--st-blocked); font-weight: 600; }
+@media (max-width: 860px) { .nt-grid { grid-template-columns: 1fr 1fr; } }
+.bl-row.idea { grid-template-columns: 18px 38px minmax(0, 1fr) minmax(0, 1.3fr) auto; }
+.bl-actions { display: inline-flex; gap: 6px; align-items: center; }
+.bl-actions .btn { padding: 3px 10px; font-size: 12.5px; }
+@media (max-width: 860px) { .bl-row.idea { grid-template-columns: 18px 34px minmax(0, 1fr) auto; } }
+.tk-card { border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 10px; padding: 10px 12px; margin: 8px 0; background: var(--surface); }
+.tk-h { font-weight: 700; } .tk-goal { margin: 4px 0 2px; } .tk-meta { font-size: 12.5px; color: var(--muted); }
+.tk-body summary { cursor: pointer; font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+.tk-card .ag-row { margin-top: 8px; }
 /* focus mode: archived column hidden, empty columns folded into narrow strips */
 .cols.focus { grid-template-columns: var(--cols); }
 .col.folded { min-width: 0; align-items: center; }
@@ -1213,8 +1236,8 @@ body.board-max { overflow: hidden; }
 .ag-note:empty { display: none; }
 .ag-note.warn, .ag-err { color: var(--st-blocked); font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
 /* every style restyles .btn; the one primary action stays an accent-filled button in all of them */
-.agent-panel .btn.primary, .agent-panel .btn.primary:hover { background: var(--accent) !important; color: var(--bg) !important; border-color: var(--accent) !important; text-shadow: none !important; font-weight: 700; }
-.agent-panel .btn.primary:hover { filter: brightness(1.08); }
+.agent-panel .btn.primary, .agent-panel .btn.primary:hover, .backlog .btn.primary, .backlog .btn.primary:hover { background: var(--accent) !important; color: var(--bg) !important; border-color: var(--accent) !important; text-shadow: none !important; font-weight: 700; }
+.agent-panel .btn.primary:hover, .backlog .btn.primary:hover { filter: brightness(1.08); }
 .btn:disabled { opacity: .5; cursor: default; }
 .ag-body { flex: 1; overflow: auto; padding: 12px var(--agp) 18px; display: flex; flex-direction: column; gap: 10px; }
 .ag-item { background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 13px; display: flex; flex-direction: column; gap: 7px; min-width: 0; flex: none; }
@@ -1367,7 +1390,7 @@ body.ag-max { overflow: hidden; }
 :root[data-style="clay"] .msg.them .meta { align-self: flex-start; }
 :root[data-style="clay"] .ag-compose textarea { background: var(--surface); border-radius: 16px; box-shadow: var(--shadow); }
 :root[data-style="clay"] .ag-compose textarea:focus { outline: none; border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
-:root[data-style="clay"] .agent-panel .btn.primary { border-radius: 10px; color: #fff !important; }
+:root[data-style="clay"] .agent-panel .btn.primary, :root[data-style="clay"] .backlog .btn.primary { border-radius: 10px; color: #fff !important; }
 :root[data-style="clay"] .ag-answer { font-family: var(--font-serif); font-size: 14.5px; }
 :root[data-style="clay"] .ag-item { background: var(--surface-2); border: 1px solid var(--line); }
 :root[data-style="clay"] .ag-suggest { background: var(--surface); }
@@ -1412,6 +1435,7 @@ const STATUS = {
   'proposed':    { label: 'Proposed',    v: '--st-proposed' },
   'missing':     { label: 'Missing',     v: '--st-missing' },
   'parking':     { label: 'Parking lot', v: '--st-proposed' },
+  'idea':        { label: 'Idea',        v: '--st-proposed' },
 };
 const ui = { boardView: 'board', drag: null, pendingBoard: false, blMoved: null, lastPick: null, boardFocus: false, state: null, pinned: null, tab: 'tasks', open: new Map(), fileCache: new Map(), fresh: new Set(), prevCol: new Map(), ms: '', boardMax: false, drawer: null, drawerScroll: 0, colScroll: new Map() };
 try { const t = localStorage.getItem('osd-theme'); if (t) document.documentElement.dataset.theme = t; ui.ms = localStorage.getItem('osd-ms') || ''; ui.boardFocus = localStorage.getItem('osd-board-focus') === '1'; ui.boardView = ['backlog', 'charts'].includes(localStorage.getItem('osd-board-view')) ? localStorage.getItem('osd-board-view') : 'board'; } catch {}
@@ -1473,6 +1497,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 // [text](url): web links open in a new tab; project paths show the text, the path is the tooltip
 const link = (_, text, url) => /^https?:\/\//.test(url) ? `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>` : `<span class="ref" title="${url}">${text}</span>`;
 const inline = (s) => esc(s).replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, link).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/(^|[\s(])\*([^*\s][^*]*?)\*(?=[\s.,;:!?)]|$)/g, '$1<em>$2</em>');
+const isTicket = (c) => c.status !== 'parking' && c.status !== 'idea'; // ideas are not planned yet
 const stVar = (s) => `var(${STATUS[s]?.v ?? '--st-proposed'})`;
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 // add-due-dates -> Add due dates (the slug stays visible where it matters)
@@ -1677,7 +1702,7 @@ function renderMilestone(s) {
       <span class="sw" style="--st:${stVar(c.status)}"></span><span class="n">${esc(title(c.name))}</span>
       <span class="s num">${c.tasks ? `${c.tasks.done}/${c.tasks.total}` : STATUS[c.status].label.toLowerCase()}</span></button></li>`).join('')}</ul>
     <div class="ms-next">${next ? `Then <b>${esc(next.m.id)}</b> ${esc(next.m.title)} · ${next.cs.length} changes` : 'Last milestone'}<br>
-      Overall <span class="num">${s.changes.filter(isDone).length}/${s.changes.filter((c) => c.status !== 'parking').length}</span> changes · <span class="num">${td.done}/${td.total}</span> tasks written so far</div>`;
+      Overall <span class="num">${s.changes.filter(isDone).length}/${s.changes.filter(isTicket).length}</span> changes · <span class="num">${td.done}/${td.total}</span> tasks written so far</div>`;
 }
 
 function renderFeed(s) {
@@ -1801,9 +1826,10 @@ function renderBoard(s) {
     <div class="board-head">
       <span class="view-switch" role="tablist" aria-label="View"><button type="button" role="tab" data-board-view="board" aria-selected="${ui.boardView === 'board'}">Board</button><button type="button" role="tab" data-board-view="backlog" aria-selected="${ui.boardView === 'backlog'}">Backlog</button><button type="button" role="tab" data-board-view="charts" aria-selected="${ui.boardView === 'charts'}">Charts</button></span>
       ${max ? `<span class="board-live">${$('conn').innerHTML}</span>` : ''}
-      <span class="muted num" style="font-size:12.5px">${s.changes.filter(isDone).length} of ${s.changes.filter((c) => c.status !== 'parking').length} changes done · ${s.totals.done}/${s.totals.total} tasks${focus && byCol.archived.length ? ` · ${byCol.archived.length} archived hidden` : ''}</span>
+      <span class="muted num" style="font-size:12.5px">${s.changes.filter(isDone).length} of ${s.changes.filter(isTicket).length} changes done · ${s.totals.done}/${s.totals.total} tasks${focus && byCol.archived.length ? ` · ${byCol.archived.length} archived hidden` : ''}</span>
       ${s.changes.filter((c) => c.status === 'parking').map((c) => `<button type="button" class="btn" data-pick="${esc(c.name)}" title="Parking lot: deferred items, never archived">Parking lot · ${c.tasks ? `${c.tasks.total - c.tasks.done} open` : esc(c.name)}</button>`).join('')}
-      <span class="ms-filter">${msBtn('', '<b>All</b>', s.changes.filter((c) => c.status !== 'parking'))}${s.milestones.map((m) => msBtn(m.id, `<b>${esc(m.id)}</b><span class="ms-name">${esc(m.title)}</span>`, s.changes.filter((c) => c.milestone === m.id), m.title)).join('')}</span>
+      ${(() => { const n = s.changes.filter((c) => c.status === 'idea').length; return n ? `<button type="button" class="btn" data-board-view="backlog" title="Ideas that still need refinement before they are planned">💡 ${n} idea${n > 1 ? 's' : ''}</button>` : ''; })()}
+      <span class="ms-filter">${msBtn('', '<b>All</b>', s.changes.filter(isTicket))}${s.milestones.map((m) => msBtn(m.id, `<b>${esc(m.id)}</b><span class="ms-name">${esc(m.title)}</span>`, s.changes.filter((c) => c.milestone === m.id), m.title)).join('')}</span>
       <span class="board-actions">${AGENT_TOKEN ? '<button class="btn board-toggle" type="button" data-chat-btn aria-controls="agent">Chat</button>' : ''}
       <button class="btn board-toggle" type="button" data-board-focus aria-pressed="${ui.boardFocus}" title="${ui.boardFocus ? 'Show the archived changes again' : ui.boardView === 'charts' ? 'Open work only: no archived band in the flow, no archived changes in the cycle times and the dependency graph' : 'Hide archived tickets and fold empty columns, so the open tickets get the space'}">${ui.boardFocus ? '◉ Focus' : '○ Focus'}</button>
       <button class="btn board-toggle" type="button" data-max aria-pressed="${max}" title="${max ? 'Back to the dashboard (Esc)' : 'Show the board across the whole window'}">${max ? 'Exit full screen ✕' : '⤢ Full screen'}</button></span>
@@ -1937,7 +1963,7 @@ function drawCharts(s) {
     } catch (e) { el.innerHTML = `<div class="empty">✕ ${esc(e.message)}</div>`; console.error(e); }
   }
 }
-const chartShown = (s) => s.changes.filter((c) => c.status !== 'parking' && c.status !== 'missing' && (!ui.ms || c.milestone === ui.ms));
+const chartShown = (s) => s.changes.filter((c) => isTicket(c) && c.status !== 'missing' && (!ui.ms || c.milestone === ui.ms));
 
 // Shared axis frame for time charts.
 function timeFrame(W, H, t0, t1, maxY, { L = 34, R = 16, T = 10, B = 24 } = {}) {
@@ -2001,7 +2027,7 @@ function burnChart(s, shownNames, times, W) {
   const cur = currentChange(s);
   const ms = ui.ms || cur?.milestone || '';
   const m = s.milestones.find((x) => x.id === ms);
-  const scope = s.changes.filter((c) => c.status !== 'parking' && c.status !== 'missing' && (!ms || c.milestone === ms));
+  const scope = s.changes.filter((c) => isTicket(c) && c.status !== 'missing' && (!ms || c.milestone === ms));
   const sub = $('ch-burn-sub');
   if (sub) sub.textContent = ms ? `${ms} "${m?.title ?? ''}": changes done against the changes planned${ui.ms ? '' : ' (the current milestone; pick another above)'}.` : 'All changes: done against planned.';
   const born = (c) => { const t = times.get(c.name); return t ? Math.min(...Object.values(t)) : null; };
@@ -2275,7 +2301,7 @@ const BL_MOVABLE = new Set(['proposed', 'missing']);
 function backlogHtml(s, shown, picked) {
   const focus = ui.boardFocus;
   const groups = s.milestones.map((m) => ({ id: m.id, title: m.title, cs: shown.filter((c) => c.milestone === m.id) }));
-  const loose = shown.filter((c) => !c.milestone && c.status !== 'parking');
+  const loose = shown.filter((c) => !c.milestone && isTicket(c));
   if (loose.length) groups.push({ id: '', title: 'Not in a milestone', cs: loose });
   const row = (c) => {
     const done = isDone(c);
@@ -2292,7 +2318,19 @@ function backlogHtml(s, shown, picked) {
       <span class="pill" style="--st:${stVar(c.status)}">${esc(columnLabel(c))}</span>
     </li>`;
   };
+  const ideas = s.changes.filter((c) => c.status === 'idea');
+  const ideaRow = (c) => `<li class="bl-row idea ${c.name === picked ? 'picked' : ''}" data-pick="${esc(c.name)}" data-bl="${esc(c.name)}" title="${esc(c.why ?? '')}">
+      <span class="bl-grip" aria-hidden="true"></span><span class="bl-o">💡</span>
+      <span class="bl-name">${esc(title(c.name))}<span class="slug">${esc(c.name)}</span></span>
+      <span class="bl-area">${esc(c.goal || (c.why ?? '').split(/(?<=[.!?])\s/)[0])}</span>
+      ${AGENT_TOKEN ? `<span class="bl-actions"><button class="btn" type="button" data-idea-refine="${esc(c.name)}" title="Brainstorm it in the chat; a ticket is saved only if you save it">💡 Refine</button><button class="btn" type="button" data-idea-plan="${esc(c.name)}" title="Add it to the roadmap as it is">Plan…</button><button class="link" type="button" data-idea-delete="${esc(c.name)}" title="Delete the idea">Delete</button></span>` : ''}
+    </li>`;
+  const ideasHtml = ideas.length ? `<section class="bl-group bl-ideas">
+      <div class="bl-head"><b>💡</b> Ideas<span class="muted num">${ideas.length} · need refinement before they are planned</span></div>
+      <ol class="bl-list">${ideas.map(ideaRow).join('')}</ol>
+    </section>` : '';
   return `<div class="backlog" data-col="backlog">
+    ${AGENT_TOKEN ? `<div class="bl-tools"><button class="btn primary" type="button" data-nt-open>＋ New ticket</button><button class="btn" type="button" data-brainstorm>💡 Brainstorm an idea</button>${ntDoneHtml()}</div>${ntHtml(s)}` : ''}
     <div class="bl-hint">${AGENT_TOKEN ? 'Drag a ticket that has not started (⠿) to reorder it within its milestone, or use Alt+↑/↓. It rewrites <code>openspec/roadmap.md</code> and keeps the "Depends on" numbers right.' : 'Read-only: start the dashboard with <code>--agent</code> to reorder by drag and drop.'}<span class="bl-note" id="bl-note"></span></div>
     ${groups.map((g) => {
       const cs = g.cs.filter((c) => !(focus && c.status === 'archived')).sort((a, b) => a.seq - b.seq);
@@ -2302,8 +2340,145 @@ function backlogHtml(s, shown, picked) {
         <ol class="bl-list" data-blms="${esc(g.id)}">${cs.map(row).join('') || '<li class="bl-empty">Nothing open here.</li>'}</ol>
       </section>`;
     }).join('')}
+    ${ideasHtml}
   </div>`;
 }
+
+// ---- new tickets and ideas: a form in the backlog; the server writes the draft (and the roadmap row)
+const NT_BODY = '# Proposal\n\n## Why\n\n\n\n## What Changes\n\n- \n\nOut of scope: \n';
+ui.nt = { open: false };
+ui.ntDone = null;
+const slugOf = (t) => String(t ?? '').toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g, '').trim().split(/[\s_-]+/).filter(Boolean).slice(0, 5).join('-');
+function ntDoneHtml() {
+  const d = ui.ntDone;
+  if (!d) return '';
+  return `<span class="nt-done">${d.mode === 'update' ? `✓ Updated the draft of <b>#${esc(d.order)}</b> <code>${esc(d.name)}</code>.` : d.mode === 'roadmap' ? `✓ Planned as <b>#${esc(d.order)}</b> <code>${esc(d.name)}</code>${d.milestone ? ` in ${esc(d.milestone)}` : ''}.` : `✓ Saved <code>${esc(d.name)}</code> as an idea.`}
+    <button class="link" type="button" data-pick="${esc(d.name)}">Open</button>
+    ${d.mode !== 'idea' ? `<button class="link" type="button" data-agent="${esc(d.name)}" data-agent-mode="start">Start a session…</button>` : `<button class="link" type="button" data-idea-refine="${esc(d.name)}">Refine it</button>`}
+    <button class="link" type="button" data-nt-dismiss aria-label="Dismiss">✕</button></span>`;
+}
+function ntHtml(s) {
+  const n = ui.nt;
+  if (!n.open) return '';
+  const opt = (v, l) => `<option value="${esc(v)}" ${(n.milestone ?? '') === v ? 'selected' : ''}>${esc(l)}</option>`;
+  const nm = (n.name || slugOf(n.goal)).trim();
+  const planned = s.changes.find((c) => c.name === nm && c.inRoadmap && c.location === 'backlog' && c.name !== n.replaces);
+  return `<section class="nt" id="nt" aria-label="New ticket">
+    <div class="nt-head"><b>${n.replaces ? `Plan the idea <code>${esc(n.replaces)}</code>` : n.fromBrainstorm ? 'Ticket from the brainstorming' : 'New ticket'}</b>
+      <span class="muted">Check it, then plan it in the roadmap or keep it as an idea.</span><button class="link" type="button" data-nt-cancel style="margin-left:auto">Cancel ✕</button></div>
+    <div class="nt-grid">
+      <label>Name<input data-nt="name" value="${esc(n.name ?? '')}" placeholder="${esc(slugOf(n.goal) || 'add-something')}" spellcheck="false" autocomplete="off"></label>
+      <label>Area<input data-nt="area" value="${esc(n.area ?? '')}" placeholder="e.g. tasks" autocomplete="off"></label>
+      <label>Milestone<select data-nt="milestone">${opt('', '— none —')}${s.milestones.map((m) => opt(m.id, `${m.id} ${m.title}`)).join('')}</select></label>
+      <label>Depends on<input data-nt="deps" value="${esc(n.deps ?? '')}" placeholder="e.g. 3, 5a–5b (soft in parentheses)" autocomplete="off"></label>
+      <label class="wide">Goal<input data-nt="goal" value="${esc(n.goal ?? '')}" placeholder="One line, as in the roadmap's Goal column" autocomplete="off"></label>
+      <label class="wide"><span>Proposal <span class="muted" style="font-weight:400">· openspec/backlog/&lt;name&gt;.md</span></span><textarea data-nt="body" rows="11" spellcheck="true">${esc(n.body ?? NT_BODY)}</textarea></label>
+    </div>
+    ${planned ? `<div class="ag-note">This ticket is planned already as <b>#${esc(planned.order)}</b>${planned.milestone ? ` in ${esc(planned.milestone)}` : ''} and has not started: <b>Update draft</b> replaces its proposal; the roadmap row stays as it is.</div>` : ''}
+    <div class="nt-actions">
+      ${planned ? `<button class="btn primary" type="button" data-nt-save="update">Update draft #${esc(planned.order)}</button>` : ''}
+      <button class="btn ${planned ? '' : 'primary'}" type="button" data-nt-save="roadmap" title="Writes the draft and a roadmap row at the end of the milestone, ready to start">Add to roadmap</button>
+      <button class="btn" type="button" data-nt-save="idea" title="Writes only the draft, marked as an idea that needs refinement">Save as idea</button>
+      <button class="btn" type="button" data-nt-brainstorm title="Discuss it in the chat first; nothing is saved until you save the ticket">💡 Brainstorm it first</button>
+      <span class="nt-note ${n.error ? 'warn' : ''}">${esc(n.note ?? '')}</span>
+    </div>
+  </section>`;
+}
+// fields typed into survive live re-renders through ui.nt; a prefill sets them explicitly
+function ntFill() {
+  for (const el of document.querySelectorAll('[data-nt]')) { const v = ui.nt[el.dataset.nt] ?? (el.dataset.nt === 'body' ? NT_BODY : ''); if (el.value !== v) el.value = v; }
+}
+function ntOpen(fields = {}) {
+  if (!AGENT_TOKEN) return;
+  ui.nt = { open: true, name: '', area: '', milestone: ui.ms || currentChange(ui.state)?.milestone || '', deps: '', goal: '', body: NT_BODY, ...fields };
+  ui.ntDone = null;
+  if (ui.boardView !== 'backlog') { ui.boardView = 'backlog'; try { localStorage.setItem('osd-board-view', 'backlog'); } catch {} }
+  renderBoard(ui.state);
+  ntFill();
+  const f = $('nt');
+  if (f) { f.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); f.querySelector(fields.name ? '[data-nt="goal"]' : '[data-nt="name"]')?.focus({ preventScroll: true }); }
+}
+async function ntSave(mode) {
+  const n = ui.nt;
+  const name = (n.name || slugOf(n.goal)).trim();
+  Object.assign(n, { note: mode === 'roadmap' ? 'Planning…' : 'Saving…', error: false });
+  if (mode === 'update') n.note = 'Updating…';
+  renderBoard(ui.state);
+  try {
+    const r = await fetch(withProject('/api/backlog/add'), { method: 'POST', headers: { 'content-type': 'application/json', 'x-osd-token': AGENT_TOKEN },
+      body: JSON.stringify({ name, area: n.area, milestone: n.milestone, dependsOn: n.deps, goal: n.goal, body: n.body, mode, replaces: n.replaces || undefined }) });
+    const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+    ui.nt = { open: false };
+    ui.ntDone = { name: d.saved, mode: d.mode, order: d.order, milestone: mode === 'roadmap' ? n.milestone : '' };
+    ui.lastPick = d.saved;
+  } catch (e) { Object.assign(n, { note: '✕ ' + e.message, error: true }); }
+  renderBoard(ui.state);
+}
+async function ideaText(name) {
+  const r = await fetch(withProject('/api/file?path=' + encodeURIComponent(`openspec/backlog/${name}.md`)));
+  return r.ok ? (await r.text()).split('\n').filter((l, i) => !(i < 8 && /^>\s*(\*\*Idea\*\*|Goal:)/.test(l))).join('\n').replace(/\n{3,}/g, '\n\n') : '';
+}
+// brainstorming happens in the chat; seed = the first message, idea = the idea it refines
+function startBrainstorm({ seed, idea } = {}) {
+  if (!AGENT_TOKEN) return;
+  ag.max = false;
+  openChat('brainstorm');
+  if (!seed) return;
+  ag.stick = true;
+  agentPost('chat', { text: seed, mode: 'brainstorm', fresh: true, idea }).catch((e) => { $('ag-route').innerHTML = `<span style="color:var(--st-blocked)">✕ ${esc(e.message)}</span>`; });
+}
+let ntTimer = null;
+document.addEventListener('input', (e) => {
+  const f = e.target.closest?.('[data-nt]');
+  if (!f) return;
+  ui.nt[f.dataset.nt] = f.value;
+  // the name decides whether this updates a planned draft; re-render (in place) once typing pauses
+  if (f.dataset.nt === 'name' || f.dataset.nt === 'goal') { clearTimeout(ntTimer); ntTimer = setTimeout(() => ui.state && renderBoard(ui.state), 250); }
+});
+document.addEventListener('change', (e) => {
+  const f = e.target.closest?.('select[data-nt]');
+  if (f) ui.nt[f.dataset.nt] = f.value;
+});
+document.addEventListener('click', async (e) => {
+  const t = e.target;
+  const hit = t.closest?.('[data-nt-open], [data-nt-cancel], [data-nt-save], [data-nt-brainstorm], [data-nt-dismiss], [data-brainstorm], [data-idea-refine], [data-idea-plan], [data-idea-delete], [data-tk-save]');
+  if (!hit) return;
+  e.stopPropagation(); e.preventDefault();
+  if (hit.matches('[data-nt-open]')) return ntOpen();
+  if (hit.matches('[data-nt-cancel]')) { ui.nt = { open: false }; return renderBoard(ui.state); }
+  if (hit.matches('[data-nt-dismiss]')) { ui.ntDone = null; return renderBoard(ui.state); }
+  if (hit.matches('[data-nt-save]')) return ntSave(hit.dataset.ntSave);
+  if (hit.matches('[data-nt-brainstorm]')) {
+    const n = ui.nt;
+    const seed = ['I have an idea for a new ticket. Help me shape it.', n.goal && `Goal: ${n.goal}`, n.body && n.body.trim() !== NT_BODY.trim() ? n.body.trim() : ''].filter(Boolean).join('\n\n');
+    return startBrainstorm({ seed, idea: n.replaces || undefined });
+  }
+  if (hit.matches('[data-brainstorm]')) return startBrainstorm();
+  if (hit.matches('[data-idea-refine]')) {
+    const name = hit.dataset.ideaRefine;
+    return startBrainstorm({ seed: `Let's refine the idea \`${name}\` (openspec/backlog/${name}.md) into a ticket.`, idea: name });
+  }
+  if (hit.matches('[data-idea-plan]')) {
+    const name = hit.dataset.ideaPlan;
+    const c = ui.state.changes.find((x) => x.name === name);
+    return ntOpen({ name, replaces: name, body: await ideaText(name), goal: c?.goal ?? '' });
+  }
+  if (hit.matches('[data-idea-delete]')) {
+    const name = hit.dataset.ideaDelete;
+    if (!confirm(`Delete the idea ${name}? This removes openspec/backlog/${name}.md.`)) return;
+    const r = await fetch(withProject('/api/backlog/remove'), { method: 'POST', headers: { 'content-type': 'application/json', 'x-osd-token': AGENT_TOKEN }, body: JSON.stringify({ name }) });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); if ($('bl-note')) { $('bl-note').textContent = '✕ ' + (d.error || r.status); $('bl-note').classList.add('warn'); } }
+    return;
+  }
+  if (hit.matches('[data-tk-save]')) {
+    const tk = ag.tickets.get(hit.dataset.tkSave);
+    if (!tk) return;
+    const idea = tk.idea && ui.state.changes.some((c) => c.name === tk.idea && c.status === 'idea') ? tk.idea : null;
+    return ntOpen({ name: tk.name, area: tk.area, milestone: tk.milestone, deps: tk.deps, goal: tk.goal, body: tk.body, replaces: idea, fromBrainstorm: true });
+  }
+}, true);
+
 async function blMove(change, before) {
   const note = $('bl-note');
   if (note) { note.textContent = 'Moving…'; note.classList.remove('warn'); }
@@ -2497,7 +2672,7 @@ setInterval(() => ui.state && (renderHeader(ui.state), renderFeed(ui.state)), 30
 const AGENT_TOKEN = document.querySelector('meta[name="osd-agent"]')?.content || '';
 let chatMax = false;
 try { chatMax = localStorage.getItem('osd-chat-max') === '1'; } catch {}
-const ag = { max: chatMax, open: false, panel: 'chat', view: null, convo: 'assistant', target: null, mode: 'ask', note: '', force: null, busy: false, expanded: new Map(), drafts: {} };
+const ag = { tickets: new Map(), max: chatMax, open: false, panel: 'chat', view: null, convo: 'assistant', target: null, mode: 'ask', note: '', force: null, busy: false, expanded: new Map(), drafts: {} };
 const JOB_LABEL = { starting: 'starting', running: 'working', idle: 'waiting for you', done: 'ended', stopped: 'stopped', failed: 'failed' };
 const JOB_ST = { starting: 'in-progress', running: 'in-progress', idle: 'specified', done: 'complete', stopped: 'proposed', failed: 'missing' };
 const alive = (j) => ['starting', 'running', 'idle'].includes(j?.status);
@@ -2519,9 +2694,11 @@ const groupBySession = (jobs) => {
 function conversations() {
   const v = ag.view;
   if (!v) return [];
-  const chats = groupBySession(v.jobs.filter((j) => j.kind === 'chat'));
+  const chats = groupBySession(v.jobs.filter((j) => j.kind === 'chat' && (j.mode ?? 'assistant') === 'assistant'));
   const cur = chats.at(-1);
-  const list = [{ id: 'assistant', label: 'Assistant', jobs: cur?.jobs ?? [], last: cur?.last, live: ['running', 'starting'].includes(cur?.last?.status) }];
+  const bs = groupBySession(v.jobs.filter((j) => j.kind === 'chat' && j.mode === 'brainstorm')).at(-1);
+  const list = [{ id: 'assistant', label: 'Assistant', jobs: cur?.jobs ?? [], last: cur?.last, live: ['running', 'starting'].includes(cur?.last?.status) },
+    { id: 'brainstorm', label: '💡 Brainstorm', jobs: bs?.jobs ?? [], last: bs?.last, live: ['running', 'starting'].includes(bs?.last?.status), brainstorm: true }];
   for (const g of groupBySession(v.jobs.filter((j) => j.kind === 'session')).reverse().slice(0, 5)) {
     list.push({ id: 'session:' + g.sid, label: title(g.last.change), jobs: g.jobs, last: g.last, live: alive(g.last), session: true });
   }
@@ -2568,7 +2745,7 @@ function buildAgent() {
 function buildChat(s) {
   const c = conversations().find((x) => x.id === ag.convo) ?? conversations()[0];
   if (c) ag.convo = c.id;
-  const ph = c?.terminal ? 'Message to the session running in a terminal' : c?.session ? `Message to the session on ${c?.label}` : `Message the assistant about ${s.project}`;
+  const ph = c?.terminal ? 'Message to the session running in a terminal' : c?.brainstorm ? (c.jobs.length ? 'Answer, push back, or ask for the ticket' : 'Describe an idea for a new ticket') : c?.session ? `Message to the session on ${c?.label}` : `Message the assistant about ${s.project}`;
   const chips = '<div class="ag-chips" id="ag-chips" role="tablist"></div>';
   return `
     <div class="ag-head"><h2>Chat</h2><span class="muted" style="font-size:12.5px">${esc(s.project)}</span>${ag.max ? chips : ''}<button class="link ag-maxbtn" type="button" data-ag-max aria-pressed="${ag.max}" title="${ag.max ? 'Back to the side panel' : 'Use the whole window'}">${ag.max ? '⤡ Restore' : '⤢ Maximize'}</button><button class="link" type="button" data-ag-close>Close ✕</button></div>
@@ -2595,7 +2772,7 @@ function buildTicket(s) {
   } else {
     form = `<div class="ag-note">Starts a new Claude Code session that works on <b>${esc(title(c.name))}</b> with the ticket workflow. You follow and talk to it in the <b>Chat</b>.</div>
       ${ag.view?.trusted === false ? `<div class="ag-note warn">Claude Code does not trust this folder yet, so it ignores the project's permission rules and the session will be stuck at the first command. Run <code>claude</code> in ${esc(s.project)} once and accept the trust dialog.</div>` : ''}
-      <div class="ag-row"><button class="btn primary" type="button" data-ag-send ${['archived', 'parking'].includes(c.status) ? 'disabled' : ''}>Start session</button>
+      <div class="ag-row"><button class="btn primary" type="button" data-ag-send ${['archived', 'parking', 'idea'].includes(c.status) ? 'disabled' : ''}>Start session</button>
         ${ag.force ? '<button class="btn" type="button" data-ag-force>Start anyway</button>' : ''}</div>
       <div class="ag-note">Permission mode <code>${esc(ag.view?.permissionMode ?? '')}</code>${ag.view?.model ? `, model <code>${esc(ag.view.model)}</code>` : ''}. Nobody answers permission prompts there, so they are declined: allow what the workflow needs (build, tests, <code>openspec</code>, <code>git</code>) in the project's <code>.claude/settings.json</code>.</div>`;
   }
@@ -2631,7 +2808,7 @@ function threadHtml(c) {
       if (l.kind === 'tool' || l.kind === 'error') { steps.push(l); continue; }
       flush();
       if (l.kind === 'user') out.push(`<div class="msg me">${esc(l.text)}<span class="meta">${hhmm(l.t)}</span></div>`);
-      else if (l.kind === 'text') out.push(`<div class="msg them ${l.sub ? 'sub' : ''}"><div class="md">${md(l.text)}</div><span class="meta">${hhmm(l.t)}</span></div>`);
+      else if (l.kind === 'text') out.push(`<div class="msg them ${l.sub ? 'sub' : ''}"><div class="md">${c.brainstorm ? brainstormMd(l.text, `${j.id}:${l.t}`, j.idea ?? c.jobs.find((x) => x.idea)?.idea) : md(l.text)}</div><span class="meta">${hhmm(l.t)}</span></div>`);
       else if (l.kind === 'prompt') out.push(`<details class="sys"><summary>Started on the ticket with the workflow prompt</summary><div>${esc(l.text)}</div></details>`);
       else out.push(`<div class="sys">${esc(l.text)}</div>`);
     }
@@ -2639,8 +2816,36 @@ function threadHtml(c) {
     if (j.error) out.push(`<div class="sys err">✕ ${esc(j.error)}</div>`);
   }
   if (['running', 'starting'].includes(c.last?.status)) out.push('<div class="msg them typing"><span class="ag-spin"></span>working…</div>');
+  if (!out.length && c.brainstorm) out.push(`<div class="ag-empty">Brainstorm an idea for a new ticket. Claude asks questions, challenges assumptions, checks the roadmap and the specs for overlaps and prerequisites, and, once you agree, writes the ticket. Nothing is saved unless you press <b>Review and save…</b> on it; then you plan it in the roadmap or keep it as an idea.<br><br>Ideas in the backlog have <b>💡 Refine</b> to brainstorm them here.</div>`);
   if (!out.length) out.push(c.session ? '' : `<div class="ag-empty">Chat with an assistant about ${esc(ui.state?.project ?? 'the project')}: the plan, the specs, the code, progress or ideas. It reads the project but never changes it, and it remembers this conversation.<br><br>For a ticket, use <b>Agent…</b> on the ticket: ask about it or start a session that works on it.</div>`);
   return out.join('');
+}
+// A brainstorming reply may carry the ticket as a ```ticket block: header lines (name, area, milestone, depends on,
+// goal), then "---" and the proposal. It is shown as a card; saving goes through the backlog form.
+function parseTicket(src) {
+  const i = src.search(/^---\s*$/m);
+  const head = i < 0 ? src : src.slice(0, i), body = i < 0 ? '' : src.slice(i).replace(/^---\s*\n?/, '');
+  const f = {};
+  for (const l of head.split('\n')) { const m = l.match(/^\s*([a-z][a-z ]*):\s*(.*)$/i); if (m) f[m[1].trim().toLowerCase()] = m[2].trim(); }
+  const none = (v) => !v || /^(none|—|-|n\/a)$/i.test(v);
+  return { name: (f.name ?? '').replace(/`/g, ''), area: f.area ?? '', milestone: none(f.milestone) ? '' : f.milestone.split(/\s/)[0], deps: none(f['depends on']) ? '' : f['depends on'], goal: f.goal ?? '', body: body.trim() };
+}
+function brainstormMd(text, key, idea) {
+  const parts = text.split(/```ticket[^\n]*\n([\s\S]*?)(?:```|$)/);
+  return parts.map((p, i) => {
+    if (i % 2 === 0) return p.trim() ? md(p) : '';
+    const tk = { ...parseTicket(p), idea };
+    const id = `${key}:${i}`;
+    ag.tickets.set(id, tk);
+    const ms = ui.state?.milestones.find((m) => m.id === tk.milestone);
+    return `<div class="tk-card">
+      <div class="tk-h">🎫 Ticket <code>${esc(tk.name || '?')}</code></div>
+      <div class="tk-goal">${esc(tk.goal)}</div>
+      <div class="tk-meta">${[tk.milestone ? `${esc(tk.milestone)}${ms ? ` ${esc(ms.title)}` : ''}` : 'no milestone', tk.area && `area ${esc(tk.area)}`, tk.deps && `after ${esc(tk.deps)}`].filter(Boolean).join(' · ')}</div>
+      ${tk.body ? `<details class="tk-body"><summary>Proposal</summary><div class="md">${md(tk.body)}</div></details>` : ''}
+      <div class="ag-row"><button class="btn primary" type="button" data-tk-save="${esc(id)}">Review and save…</button><span class="ag-note">opens it in the backlog to plan it or keep it as an idea</span></div>
+    </div>`;
+  }).join('');
 }
 function barHtml(c) {
   if (!c) return '';
@@ -2648,6 +2853,10 @@ function barHtml(c) {
     const ext = recentExternal()[0];
     if (!ag.view?.hooks) return `<div class="ag-note warn">The hook is not installed, so a session in a terminal cannot receive messages: <code>${esc(ag.view?.hookInstall ?? '')}</code></div>`;
     return `<div class="ag-note">${ext ? `<span class="dot on"></span>Active · last step ${ago(ext.t)}${ext.tool ? ` (${esc(ext.tool)})` : ''}` : '<span class="dot"></span>No session seen in the last 15 minutes; messages wait until one takes a step.'}</div>`;
+  }
+  if (c.brainstorm) {
+    const idea = c.jobs.find((j) => j.idea)?.idea;
+    return c.jobs.length ? `<div class="ag-row"><span class="ag-note">Brainstorming${idea ? ` on the idea <code>${esc(idea)}</code>` : ''} · read-only · nothing is saved until you save the ticket</span><button class="link" type="button" data-ag-new style="margin-left:auto">New brainstorm</button></div>` : '';
   }
   if (!c.session) return c.jobs.length ? `<div class="ag-row"><span class="ag-note">Read-only assistant · remembers this conversation</span><button class="link" type="button" data-ag-new style="margin-left:auto">New chat</button></div>` : '';
   const j = c.last;
@@ -2715,7 +2924,7 @@ async function agentSend(force = false) {
       const c = conversations().find((x) => x.id === ag.convo);
       if (c?.terminal) await agentPost('message', { text, to: 'inbox' });
       else if (c?.session) await agentPost('message', { change: c.last.change, text, job: c.last.id });
-      else await agentPost('chat', { text });
+      else await agentPost('chat', { text, mode: c?.brainstorm ? 'brainstorm' : 'assistant' });
       ag.drafts['chat-' + ag.convo] = '';
       ta.value = '';
       ag.stick = true;
@@ -2774,8 +2983,9 @@ document.addEventListener('click', (e) => {
   if (t.closest('[data-ag-force]')) return agentSend(true);
   if (t.closest('[data-ag-new]')) {
     const text = $('ag-text')?.value.trim();
-    if (!text) { $('ag-route').textContent = 'Write the first message of the new chat, then press New chat.'; return $('ag-text')?.focus(); }
-    return agentPost('chat', { text, fresh: true }).then(() => { $('ag-text').value = ''; ag.drafts['chat-assistant'] = ''; ag.stick = true; }).catch((err) => { $('ag-route').textContent = '✕ ' + err.message; });
+    if (!text) { $('ag-route').textContent = `Write the first message, then press ${ag.convo === 'brainstorm' ? 'New brainstorm' : 'New chat'}.`; return $('ag-text')?.focus(); }
+    const mode = ag.convo === 'brainstorm' ? 'brainstorm' : 'assistant';
+    return agentPost('chat', { text, fresh: true, mode }).then(() => { $('ag-text').value = ''; ag.drafts['chat-' + ag.convo] = ''; ag.stick = true; }).catch((err) => { $('ag-route').textContent = '✕ ' + err.message; });
   }
   const ctl = t.closest('[data-ag-control]');
   if (ctl) return agentPost('control', { job: ctl.dataset.job, action: ctl.dataset.agControl }).catch((err) => { ag.note = '✕ ' + err.message; renderAgentLive(); });
@@ -3028,7 +3238,7 @@ function renderOverview(o) {
     if (p.loading) return `<a class="panel ov-card" href="${esc(hrefFor(p.id))}"><div class="ov-top"><span class="ov-name">${esc(p.name)}</span></div><div class="ov-empty">Reading openspec/…</div></a>`;
     const c = p.current;
     const fresh = prev.has(p.id) && (p.lastEvent?.t ?? 0) > prev.get(p.id);
-    const n = Object.entries(p.counts).filter(([k]) => k !== 'parking').reduce((a, [, v]) => a + v, 0) || 1;
+    const n = Object.entries(p.counts).filter(([k]) => k !== 'parking' && k !== 'idea').reduce((a, [, v]) => a + v, 0) || 1;
     const cur = c ? `<div class="ov-cur">
         <span class="k" style="color:${stVar(c.status)}">${CUR_LABEL[c.status] ?? 'Current'}</span>
         <span class="n">${esc(title(c.name))}</span>

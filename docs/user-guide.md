@@ -106,6 +106,19 @@ move that would put a change before one of its prerequisites.
 
 ![Backlog with the opened change highlighted](images/dashboard-backlog.png)
 
+With `--agent` the backlog also takes new work. **＋ New ticket** opens a form for the draft and its roadmap entry:
+**Add to roadmap** plans it at the end of the chosen milestone, ready to start; **Save as idea** keeps it as a draft
+that still needs refinement, listed under **Ideas** at the end of the backlog and nowhere else.
+
+![New ticket form in the backlog](images/dashboard-backlog-new.png)
+
+**💡 Brainstorm an idea** (or **Refine** on an idea) starts a brainstorming conversation in the chat. Claude asks
+questions, checks the roadmap and the specs for overlaps and prerequisites, and keeps the ticket small; when you
+agree, it writes the ticket as a card. **Review and save…** opens it in the form, where you plan it or keep it as an
+idea. If the brainstorming does not lead anywhere, nothing is saved.
+
+![Brainstorming an idea in the chat](images/dashboard-brainstorm.png)
+
 **Charts** shows how the work flows: a cumulative flow diagram, a burn-up of the milestone with a forecast, the
 age of open changes against the typical time, the cycle time of each change split into its phases, the
 dependency graph with the critical path, and when tasks get checked off. The milestone picked above filters them.
@@ -237,7 +250,8 @@ http://127.0.0.1:4590/?style=paper&theme=dark.
 ## Tips
 
 - If OpenSpec runs in a container or behind a wrapper, start the dashboard with `--cli=<wrapper>`.
-- The dashboard never writes to your project, except when you reorder the backlog with `--agent`. Its history
+- The dashboard never writes to your project, except with `--agent` when you reorder the backlog or save a
+  ticket or an idea. Its history
   lives in `~/.local/state/openspec-dashboard/`.
 - Ticket by ticket, `openspec/specs/` becomes the description of what the system does today; point new team
   members and new agents there first.

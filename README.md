@@ -185,6 +185,9 @@ What makes it more than a status page:
 - **Board, backlog and focus.** A board in six columns derived from the files, a backlog per milestone like an
   issue tracker (reorder untouched tickets by drag and drop; the dashboard rewrites the roadmap and keeps every
   dependency number right), and a focus mode that hides what is archived.
+- **From idea to ticket.** Add a ticket from the backlog, planned at the end of a milestone and ready to start, or
+  keep it as an idea that needs refinement. **Brainstorm** an idea with Claude in the chat: it asks, challenges and
+  checks the roadmap for overlaps, and the ticket is saved only if you agree with the result.
 - **Charts from the git history.** Cumulative flow, a milestone burn-up with a forecast, the age of open work
   against the typical time, the cycle time of every change split into specify, implement and review, the
   dependency graph with the critical path, and when tasks get checked off. They are rebuilt from `git log` of
@@ -198,9 +201,9 @@ What makes it more than a status page:
 - **Several projects** at once with a live overview, and **ten styles** from Flat and Glass to Clay, Paper,
   Blackboard or a green-screen Terminal.
 
-| Charts | Backlog |
+| Charts | Brainstorming an idea next to the backlog |
 |---|---|
-| ![Charts: cumulative flow, burn-up, cycle time, critical path](docs/images/dashboard-charts.png) | ![Backlog with the opened change highlighted](docs/images/dashboard-backlog.png) |
+| ![Charts: cumulative flow, burn-up, cycle time, critical path](docs/images/dashboard-charts.png) | ![Brainstorming an idea in the chat, next to the backlog with its ideas](docs/images/dashboard-brainstorm.png) |
 
 ![Chat with the project assistant next to the full-screen board](docs/images/dashboard-chat.png)
 
