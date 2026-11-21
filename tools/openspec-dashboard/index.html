@@ -322,6 +322,19 @@ span.ch-warn { color: var(--st-progress); }
   border-radius: 8px; padding: 6px 10px; font-size: 12px; line-height: 1.45; max-width: 320px; }
 .ch-tip .h { font-weight: 700; }
 .board.max .charts { padding-bottom: 8px; }
+/* inline chat under the tabs of a change */
+.ic { margin-top: 18px; border-top: 1px dashed var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.ic-thread { display: flex; flex-direction: column; gap: 6px; }
+.ic-thread:empty { display: none; }
+.ic-q { align-self: flex-end; max-width: 85%; background: var(--accent-soft); border-radius: 12px; padding: 6px 10px; font-size: 13px; display: flex; gap: 8px; align-items: baseline; }
+.ic-q time { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.ic-a { align-self: flex-start; max-width: 92%; background: var(--surface-2); border-radius: 12px; padding: 6px 12px; font-size: 13.5px; }
+.ic-wait { color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.ic-compose { display: flex; gap: 8px; align-items: flex-end; }
+.ic-text { flex: 1; min-width: 0; min-height: 36px; max-height: 140px; resize: vertical; font: inherit; font-size: 13.5px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; }
+.ic-text:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+.ic-note { font-size: 12px; color: var(--muted); } .ic-err { color: var(--st-blocked); font-weight: 600; }
+.ic-chip { display: inline-block; font-size: 11px; font-weight: 700; opacity: .8; margin-bottom: 2px; }
 /* settings dialog: local models */
 .set-dialog { width: min(780px, calc(100vw - 32px)); max-height: calc(100vh - 48px); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); padding: 18px 22px; box-shadow: var(--shadow-hover); }
 .set-dialog::backdrop { background: rgba(0, 0, 0, .35); }
@@ -1785,9 +1798,91 @@ async function renderFocus(s, el = $('focus'), forced = null) {
     </div>
     ${now}
     <div class="tabs" role="tablist">${tabs.map(([k, label, ok]) => `<button type="button" class="tab" role="tab" data-tab="${k}" aria-selected="${k === tab}" ${ok ? '' : 'disabled'}>${label}</button>`).join('')}</div>
-    <div class="f-body">${body}</div>`;
+    <div class="f-body">${body}${AGENT_TOKEN ? icHtml(c, tab) : ''}</div>`;
+  icRestore(el);
   if (inDrawer) el.scrollTop = scroll; else if (!ui.boardMax) window.scrollTo(0, scroll);
 }
+
+// ---- inline chat under a tab: a question about this part of the change goes to the assistant (read-only, it
+// remembers the conversation), with the context in front: [About the design of the change x: <files>] question.
+// The exchanges about this tab show right here; "Continue in chat" opens the whole conversation.
+const IC_LABEL = { tasks: 'tasks', proposal: 'proposal', design: 'design', specs: 'spec deltas', validation: 'validation result' };
+const IC_RE = /^\[About the (.+?) of the change ([\w.-]+)(?:: [^\]]*)?\] ([\s\S]*)$/;
+ui.icDrafts = new Map();
+function icTag(c, tab) {
+  const f = (n) => c.files.find((x) => x.name === n)?.path;
+  const cur = currentTask(c);
+  const where = tab === 'tasks' ? `${f('tasks.md') ?? `openspec/changes/${c.name}/tasks.md`}${cur ? `; current task ${cur.i.id} ${cur.i.text}` : ''}`
+    : tab === 'proposal' ? f('proposal.md') ?? '' : tab === 'design' ? f('design.md') ?? ''
+    : tab === 'specs' ? c.specs.files.map((x) => x.path).join(', ')
+    : `openspec validate ${c.name}${c.validation ? (c.validation.valid ? ' passes' : ` reports ${c.validation.issues.length} issues`) : ''}`;
+  return `[About the ${IC_LABEL[tab]} of the change ${c.name}${where ? `: ${where.replace(/[\]\n]/g, ' ')}` : ''}]`;
+}
+function icExchanges(c, tab) {
+  const chats = groupBySession((ag.view?.jobs ?? []).filter((j) => j.kind === 'chat' && (j.mode ?? 'assistant') === 'assistant'));
+  const conv = chats.at(-1);
+  if (!conv) return { list: [], running: false };
+  const prefix = `[About the ${IC_LABEL[tab]} of the change ${c.name}`;
+  const list = [];
+  let cur = null;
+  for (const j of conv.jobs) for (const l of j.log) {
+    if (l.kind === 'user') { cur = l.text.startsWith(prefix) ? { q: l.text.match(IC_RE)?.[3] ?? l.text, t: l.t, a: [] } : null; if (cur) list.push(cur); }
+    else if (l.kind === 'text' && !l.sub && cur) cur.a.push(l.text);
+  }
+  return { list: list.slice(-3), running: ['running', 'starting'].includes(conv.last?.status) };
+}
+function icThreadHtml(c, tab) {
+  const { list, running } = icExchanges(c, tab);
+  return list.map((e, i) => `<div class="ic-q"><span>${esc(e.q)}</span><time>${hhmm(e.t)}</time></div>${e.a.length ? `<div class="ic-a md">${md(e.a.join('\n\n'))}</div>`
+    : i === list.length - 1 && running ? '<div class="ic-a ic-wait"><span class="ag-spin"></span>thinking…</div>' : ''}`).join('');
+}
+function icHtml(c, tab) {
+  const key = `${c.name}|${tab}`;
+  return `<div class="ic" data-ic="${esc(key)}">
+    <div class="ic-thread">${icThreadHtml(c, tab)}</div>
+    <div class="ic-compose"><textarea class="ic-text" rows="1" placeholder="Ask about the ${esc(IC_LABEL[tab])} of ${esc(title(c.name))}…"></textarea><button class="btn" type="button" data-ic-send>Ask</button></div>
+    <div class="ic-note"><span class="ic-err"></span>Goes to the assistant with this context; it reads the project and changes nothing. Enter sends. <button class="link" type="button" data-chat="assistant">Continue in chat →</button></div>
+  </div>`;
+}
+// the tab view is redrawn on every update: keep what is being typed, and the cursor
+function icRestore(el) {
+  for (const ta of el.querySelectorAll('.ic-text')) {
+    const k = ta.closest('.ic').dataset.ic;
+    ta.value = ui.icDrafts.get(k) ?? '';
+    if (ui.icFocus === k) { ta.focus({ preventScroll: true }); const p = Math.min(ui.icCaret ?? ta.value.length, ta.value.length); ta.setSelectionRange(p, p); }
+  }
+}
+function icRefresh() { // new answers: only the threads, not the whole tab view
+  for (const box of document.querySelectorAll('.ic')) {
+    const [name, tab] = box.dataset.ic.split('|');
+    const c = ui.state?.changes.find((x) => x.name === name);
+    const th = box.querySelector('.ic-thread');
+    if (c && th) { const html = icThreadHtml(c, tab); if (th.innerHTML !== html) th.innerHTML = html; }
+  }
+}
+async function icSend(box) {
+  const ta = box.querySelector('.ic-text');
+  const q = ta.value.trim();
+  if (!q) return;
+  const [name, tab] = box.dataset.ic.split('|');
+  const c = ui.state.changes.find((x) => x.name === name);
+  try {
+    await agentPost('chat', { text: `${icTag(c, tab)} ${q}`, mode: 'assistant' });
+    ui.icDrafts.delete(box.dataset.ic); ta.value = ''; box.querySelector('.ic-err').textContent = '';
+  } catch (e) { box.querySelector('.ic-err').textContent = `✕ ${e.message} `; }
+}
+document.addEventListener('focusin', (e) => { ui.icFocus = e.target.matches?.('.ic-text') ? e.target.closest('.ic').dataset.ic : null; });
+document.addEventListener('input', (e) => {
+  if (!e.target.matches?.('.ic-text')) return;
+  ui.icDrafts.set(e.target.closest('.ic').dataset.ic, e.target.value);
+  ui.icCaret = e.target.selectionStart;
+});
+document.addEventListener('keyup', (e) => { if (e.target.matches?.('.ic-text')) ui.icCaret = e.target.selectionStart; });
+document.addEventListener('keydown', (e) => {
+  if (!e.target.matches?.('.ic-text') || e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
+  e.preventDefault(); icSend(e.target.closest('.ic'));
+});
+document.addEventListener('click', (e) => { const b = e.target.closest?.('[data-ic-send]'); if (b) { e.stopPropagation(); icSend(b.closest('.ic')); } }, true);
 
 // ------------------------------------------------------------ render: side
 function renderMilestone(s) {
@@ -2712,7 +2807,7 @@ function connect() {
   es.onopen = () => { $('conn').innerHTML = '<span class="dot on"></span>live'; };
   es.onmessage = (ev) => { const d = JSON.parse(ev.data); $('conn').innerHTML = `<span class="dot on"></span>live · ${hhmm(d.scannedAt)}`; accept(d); };
   es.onerror = () => { $('conn').innerHTML = '<span class="dot off"></span>disconnected, retrying…'; };
-  es.addEventListener('agent', (ev) => { ag.view = JSON.parse(ev.data); renderAgentLive(); });
+  es.addEventListener('agent', (ev) => { ag.view = JSON.parse(ev.data); renderAgentLive(); icRefresh(); });
 }
 
 // ------------------------------------------------------------ interaction
@@ -2947,6 +3042,8 @@ function reactionsIn(jobs) {
   return m;
 }
 function userMsgHtml(l) {
+  const ic = l.text.match(IC_RE);
+  if (ic) return `<div class="msg me"><span class="ic-chip">about the ${esc(ic[1])} · ${esc(title(ic[2]))}</span>${esc(ic[3])}<span class="meta">${hhmm(l.t)}</span></div>`;
   const r = l.text.match(REACT_RE);
   if (r) return `<div class="msg me rx-sent"><span>${esc(r[1] ?? r[2])} ${r[2] ? `${esc(REQUESTS.find(([e]) => e === r[2])?.[2] ?? '')}: ` : ''}<span class="rx-on">${r[2] ? '' : 'on '}“${esc(r[3])}”</span></span><span class="meta">${hhmm(l.t)}</span></div>`;
   const q = l.text.match(QUOTE_RE);

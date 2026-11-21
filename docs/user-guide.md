@@ -79,7 +79,11 @@ the agent works. It updates within a second of every file change. The screenshot
   you can tell whether the agent is still busy.
 - The progress bar has one segment per task group; the group with the current task is outlined.
 - The tabs show the proposal, design, spec deltas and the `openspec validate` result of the change (see
-  [Validation](#validation) below).
+  [Validation](#validation) below). With `--agent`, every tab has a question box below its content: the question
+  goes to the assistant with that context (e.g. "the design of add-due-dates" and its file), and the answer shows
+  right there; **Continue in chat** opens the whole conversation.
+
+![Asking about the design right in the tab](images/dashboard-inline-chat.png)
 - **Current milestone** lists the other changes of the milestone; **Activity** lists every checked-off task and
   status change since the dashboard started, with a chart of tasks done over time.
 - The **Board** shows every change in the column its files put it in. "Waits for #3, #6" names the unfinished

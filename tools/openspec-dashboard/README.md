@@ -197,6 +197,9 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     first sentence, or the selected part, in a fixed form (`[Reaction 👍 to your message: "…"]`,
     `[Request 📝 about your message: "…"]`, `[Replying to your message: "…"]`), which it finds in its own conversation; the whole answer is not sent again.
     Reactions show as small badges on the answer they belong to.
+- **A question box under each tab** of a change (Tasks, Proposal, Design, Spec deltas, Validation): the question
+  goes to the assistant with that part as context (`[About the design of the change x: <file>] …`), the answers
+  about that tab show inline, and the chat marks such messages with their context.
 - **Agent…** on a ticket, with the ticket's context added automatically:
   - **Ask**: a read-only question about the ticket; "Ask about this task" next to the current task prefills one.
   - **Start session**: a new Claude Code session that works on the ticket with the ticket workflow; it opens as a
