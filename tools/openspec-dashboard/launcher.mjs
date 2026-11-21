@@ -2,14 +2,15 @@
 // An app launcher for the OpenSpec dashboard: one click starts the dashboard (if it is not running yet) and opens it
 // in the browser. macOS: an app in ~/Applications (Launchpad, Spotlight, Dock); Linux: a desktop entry.
 //
-//   node launcher.mjs install [--name="OpenSpec Dashboard"] [--port=4590] [--app-window] -- <server options>
+//   node launcher.mjs install [--name="OpenSpec Dashboard"] [--port=4590] [--tab] -- <server options>
 //   node launcher.mjs uninstall [--name="OpenSpec Dashboard"]
 //   node launcher.mjs stop [--port=4590]          stops a dashboard the launcher started
 //
 // Everything after "--" is passed to server.mjs, e.g. `-- --agent --scan=~/code` or `-- --agent --project=~/code/app`.
 // The launcher remembers the folder it was installed from (relative paths in the options start there), this Node.js
-// and the PATH, since an app started from the Dock gets neither a shell nor its PATH. --app-window opens the
-// dashboard in a window of its own (Chrome, Edge or Brave in app mode) instead of a browser tab.
+// and the PATH, since an app started from the Dock gets neither a shell nor its PATH. The dashboard opens in a window
+// of its own, like an app (Chrome, Edge, Brave or Chromium in app mode: no tabs, no address bar); --tab opens it in
+// a tab of the default browser instead (also when none of those browsers is installed).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -50,17 +51,19 @@ fi
 ${open}
 `;
 }
-// how the page is opened: the default browser, or (--app-window) a window of its own in a Chromium browser
+// how the page is opened: a window of its own in a Chromium browser (app mode), or (--tab, or none found) a tab of
+// the default browser
 function openLine() {
+  const appWindow = !opt('tab');
   if (process.platform === 'darwin') {
-    if (opt('app-window')) {
-      const app = ['Google Chrome', 'Microsoft Edge', 'Brave Browser', 'Chromium'].find((a) => fs.existsSync(`/Applications/${a}.app`));
-      if (app) return `open -na ${sh(app)} --args --app="$URL"`;
-      console.log('No Chrome, Edge or Brave found: the launcher opens a browser tab.');
+    if (appWindow) {
+      const app = ['Google Chrome', 'Microsoft Edge', 'Brave Browser', 'Chromium'].find((a) => fs.existsSync(`/Applications/${a}.app`) || fs.existsSync(path.join(os.homedir(), 'Applications', `${a}.app`)));
+      if (app) { console.log(`It opens in a window of its own (${app}, app mode).`); return `open -na ${sh(app)} --args --app="$URL"`; }
+      console.log('No Chrome, Edge, Brave or Chromium found: the launcher opens a browser tab.');
     }
     return 'open "$URL"';
   }
-  if (opt('app-window')) {
+  if (appWindow) {
     const bin = ['google-chrome', 'chromium', 'chromium-browser', 'microsoft-edge', 'brave-browser'].find((b) => { try { execFileSync('which', [b], { stdio: 'ignore' }); return true; } catch { return false; } });
     if (bin) return `${bin} --app="$URL" >/dev/null 2>&1 &`;
   }

@@ -76,14 +76,15 @@ the agent works. It updates within a second of every file change. The screenshot
 
 **As an app.** `launcher.mjs` installs a launcher with the dashboard's logo: on macOS an app in `~/Applications`
 (Launchpad, Spotlight, and in the Dock if you drag it there), on Linux an entry in the application menu. A click
-starts the dashboard if it is not running yet and opens it; the options after `--` are the dashboard's:
+starts the dashboard if it is not running yet and opens it in a window of its own, like an app (Chrome, Edge, Brave
+or Chromium in app mode: no tabs, no address bar); the options after `--` are the dashboard's:
 
 ```sh
 node <path-to>/tools/openspec-dashboard/launcher.mjs install -- --agent --scan=~/code
 ```
 
-`--port=` picks the port (4590 by default), `--name=` the app's name, `--app-window` opens the dashboard in a window
-of its own (Chrome, Edge or Brave in app mode) instead of a browser tab. `launcher.mjs stop` ends a dashboard the
+`--port=` picks the port (4590 by default), `--name=` the app's name, `--tab` opens the dashboard in a tab of the
+default browser instead (also what happens when none of those browsers is installed). `launcher.mjs stop` ends a dashboard the
 launcher started, `launcher.mjs uninstall` removes the launcher.
 
 - **Working on** shows the change in progress and the **current task**, the first unchecked one, with its
