@@ -15,7 +15,7 @@ is any new session or sub-agent that has not seen the implementation.
 when an answer takes more than 30 seconds (adjustable, or off), it runs until the answer is in. The animation is
 shortened.*
 
-![Charts from the git history: cumulative flow, burn-up, cycle time and the critical path](docs/images/dashboard-charts.png)
+![Charts from the git history of a demo project: cumulative flow, burn-up with a forecast, cycle times and the critical path](docs/images/dashboard-charts.png)
 
 The repository contains:
 
@@ -29,8 +29,8 @@ The repository contains:
   changes while agents work on them, with a backlog, charts from the git history and a chat with Claude Code
   (see [below](#the-dashboard)).
 - two sample OpenSpec contexts, [`examples/todo-app`](examples/todo-app) and
-  [`examples/habit-tracker`](examples/habit-tracker), and a short
-  [user guide](docs/user-guide.md) with screenshots.
+  [`examples/habit-tracker`](examples/habit-tracker), a [demo project with four weeks of history](examples/demo-history)
+  to try the charts, and a short [user guide](docs/user-guide.md) with screenshots.
 
 New here? Start with the [user guide](docs/user-guide.md).
 

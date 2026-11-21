@@ -194,7 +194,15 @@ They are built from the git history of `openspec/` and from what the dashboard r
 cover the time before you first started it; hover for values, **Data** shows a table. **○ Focus** shows open work
 only: no archived band in the flow, no archived changes in the cycle times and the dependency graph.
 
-![Charts](images/dashboard-charts.png)
+To try the charts with some history, generate the demo project (a team wiki built up over four weeks, see
+[examples/demo-history](../examples/demo-history)) and start the dashboard on it; the screenshot shows it:
+
+```sh
+node examples/demo-history/make-demo.mjs ~/team-wiki-demo
+node tools/openspec-dashboard/server.mjs ~/team-wiki-demo
+```
+
+![Charts of the demo project](images/dashboard-charts.png)
 
 ### Git history
 
