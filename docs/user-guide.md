@@ -94,10 +94,12 @@ Click a card to open its details next to the board; `Esc` closes them. A link to
 
 ## Styles
 
-The dashboard has three styles, each in light and dark: **Flat** (the default), **Glass** (frosted panels over a
-soft colour field) and **Paper** (post-its on light wooden boards, one colour per column, the current task on a sticky note). The style picker
-in the header switches the style, ◐ switches light and dark; both choices are remembered per browser.
-In a link, `?style=flat|glass|paper` and `?theme=light|dark` set them, e.g.
+The dashboard has five styles: **Flat** (the default), **Glass** (frosted panels over a soft colour field),
+**Paper** (post-its on light wooden boards, one colour per column, the current task on a sticky note),
+**Whiteboard** (marker on a framed whiteboard, cards held by magnets; a dark glass board in dark mode) and
+**Blackboard** (chalk on a green board in a wooden frame; always dark). The style picker in the header switches
+the style, ◐ switches light and dark; both choices are remembered per browser.
+In a link, `?style=flat|glass|paper|whiteboard|blackboard` and `?theme=light|dark` set them, e.g.
 http://127.0.0.1:4590/?style=paper&theme=dark.
 
 | Flat, light | Flat, dark | Glass, dark |
@@ -108,6 +110,15 @@ http://127.0.0.1:4590/?style=paper&theme=dark.
 |---|---|
 | ![Paper style, light](images/style-paper-light.png) | ![Paper style, dark](images/style-paper-dark.png) |
 | ![Paper style, board in full screen, light](images/style-paper-board-light.png) | ![Paper style, board in full screen, dark](images/style-paper-board-dark.png) |
+
+| Whiteboard, light | Whiteboard, dark |
+|---|---|
+| ![Whiteboard style, light](images/style-whiteboard-light.png) | ![Whiteboard style, dark](images/style-whiteboard-dark.png) |
+| ![Whiteboard style, board in full screen](images/style-whiteboard-board-light.png) | |
+
+| Blackboard | Blackboard, board in full screen |
+|---|---|
+| ![Blackboard style](images/style-blackboard.png) | ![Blackboard style, board in full screen](images/style-blackboard-board.png) |
 
 ## Tips
 

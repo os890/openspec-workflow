@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OpenSpec Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Patrick+Hand&family=Courier+Prime:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Patrick+Hand&family=Courier+Prime:wght@400;700&family=Permanent+Marker&family=Cabin+Sketch:wght@400;700&display=swap">
 <style>
 /* Layout: focus card (current change, its current task, its checklist) + side column (milestone, activity),
    then a soft kanban board. Friendly: rounded surfaces, soft shadows, tinted status lanes, readable titles. */
@@ -537,6 +537,194 @@ body.board-max { overflow: hidden; }
 :root[data-style="paper"] details.group > summary .num,
 :root[data-style="paper"] .col-head .t .num { border-radius: 3px; }
 
+/* ---------------------------------------------------------------- style tokens: whiteboard, blackboard
+   Each redefines the base tokens like paper does; dark blocks carry one more selector part. Blackboard is one
+   look in both themes (a blackboard is always dark). */
+:root {
+  --font-marker: "Permanent Marker", "Segoe Print", "Comic Sans MS", cursive;
+  --font-chalk: "Cabin Sketch", "Patrick Hand", "Segoe Print", cursive;
+  --wb-frame: #c5cbd3;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --wb-frame: #3b424d; }
+}
+:root[data-theme="dark"] { --wb-frame: #3b424d; }
+
+:root[data-style="whiteboard"] {
+  --bg: #e6e9ed; --surface: #fdfefe; --surface-2: #f1f3f6; --ink: #1f2430; --muted: #596170; --faint: #98a0ac;
+  --line: #dde2e8; --accent: #1c6fe0; --accent-soft: #e2edfc;
+  --st-proposed: #6b7280; --st-specified: #1c6fe0; --st-progress: #e8590c; --st-complete: #2b9a46;
+  --st-archived: #5a7a68; --st-blocked: #df2f2f; --st-missing: #df2f2f;
+  --radius: 8px; --radius-sm: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-style="whiteboard"]:not([data-theme="light"]) {
+    --bg: #111317; --surface: #1a1e25; --surface-2: #21262e; --ink: #eef1f5; --muted: #a8b0bd; --faint: #6d7684;
+    --line: #2c323c; --accent: #4dabf7; --accent-soft: #1d3247;
+    --st-proposed: #adb5bd; --st-specified: #4dabf7; --st-progress: #ff922b; --st-complete: #51cf66;
+    --st-archived: #8fbfa5; --st-blocked: #ff6b6b; --st-missing: #ff6b6b; color-scheme: dark;
+  }
+}
+:root[data-style="whiteboard"][data-theme="dark"] {
+  --bg: #111317; --surface: #1a1e25; --surface-2: #21262e; --ink: #eef1f5; --muted: #a8b0bd; --faint: #6d7684;
+  --line: #2c323c; --accent: #4dabf7; --accent-soft: #1d3247;
+  --st-proposed: #adb5bd; --st-specified: #4dabf7; --st-progress: #ff922b; --st-complete: #51cf66;
+  --st-archived: #8fbfa5; --st-blocked: #ff6b6b; --st-missing: #ff6b6b; color-scheme: dark;
+}
+:root[data-style="blackboard"],
+:root[data-style="blackboard"][data-theme="light"],
+:root[data-style="blackboard"][data-theme="dark"] {
+  --bg: #1d2225; --surface: #2e483b; --surface-2: #29413500; --ink: #f1f1e8; --muted: #c4ccc1; --faint: #93a598;
+  --line: #4b6658; --accent: #ffe27a; --accent-soft: #3d5546;
+  --st-proposed: #cfd6cc; --st-specified: #92d2ff; --st-progress: #ffb46e; --st-complete: #a8e6a2;
+  --st-archived: #bccbbf; --st-blocked: #ff9ea6; --st-missing: #ff9ea6;
+  --shadow: 0 2px 8px rgba(0, 0, 0, .45); --shadow-hover: 0 4px 14px rgba(0, 0, 0, .55);
+  --radius: 4px; --radius-sm: 3px; color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-style="blackboard"]:not([data-theme="light"]) { --surface-2: #294135; }
+}
+:root[data-style="blackboard"] { --surface-2: #294135; }
+/* ---------------------------------------------------------------- style: whiteboard
+   Aluminium-framed whiteboard: marker headings, marker lines between columns, cards held by magnets. */
+:root[data-style="whiteboard"] header.top h1,
+:root[data-style="whiteboard"] .f-name,
+:root[data-style="whiteboard"] .ms-title,
+:root[data-style="whiteboard"] .board-head .label,
+:root[data-style="whiteboard"] .col-head .t,
+:root[data-style="whiteboard"] .side .label { font-family: var(--font-marker); font-weight: 400 !important; letter-spacing: .01em; }
+:root[data-style="whiteboard"] .f-name { font-size: 28px; }
+:root[data-style="whiteboard"] .side .label { font-size: 16px !important; color: var(--ink); }
+:root[data-style="whiteboard"] .panel,
+:root[data-style="whiteboard"] .drawer {
+  background: linear-gradient(125deg, var(--surface) 0%, var(--surface-2) 38%, var(--surface) 52%, var(--surface-2) 100%);
+  border: 6px solid var(--wb-frame); border-radius: 6px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 6%, transparent), 0 2px 3px color-mix(in srgb, var(--ink) 12%, transparent),
+    0 14px 30px -14px color-mix(in srgb, var(--ink) 30%, transparent);
+}
+:root[data-style="whiteboard"] .board.max { border: 0; border-radius: 0; box-shadow: none; background: var(--surface); }
+:root[data-style="whiteboard"] .cols { gap: 0; }
+:root[data-style="whiteboard"] .col { background: transparent; border-radius: 0; }
+:root[data-style="whiteboard"] .col + .col { border-left: 3px solid color-mix(in srgb, var(--ink) 22%, transparent); }
+:root[data-style="whiteboard"] .col-head { border-bottom: 3px solid var(--st); margin: 0 10px; padding: 10px 2px 8px; border-radius: 0 0 4px 10px; }
+:root[data-style="whiteboard"] .col-head .t::before { display: none; }
+:root[data-style="whiteboard"] .col-head .t { color: var(--st); font-size: 17px; }
+:root[data-style="whiteboard"] .col-head .t .num { color: var(--st); background: transparent; border: 2px solid var(--st); border-radius: 40% 55% 45% 50%; }
+:root[data-style="whiteboard"] .col-body { padding: 16px 12px; gap: 16px; }
+:root[data-style="whiteboard"] .kc {
+  position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding-top: 14px;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 12%, transparent), 0 6px 12px -8px color-mix(in srgb, var(--ink) 25%, transparent);
+}
+:root[data-style="whiteboard"] .kc::before {
+  content: ""; position: absolute; top: -7px; left: 50%; width: 15px; height: 15px; margin-left: -7.5px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--st) 40%, white), var(--st) 62%, color-mix(in srgb, var(--st) 70%, black));
+  box-shadow: 0 2px 3px color-mix(in srgb, var(--ink) 30%, transparent);
+}
+:root[data-style="whiteboard"] .now,
+:root[data-style="whiteboard"] .board-now {
+  background: transparent; border: 3px solid var(--st-progress);
+  border-radius: 255px 18px 225px 18px / 18px 225px 18px 255px;
+}
+:root[data-style="whiteboard"] .now.done { border-color: var(--st-complete); }
+:root[data-style="whiteboard"] .now .t { font-family: var(--font-marker); font-weight: 400; font-size: 17px; }
+:root[data-style="whiteboard"] .pill { background: transparent; border: 2px solid var(--st); border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px; }
+:root[data-style="whiteboard"] .bar,
+:root[data-style="whiteboard"] .seg { background: transparent; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ink) 22%, transparent); border-radius: 255px 12px 225px 12px / 12px 225px 12px 255px; }
+:root[data-style="whiteboard"] .bar > span,
+:root[data-style="whiteboard"] .seg > span { opacity: .85; border-radius: 255px 12px 225px 12px / 12px 225px 12px 255px; }
+:root[data-style="whiteboard"] .box { border: 2px solid var(--ink); border-radius: 45% 55% 50% 48%; }
+:root[data-style="whiteboard"] .task.done .box { background: var(--st-complete); border-color: var(--st-complete); }
+:root[data-style="whiteboard"] .task.cur { background: transparent; box-shadow: inset 0 0 0 2.5px var(--st-progress); border-radius: 255px 14px 225px 14px / 14px 225px 14px 255px; }
+:root[data-style="whiteboard"] details.group.current { background: transparent; }
+:root[data-style="whiteboard"] .tab { border-radius: 0; }
+:root[data-style="whiteboard"] .tab[aria-selected="true"] { background: transparent; color: var(--accent); box-shadow: inset 0 -4px 0 var(--accent); }
+:root[data-style="whiteboard"] .btn,
+:root[data-style="whiteboard"] .style-select,
+:root[data-style="whiteboard"] .ms-filter button,
+:root[data-style="whiteboard"] .live > span,
+:root[data-style="whiteboard"] .board-live { background: var(--surface); border: 1.5px solid var(--line); }
+:root[data-style="whiteboard"] .ms-filter button[aria-pressed="true"] { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+:root[data-style="whiteboard"] .ms-filter button[aria-pressed="true"] b { color: var(--surface); }
+
+/* ---------------------------------------------------------------- style: blackboard
+   Green chalkboard in a wooden frame: chalk dust, chalk lettering, boxes drawn in coloured chalk. */
+:root[data-style="blackboard"] body {
+  background-color: var(--bg);
+  background-image: radial-gradient(rgba(255, 255, 255, .03) 1px, transparent 1.2px);
+  background-size: 7px 7px;
+}
+:root[data-style="blackboard"] .panel,
+:root[data-style="blackboard"] .drawer,
+:root[data-style="blackboard"] .board.max {
+  background-color: var(--surface);
+  background-image:
+    radial-gradient(60% 40% at 30% 20%, rgba(255, 255, 255, .06), transparent 70%),
+    radial-gradient(50% 35% at 80% 75%, rgba(255, 255, 255, .05), transparent 70%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='d'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1.4 -0.95'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23d)'/%3E%3C/svg%3E");
+  border: 12px solid transparent; border-radius: 3px;
+  border-image: linear-gradient(135deg, #a8743f, #7a4e28 35%, #9b693b 60%, #6c4322) 1;
+  box-shadow: 0 10px 24px -10px rgba(0, 0, 0, .7);
+}
+:root[data-style="blackboard"] .board.max { border: 0; border-image: none; border-radius: 0; box-shadow: none; }
+:root[data-style="blackboard"] header.top h1,
+:root[data-style="blackboard"] .f-name,
+:root[data-style="blackboard"] .ms-title,
+:root[data-style="blackboard"] .board-head .label,
+:root[data-style="blackboard"] .col-head .t,
+:root[data-style="blackboard"] .side .label,
+:root[data-style="blackboard"] .now .t { font-family: var(--font-chalk); font-weight: 700 !important; letter-spacing: .02em; }
+:root[data-style="blackboard"] .f-name { font-size: 32px; }
+:root[data-style="blackboard"] .side .label { font-size: 18px !important; color: var(--ink); }
+:root[data-style="blackboard"] .kc-name { font-family: var(--font-hand); font-weight: 400; font-size: 17px; }
+:root[data-style="blackboard"] .panel,
+:root[data-style="blackboard"] .board.max,
+:root[data-style="blackboard"] .drawer { text-shadow: 0 0 1px rgba(255, 255, 255, .25); }
+:root[data-style="blackboard"] .col { background: transparent; border-radius: 0; }
+:root[data-style="blackboard"] .cols { gap: 0; }
+:root[data-style="blackboard"] .col + .col { border-left: 2px solid color-mix(in srgb, var(--ink) 30%, transparent); }
+:root[data-style="blackboard"] .col-head { border-bottom: 2px solid var(--st); margin: 0 10px; padding: 10px 2px 8px; }
+:root[data-style="blackboard"] .col-head .t { color: var(--st); font-size: 18px; }
+:root[data-style="blackboard"] .col-head .t::before { display: none; }
+:root[data-style="blackboard"] .col-head .t .num,
+:root[data-style="blackboard"] details.group > summary .num { background: transparent; border: 1.5px solid currentColor; }
+:root[data-style="blackboard"] .col-body { padding: 14px 12px; gap: 14px; }
+:root[data-style="blackboard"] .kc {
+  background: color-mix(in srgb, var(--st) 8%, transparent); border: 2px solid color-mix(in srgb, var(--st) 75%, transparent);
+  border-radius: 255px 14px 225px 14px / 14px 225px 14px 255px; box-shadow: none;
+}
+:root[data-style="blackboard"] .kc:hover { box-shadow: 0 0 0 1px color-mix(in srgb, var(--st) 60%, transparent); transform: none; }
+:root[data-style="blackboard"] .kc.focus { box-shadow: 0 0 0 2px var(--accent); }
+:root[data-style="blackboard"] .kc-top .m { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
+:root[data-style="blackboard"] .now,
+:root[data-style="blackboard"] .board-now {
+  background: color-mix(in srgb, var(--st-progress) 8%, transparent); border: 2px solid var(--st-progress);
+  border-radius: 255px 16px 225px 16px / 16px 225px 16px 255px;
+}
+:root[data-style="blackboard"] .now.done { border-color: var(--st-complete); background: color-mix(in srgb, var(--st-complete) 8%, transparent); }
+:root[data-style="blackboard"] .now .tag { color: var(--surface); }
+:root[data-style="blackboard"] .pill { background: transparent; border: 1.5px solid var(--st); }
+:root[data-style="blackboard"] .bar,
+:root[data-style="blackboard"] .seg { background: transparent; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 35%, transparent); }
+:root[data-style="blackboard"] .bar > span,
+:root[data-style="blackboard"] .seg > span { opacity: .85; }
+:root[data-style="blackboard"] .box { border: 2px solid var(--ink); border-radius: 45% 55% 50% 48%; }
+:root[data-style="blackboard"] .task.done .box { background: var(--st-complete); border-color: var(--st-complete); }
+:root[data-style="blackboard"] .task.done .box::after { border-color: var(--surface); }
+:root[data-style="blackboard"] .task.cur { background: color-mix(in srgb, var(--st-progress) 14%, transparent); }
+:root[data-style="blackboard"] details.group.current { background: transparent; }
+:root[data-style="blackboard"] .tab { border-radius: 0; }
+:root[data-style="blackboard"] .tab[aria-selected="true"] { background: transparent; color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); }
+:root[data-style="blackboard"] .btn,
+:root[data-style="blackboard"] .style-select,
+:root[data-style="blackboard"] .ms-filter button,
+:root[data-style="blackboard"] .live > span,
+:root[data-style="blackboard"] .board-live { background: transparent; border: 1.5px solid color-mix(in srgb, var(--ink) 40%, transparent); color: var(--ink); }
+:root[data-style="blackboard"] .style-select option { background: var(--surface); }
+:root[data-style="blackboard"] .ms-filter button b { color: var(--ink); }
+:root[data-style="blackboard"] .ms-filter button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+:root[data-style="blackboard"] .ms-filter button[aria-pressed="true"] b { color: var(--accent); }
+:root[data-style="blackboard"] code { background: color-mix(in srgb, var(--ink) 10%, transparent); }
+
 @media (max-width: 1000px) {
   .main { grid-template-columns: 1fr; }
   .board.max { overflow: auto; }
@@ -563,7 +751,7 @@ body.board-max { overflow: hidden; }
       <span id="conn"><span class="dot"></span>connecting…</span>
       <span id="cli"></span>
       <select id="style" class="style-select" aria-label="Style" title="Visual style">
-        <option value="flat">Flat</option><option value="glass">Glass</option><option value="paper">Paper</option>
+        <option value="flat">Flat</option><option value="glass">Glass</option><option value="paper">Paper</option><option value="whiteboard">Whiteboard</option><option value="blackboard">Blackboard</option>
       </select>
       <button class="btn" id="theme" type="button" aria-label="Toggle light or dark theme">◐</button>
     </div>
@@ -594,7 +782,7 @@ const STATUS = {
 const ui = { state: null, pinned: null, tab: 'tasks', open: new Map(), fileCache: new Map(), fresh: new Set(), prevCol: new Map(), ms: '', boardMax: false, drawer: null, drawerScroll: 0, colScroll: new Map() };
 try { const t = localStorage.getItem('osd-theme'); if (t) document.documentElement.dataset.theme = t; ui.ms = localStorage.getItem('osd-ms') || ''; } catch {}
 // visual style: flat (default) or glass; ?style=glass overrides the remembered choice
-const STYLES = ['flat', 'glass', 'paper'];
+const STYLES = ['flat', 'glass', 'paper', 'whiteboard', 'blackboard'];
 function applyStyle(name) {
   const st = STYLES.includes(name) ? name : 'flat';
   if (st === 'flat') delete document.documentElement.dataset.style; else document.documentElement.dataset.style = st;

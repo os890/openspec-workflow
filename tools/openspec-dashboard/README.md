@@ -73,7 +73,7 @@ Without a working CLI everything except the validation results still works.
 | `--history=<file>` | `$XDG_STATE_HOME/openspec-dashboard/<project>-<hash>.json` (`~/.local/state/…`) | activity history |
 | `--no-open` | | do not open the browser (macOS) |
 
-Three styles, each in light and dark: Flat, Glass and Paper (picker in the header). In the address, `?style=flat|glass|paper` and `?theme=light|dark` choose the look (otherwise the header buttons and the
+Five styles, picked in the header: Flat, Glass, Paper, Whiteboard (each in light and dark) and Blackboard (always dark). In the address, `?style=flat|glass|paper|whiteboard|blackboard` and `?theme=light|dark` choose the look (otherwise the header buttons and the
 system setting decide), and `?snapshot` loads the data once without the live stream (useful for screenshots).
 
 ## Notes
