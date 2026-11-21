@@ -207,9 +207,15 @@ choose: for Rephrase a container with its image and model, a local server such a
 Apple's on-device model on macOS 26 with Apple Intelligence, or off; for speech-to-text the whisper image, or off.
 **Test** tries the setting with a sample sentence, **Load now** starts a container model before you need it.
 
-The **Podman** tab of the same dialog shows how the Podman VM is doing (memory, CPU load, disk) and its containers.
-When it is stuck or full, **Restart the VM** stops and starts it; the containers you checked as "start after restart"
-come back, the others stay stopped.
+![Settings: the local models in use](images/dashboard-settings-models.png)
+
+The **Podman** tab of the same dialog shows how the Podman VM is doing (memory, CPU load, disk) and its containers:
+the 15 used last at the top (running ones first), then all others by name, each with a **Start** or **Stop**
+button. When the VM is stuck or full, **Restart the VM** stops and starts it; the containers you checked (↻) come
+back, the others stay stopped. The dashboard's own model container cannot be checked: it is removed when it stops
+and started again on the next request.
+
+![Settings: the Podman VM and its containers](images/dashboard-settings-podman.png)
 
 Every question, chat message and session is a normal Claude Code run and counts towards your plan. Details:
 [dashboard README](../tools/openspec-dashboard/README.md#agent-panel-optional).

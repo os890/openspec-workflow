@@ -242,8 +242,9 @@ how much the VM has available, and which other model container is running.
 
 **Podman (⚙ › Podman).** Local models, speech-to-text and a containerised OpenSpec CLI all share one Podman VM on
 macOS and Windows, so the second tab shows how it is doing: the VM's memory, CPU load and disk (with images and how
-much of it is reclaimable), and its containers with their state and memory, the running ones first. Containers can
-be started and stopped there. **Restart the VM** stops it (every container in it stops) and starts it again, then
+much of it is reclaimable), and its containers with their state and memory: the 15 used last at the top (running
+ones count as in use now, never-started ones as not used), then all others by name. Containers can be started and
+stopped there; the list keeps its place while it refreshes. **Restart the VM** stops it (every container in it stops) and starts it again, then
 starts the containers checked as "start after restart" and checks the local models and the OpenSpec CLI again; the
 dialog shows each step. Containers started with `--rm` (like the dashboard's model container) disappear when they
 stop and cannot be checked. The checked containers are saved in the same `settings.json`.
