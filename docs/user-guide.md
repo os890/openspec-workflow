@@ -282,7 +282,8 @@ Each card shows the change being worked on and its current task, the task progre
 coloured bar), the current milestone, validation problems and when something last happened; the most recently
 active project comes first and the cards update live. Click a card, or pick the project in the header, to open its
 dashboard; **All projects** in the picker returns to the overview. Projects with the same folder name are told apart
-by the end of their path, e.g. `examples/todo-app` and `acme/todo-app`, on the cards, in the picker and in the title.
+by the end of their path, e.g. `examples/todo-app` and `acme/todo-app`, on the cards, in the picker and in the title,
+and so are the folders in the list of projects to onboard below.
 
 ### Archive and unfollow
 

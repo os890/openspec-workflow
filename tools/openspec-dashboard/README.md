@@ -25,7 +25,8 @@ most recently active first and updated live. A card (or the project picker in th
 dashboard; `?project=<id>` in the address links to it directly. Each project keeps its own history, and OpenSpec
 CLI calls for all projects run one at a time. Projects with the same folder name (followed, archived or unfollowed)
 are labelled with the shortest end of their path that tells them apart (`examples/todo-app`, `acme/todo-app`) on the
-cards, in the picker, the title and the history panel.
+cards, in the picker, the title and the history panel; candidates to onboard likewise (also against followed
+projects), in the list, the chat and the progress dialog.
 
 **What a followed project costs.** A watcher on `openspec/` plus a re-read every 5 s; the workspace scan (the
 modification time of every file, up to 40,000, without `node_modules`, `.git` and the like, for "files written

@@ -798,7 +798,7 @@ function createProject(root, id, historyFile, onChange) {
   // The overview: what someone glancing at several projects needs, computed from the full state.
   function summary() {
     const s = project.state;
-    if (!s) return { id, name: project.name, label: labelOf(root), displayPath: displayPath(root), loading: true };
+    if (!s) return { id, name: project.name, root, label: labelOf(root), displayPath: displayPath(root), loading: true };
     const rank = { 'in-progress': 0, complete: 1, specified: 2 };
     const active = s.changes.filter((c) => c.status in rank)
       .sort((a, b) => rank[a.status] - rank[b.status] || (b.lastModified ?? 0) - (a.lastModified ?? 0));
@@ -812,7 +812,7 @@ function createProject(root, id, historyFile, onChange) {
     const msChanges = ms ? s.changes.filter((c) => c.milestone === ms.id) : [];
     const lastActivity = Math.max(s.events[0]?.t ?? 0, s.workspace.recent[0]?.mtime ?? 0, ...s.changes.map((c) => c.lastModified ?? 0)) || null;
     return {
-      id, name: s.project, label: labelOf(root), displayPath: displayPath(root),
+      id, name: s.project, root, label: labelOf(root), displayPath: displayPath(root),
       totals: s.totals,
       counts,
       changes: s.changes.filter(isTicket).length,
