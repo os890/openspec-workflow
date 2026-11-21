@@ -378,7 +378,9 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     and returns it with the transcript (`ask`, an id from the question and its options). `POST
     /api/agent/answer` checks that the same menu is on screen, then types the option's digit (one question, one
     choice; the digit picks and submits, the Return that follows goes to the empty prompt) or "Chat about this"'s
-    digit, waits until the session is idle and types the answers as one message. Answered questions come from the
+    digit, waits until the session is idle and types the answers as one message. `{ recommended: true }` (👍 on the
+    card) takes the options whose label says "(Recommended)" (all of them for several choices), and with further
+    questions asks for its recommendation for each. Answered questions come from the
     transcript (the tool call and its result).
   - **Context gauge**: the session list, the transcript and `/api/sessions/status` carry `ctx` (`used`, `window`,
     `compactions`): `used` from the last main-chain assistant message's `usage` (input + cache creation + cache read

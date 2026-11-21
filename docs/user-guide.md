@@ -387,8 +387,10 @@ thread as a card: the question, its options as buttons (one or several, as the q
 answer, and **Send answer**. It goes to the terminal as if you answered there: a single choice picks the option in
 the menu; your own answer, several choices or several questions at once close the menu with "Chat about this" and
 follow as a message (`[Answers to your questions] Which color? → Purple · Size: Large`), since the terminal shows one
-question at a time. For the further questions the card has one field. Answered questions stay in the thread with
-their answer. A permission prompt is not such a question: answer that in the terminal.
+question at a time. For the further questions the card has one field. When Claude marks options as recommended (they get a small
+**recommended** badge), **👍 Recommended** takes them in one click: the recommended option (or all recommended ones
+when several may be chosen), and with several questions its recommendation for each. Answered questions stay in the
+thread with their answer. A permission prompt is not such a question: answer that in the terminal.
 
 **How full its context is.** Next to the session's state, a small bar shows how much of the context window the
 session uses, e.g. **45k / 200k**: amber from 60 %, orange from 80 %, when Claude Code will soon compact the

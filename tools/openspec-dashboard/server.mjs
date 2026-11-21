@@ -1358,7 +1358,7 @@ function screenAsk(screen) {
   const tabs = tabLine ? [...tabLine.matchAll(/[☐☒]\s+(.+?)(?=\s{2,}|$)/g)].map((m) => m[1].trim()) : [];
   const question = qLines.join(' ').trim();
   if (!question) return null;
-  return { question, multi, tabs, options: options.map(({ label, description }) => ({ label, description: description === label ? '' : description })), chat };
+  return { question, multi, tabs, options: options.map(({ label, description }) => ({ label, description: description === label || description === label.replace(/\s*\(recommended\)/i, '') ? '' : description })), chat };
 }
 const askIdOf = (a) => createHash('sha1').update(`${a.question}|${a.options.map((o) => o.label).join('|')}`).digest('hex').slice(0, 12);
 const screenAskCache = new Map(); // pid -> { t, ask }
@@ -1899,10 +1899,17 @@ function createAgent(project) {
     // the same menu has to be on its screen right now (never a digit into another prompt)
     const q = await screenAskOf(x.pid, true);
     if (!q || q.id !== id) throw httpError(409, 'That question is not on the screen of its terminal any more (answered already?).');
-    const picks = (Array.isArray(a.choices) ? a.choices : a.choice != null ? [a.choice] : []).map(Number).filter((k) => q.options[k]);
-    const said = typeof a.text === 'string' && a.text.trim() ? a.text.trim().slice(0, 1000) : picks.map((k) => q.options[k].label).join(', ');
-    if (!said) throw httpError(400, 'Pick an option or write an answer.');
     const others = q.tabs.length > 1 ? q.tabs.slice(1) : [];
+    // 👍: the recommended option(s) ("(Recommended)" in the label); with further questions, its recommendation for each
+    const REC = /\(recommended\)/i, rec = q.options.map((o, k) => (REC.test(o.label) ? k : -1)).filter((k) => k >= 0);
+    if (a.recommended) {
+      if (!rec.length && !others.length) throw httpError(400, 'None of its options is marked as recommended.');
+      if (others.length) rest = 'your recommended option for each of these, as you suggested';
+      a = rec.length ? (q.multi ? { choices: rec } : { choice: rec[0] }) : { text: 'your recommended option' };
+    }
+    const picks = (Array.isArray(a.choices) ? a.choices : a.choice != null ? [a.choice] : []).map(Number).filter((k) => q.options[k]);
+    const said = typeof a.text === 'string' && a.text.trim() ? a.text.trim().slice(0, 1000) : picks.map((k) => q.options[k].label.replace(REC, '').trim()).join(', ');
+    if (!said) throw httpError(400, 'Pick an option or write an answer.');
     if (others.length && !String(rest ?? '').trim()) throw httpError(400, `It asks more: ${others.join(', ')}. Add those answers too.`);
     if (!others.length && !q.multi && !(a.text?.trim()) && picks.length === 1) { await termScript(q.tty, 'type', String(picks[0] + 1)); screenAskCache.delete(x.pid); return { answered: 'direct' }; }
     await termScript(q.tty, 'type', String(q.chat)); // "Chat about this": the menu closes

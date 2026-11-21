@@ -339,6 +339,8 @@ span.ch-warn { color: var(--st-progress); }
 .ask-opts { display: flex; flex-wrap: wrap; gap: 6px; }
 .ask-opt { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 10px; padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer; max-width: 100%; }
 .ask-opt span { font-size: 12px; color: var(--muted); }
+.ask-rec { font-style: normal; font-size: 10.5px; font-weight: 700; color: var(--st-complete); border: 1px solid currentColor; border-radius: 999px; padding: 0 6px; margin-left: 4px; vertical-align: 1px; }
+.ask-opt.rec { border-color: color-mix(in srgb, var(--st-complete) 55%, var(--line)); }
 .ask-opt[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
 .ask-opt:disabled { cursor: default; opacity: .75; }
 .ask-text { font: inherit; font-size: 13px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
@@ -3692,20 +3694,20 @@ function askCardHtml(q, canAnswer) {
   const st = askState.get(q.id) ?? {}, a = askOf(q.id), off = !canAnswer || st.sent || st.busy;
   return `<div class="ask-card" data-ask="${esc(q.id)}"><div class="ask-h">❓ Claude asks you${q.tabs.length > 1 ? ` (${q.tabs.length} questions)` : ''}</div>
     <div class="ask-block">${q.tabs[0] ? `<span class="ask-tag">${esc(q.tabs[0])}</span>` : ''}<div class="ask-q">${esc(q.question)}${q.multi ? ' <span class="muted">(several possible)</span>' : ''}</div>
-      <div class="ask-opts">${q.options.map((o, k) => `<button type="button" class="ask-opt" data-ask-opt="${k}" aria-pressed="${a.picks.has(k)}" ${off ? 'disabled' : ''}><b>${k + 1}. ${esc(o.label)}</b>${o.description ? `<span>${esc(o.description)}</span>` : ''}</button>`).join('')}</div>
+      <div class="ask-opts">${q.options.map((o, k) => { const rec = /\(recommended\)/i.test(o.label); return `<button type="button" class="ask-opt ${rec ? 'rec' : ''}" data-ask-opt="${k}" aria-pressed="${a.picks.has(k)}" ${off ? 'disabled' : ''}><b>${k + 1}. ${esc(o.label.replace(/\s*\(recommended\)/i, ''))}${rec ? ' <i class="ask-rec">recommended</i>' : ''}</b>${o.description ? `<span>${esc(o.description)}</span>` : ''}</button>`; }).join('')}</div>
       <input class="ask-text" data-ask-text value="${esc(a.text)}" placeholder="…or your own answer" ${off ? 'disabled' : ''}></div>
     ${q.tabs.length > 1 ? `<div class="ask-block"><div class="ask-q">${esc(q.tabs.slice(1).join(', '))} <span class="muted">· the terminal shows one question at a time; your answers to the others go along as text</span></div><input class="ask-text" data-ask-rest value="${esc(a.rest)}" placeholder="Your answers to ${esc(q.tabs.slice(1).join(', '))}" ${off ? 'disabled' : ''}></div>` : ''}
-    ${canAnswer ? `<div class="ag-row"><button class="btn primary" type="button" data-ask-send ${askReady(q) && !off ? '' : 'disabled'}>${st.busy ? '<span class="ag-spin"></span>Answering…' : st.sent ? '✓ Sent' : 'Send answer'}</button>${st.err ? `<span class="ag-note warn">✕ ${esc(st.err)}</span>` : '<span class="ag-note">goes to its terminal as if you answered it there</span>'}</div>`
+    ${canAnswer ? `<div class="ag-row">${q.options.some((o) => /\(recommended\)/i.test(o.label)) || q.tabs.length > 1 ? `<button class="btn" type="button" data-ask-rec ${off ? 'disabled' : ''} title="${q.tabs.length > 1 ? 'Take its recommended option for every question' : q.multi ? 'Take all the options it recommends' : 'Take the option it recommends'}">👍 Recommended</button>` : ''}<button class="btn primary" type="button" data-ask-send ${askReady(q) && !off ? '' : 'disabled'}>${st.busy ? '<span class="ag-spin"></span>Answering…' : st.sent ? '✓ Sent' : 'Send answer'}</button>${st.err ? `<span class="ag-note warn">✕ ${esc(st.err)}</span>` : '<span class="ag-note">goes to its terminal as if you answered it there</span>'}</div>`
       : '<div class="ag-note">Answer it in its terminal, or <b>✎ Write to it</b> to answer here.</div>'}</div>`;
 }
 document.addEventListener('click', async (e) => {
-  const opt = e.target.closest?.('[data-ask-opt]'), send = e.target.closest?.('[data-ask-send]');
-  if (!opt && !send) return;
+  const opt = e.target.closest?.('[data-ask-opt]'), send = e.target.closest?.('[data-ask-send]'), recb = e.target.closest?.('[data-ask-rec]');
+  if (!opt && !send && !recb) return;
   const q = termLog.get(ag.term)?.ask, id = e.target.closest('[data-ask]')?.dataset.ask;
   if (!q || q.id !== id) return;
   const a = askOf(id);
   if (opt) { const k = Number(opt.dataset.askOpt); if (q.multi) { if (a.picks.has(k)) a.picks.delete(k); else a.picks.add(k); } else a.picks = new Set([k]); a.text = ''; return renderAgentLive(); }
-  const answer = a.text.trim() ? { text: a.text.trim() } : q.multi ? { choices: [...a.picks] } : { choice: [...a.picks][0] };
+  const answer = recb ? { recommended: true } : a.text.trim() ? { text: a.text.trim() } : q.multi ? { choices: [...a.picks] } : { choice: [...a.picks][0] };
   askState.set(id, { busy: true }); renderAgentLive();
   try { await agentPost('answer', { session: ag.term, id, answer, rest: a.rest }); askState.set(id, { sent: true }); const L = termLog.get(ag.term); if (L) { L.sentAt = Date.now(); L.waitStart = L.sentAt; } }
   catch (err) { askState.set(id, { err: err.message }); }
