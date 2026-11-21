@@ -91,7 +91,9 @@ or **Install** in the address bar (Safari: File › Add to Dock). It then runs i
 the Dock, where it can stay (right click › Options › Keep in Dock); the launcher opens it from then on. A web app
 cannot start the dashboard by itself, so install the launcher with `--service`: the dashboard then runs from login
 on (macOS: a LaunchAgent, restarted if it ends; Linux: a systemd user service), and the pinned icon always finds
-it. `launcher.mjs uninstall` removes the service as well.
+it. Once the web app is installed, the launcher app is no longer needed: `launcher.mjs install --service --no-app
+-- <options>` keeps only the service and removes the launcher app. `launcher.mjs uninstall` removes the service as
+well.
  `launcher.mjs stop` ends a dashboard the
 launcher started, `launcher.mjs uninstall` removes the launcher.
 

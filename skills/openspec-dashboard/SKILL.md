@@ -30,7 +30,8 @@ Run it in the background (`nohup … &`) so the session can go on; stop it with 
 `launcher.mjs stop` ends a dashboard it started, `launcher.mjs uninstall` removes the app. Run `install` again
 after changing the options. For an icon of its own in the Dock, the user installs the page as a web app (Chrome:
 Install in the address bar; Safari: File › Add to Dock); add `--service` to `install` so the dashboard runs from
-login on and the pinned web app always finds it (macOS LaunchAgent, Linux systemd user service).
+login on and the pinned web app always finds it (macOS LaunchAgent, Linux systemd user service); with the web app
+installed, `install --service --no-app` keeps only the service, without a second app in Launchpad.
 
 ## With `--agent`
 

@@ -2,7 +2,7 @@
 // An app launcher for the OpenSpec dashboard: one click starts the dashboard (if it is not running yet) and opens it
 // in the browser. macOS: an app in ~/Applications (Launchpad, Spotlight, Dock); Linux: a desktop entry.
 //
-//   node launcher.mjs install [--name="OpenSpec Dashboard"] [--port=4590] [--tab] [--service] -- <server options>
+//   node launcher.mjs install [--name="OpenSpec Dashboard"] [--port=4590] [--tab] [--service] [--no-app] -- <server options>
 //   node launcher.mjs uninstall [--name="OpenSpec Dashboard"]
 //   node launcher.mjs stop [--port=4590]          stops a dashboard the launcher started
 //
@@ -13,7 +13,8 @@
 // a tab of the default browser instead (also when none of those browsers is installed). Once the page is installed as
 // a web app (Chrome: Install in the address bar; it gets its own icon in the Dock), the launcher opens that app.
 // --service keeps the dashboard running from login on (macOS: a LaunchAgent; Linux: a systemd user service), so the
-// installed web app, pinned to the Dock, always finds it; `uninstall` removes the service too.
+// installed web app, pinned to the Dock, always finds it; `uninstall` removes the service too. With the web app
+// installed, the launcher app itself is not needed any more: --no-app (with --service) installs only the service.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -127,12 +128,13 @@ const agentPlist = path.join(os.homedir(), 'Library', 'LaunchAgents', `${label}.
 const unitFile = path.join(os.homedir(), '.config', 'systemd', 'user', `${slug}-${port}.service`);
 const xml = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 // macOS names a process (Activity Monitor, the login items) after the program it runs: the service starts Node.js
-// through a link named after the dashboard, inside the launcher app, which the service is also associated with
+// through a link named after the dashboard (in the state folder, so it works without the launcher app), and is
+// associated with the launcher app when there is one
 const appDir = path.join(os.homedir(), 'Applications', `${name}.app`);
 const bundleId = `local.openspec-dashboard.${slug}`;
 function namedNode() {
-  const link = path.join(appDir, 'Contents', 'MacOS', name.replace(/\//g, '-'));
-  try { fs.rmSync(link, { force: true }); fs.symlinkSync(nodeBin, link); return link; } catch { return nodeBin; }
+  const link = path.join(STATE_DIR, 'bin', name.replace(/\//g, '-'));
+  try { fs.mkdirSync(path.dirname(link), { recursive: true }); fs.rmSync(link, { force: true }); fs.symlinkSync(nodeBin, link); return link; } catch { return nodeBin; }
 }
 function installService() {
   const prog = [process.platform === 'darwin' ? namedNode() : nodeBin, path.join(HERE, 'server.mjs'), ...args];
@@ -142,8 +144,7 @@ function installService() {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>Label</key><string>${label}</string>
-  <key>AssociatedBundleIdentifiers</key><array><string>${xml(bundleId)}</string></array>
-  <key>ProgramArguments</key><array>${prog.map((a) => `<string>${xml(a)}</string>`).join('')}</array>
+${fs.existsSync(appDir) ? `  <key>AssociatedBundleIdentifiers</key><array><string>${xml(bundleId)}</string></array>\n` : ''}  <key>ProgramArguments</key><array>${prog.map((a) => `<string>${xml(a)}</string>`).join('')}</array>
   <key>WorkingDirectory</key><string>${xml(process.cwd())}</string>
   <key>EnvironmentVariables</key><dict><key>PATH</key><string>${xml(process.env.PATH ?? '/usr/bin:/bin')}</string></dict>
   <key>RunAtLoad</key><true/>
@@ -193,7 +194,11 @@ function stop() {
 }
 
 if (cmd === 'install') {
-  if (process.platform === 'darwin') installMac();
+  if (opt('no-app') && !opt('service')) { console.error('--no-app only makes sense with --service.'); process.exit(1); }
+  if (opt('no-app')) {
+    // only the service; a launcher app installed earlier goes (the web app opens the dashboard)
+    if (process.platform === 'darwin' && fs.existsSync(appDir)) { fs.rmSync(appDir, { recursive: true, force: true }); console.log(`Removed the launcher app ${appDir}`); }
+  } else if (process.platform === 'darwin') installMac();
   else if (process.platform === 'linux') installLinux();
   if (opt('service') && ['darwin', 'linux'].includes(process.platform)) installService();
   else { console.error('The launcher supports macOS and Linux; on Windows, start server.mjs from a shortcut.'); process.exit(1); }
