@@ -335,6 +335,19 @@ span.ch-warn { color: var(--st-progress); }
 .ed-skip { color: var(--faint); font-style: italic; padding: 2px 18px; }
 .ed-done { font-size: 12.5px; color: var(--muted); }
 .ed-card .btn.primary { background: var(--accent) !important; color: var(--bg) !important; border-color: var(--accent) !important; font-weight: 700; }
+/* the "Propose an update" dialog */
+.pd-dialog { width: min(820px, calc(100vw - 32px)); overflow: auto; }
+.pd-ctx { font-size: 13px; margin: 2px 0 8px; } .pd-ctx code { font-size: 11.5px; }
+.pd-issues { font-size: 12.5px; background: color-mix(in srgb, var(--st-blocked) 10%, transparent); border-radius: 8px; padding: 6px 10px; margin-bottom: 8px; }
+.pd-cur { border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; margin-bottom: 10px; }
+.pd-cur summary { cursor: pointer; font-size: 12.5px; color: var(--muted); padding: 2px 0; }
+.pd-cur .md { max-height: 240px; overflow: auto; font-size: 13px; padding: 4px 0 8px; }
+.pd-what { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.pd-what textarea { font: inherit; font-size: 13.5px; font-weight: 400; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; resize: vertical; }
+.pd-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; font-size: 12px; }
+.pd-chips .chip { font-size: 12px; }
+.pd-disc { font-size: 12.5px; margin: 4px 0 6px; display: flex; gap: 6px; align-items: center; }
+.pd-result { margin-top: 6px; }
 /* inline chat under the tabs of a change */
 .ic { margin-top: 18px; border-top: 1px dashed var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
 .ic-thread { display: flex; flex-direction: column; gap: 6px; }
@@ -1559,6 +1572,7 @@ body.ag-max { overflow: hidden; }
   <section class="panel board" id="board"></section>
 </div>
 <dialog class="set-dialog" id="settings" aria-labelledby="set-title"></dialog>
+<dialog class="set-dialog pd-dialog" id="propose" aria-labelledby="pd-title"></dialog>
 <aside class="drawer agent-panel" id="agent" aria-label="Agent" hidden></aside>
 
 <script>
@@ -1840,7 +1854,7 @@ function icExchanges(c, tab) {
   const list = [];
   let cur = null;
   for (const j of conv.jobs) for (const l of j.log) {
-    if (l.kind === 'user') { cur = l.text.startsWith(prefix) ? { q: (l.text.match(IC_RE)?.[3] ?? l.text).replace(/^Please propose an updated version of (\S+?)(?: that does this: (.*?)| (that applies what we discussed)[^.,:]*|(: review it)[^.]*?)?(?:, so that openspec validate passes)?\. Write the complete new content[\s\S]*$/, (_, f, what, disc, review) => `✎ Propose an update${what ? `: ${what}` : disc ? ' from what we discussed' : review ? ': review and improve it' : ''}`), t: l.t, a: [], key: '' } : null; if (cur) list.push(cur); }
+    if (l.kind === 'user') { cur = l.text.startsWith(prefix) ? { q: (l.text.match(IC_RE)?.[3] ?? l.text).replace(/^Please propose an updated version of \S+? that does this: ([\s\S]*?)(?: Take what we discussed about [^.]* into account\.)? Write the complete new content[\s\S]*$/, (_, what) => `✎ Propose an update: ${what.replace(/\.$/, '')}`), t: l.t, a: [], key: '' } : null; if (cur) list.push(cur); }
     else if (l.kind === 'text' && !l.sub && cur) { if (!cur.key) cur.key = `${j.id}:${l.t}`; cur.a.push(l.text); }
   }
   return { list: list.slice(-3), running: ['running', 'starting'].includes(conv.last?.status) };
@@ -1854,7 +1868,7 @@ function icHtml(c, tab) {
   const key = `${c.name}|${tab}`;
   return `<div class="ic" data-ic="${esc(key)}">
     <div class="ic-thread">${icThreadHtml(c, tab)}</div>
-    <div class="ic-compose"><textarea class="ic-text" rows="1" placeholder="Ask about the ${esc(IC_LABEL[tab])} of ${esc(title(c.name))}…"></textarea><button class="btn" type="button" data-ic-send>Ask</button>${icFiles(c, tab).length ? `<button class="btn" type="button" data-ic-propose title="Ask Claude for an updated version of ${esc(icFiles(c, tab).join(', '))}: with what you type here as the instructions; with an empty box ${icExchanges(c, tab).list.length ? 'from what was discussed about it above' : 'Claude reviews it and proposes what it would improve'}. You see a diff and accept or reject it.">✎ Propose update</button>` : ''}</div>
+    <div class="ic-compose"><textarea class="ic-text" rows="1" placeholder="Ask about the ${esc(IC_LABEL[tab])} of ${esc(title(c.name))}…"></textarea><button class="btn" type="button" data-ic-send disabled>Ask</button>${icFiles(c, tab).length ? `<button class="btn" type="button" data-ic-propose title="Opens a dialog to ask Claude for an updated version of ${esc(icFiles(c, tab).join(', '))}; you see a diff and accept or reject it">✎ Propose update…</button>` : ''}</div>
     <div class="ic-note"><span class="ic-err"></span>Goes to the assistant with this context; it reads the project and changes nothing. Enter sends. <button class="link" type="button" data-chat="assistant">Continue in chat →</button></div>
   </div>`;
 }
@@ -1863,6 +1877,7 @@ function icRestore(el) {
   for (const ta of el.querySelectorAll('.ic-text')) {
     const k = ta.closest('.ic').dataset.ic;
     ta.value = ui.icDrafts.get(k) ?? '';
+    ta.closest('.ic').querySelector('[data-ic-send]').disabled = !ta.value.trim();
     if (ui.icFocus === k) { ta.focus({ preventScroll: true }); const p = Math.min(ui.icCaret ?? ta.value.length, ta.value.length); ta.setSelectionRange(p, p); }
   }
 }
@@ -1881,25 +1896,95 @@ function icFiles(c, tab) {
   return (tab === 'tasks' ? [f('tasks.md')] : tab === 'proposal' ? [f('proposal.md')] : tab === 'design' ? [f('design.md')]
     : tab === 'specs' || tab === 'validation' ? c.specs.files.map((x) => x.path) : []).filter(Boolean);
 }
-async function icSend(box, propose = false) {
+// ---- "✎ Propose update…": a focused dialog for one tab of a change. It shows what the update is about (the change,
+// the file and its current content), takes what should change (with suggestions), and shows Claude's proposal as a
+// diff to accept or reject, right there.
+const PD_CHIPS = {
+  tasks: ['Split tasks that are too big, and give every task a precise verify criterion.', 'Add the tasks that are missing to cover every spec scenario.'],
+  proposal: ['Make the Why and the scope sharper, and list what is out of scope.'],
+  design: ['Add the risks and open questions that are missing.', 'Explain the main decisions with their alternatives.'],
+  specs: ['Add missing scenarios, especially error and edge cases.', 'Make every requirement testable (SHALL/MUST, concrete values).'],
+  validation: ['Fix the issues openspec validate reports.'],
+};
+const PD_REVIEW = 'Review it and improve what is unclear, inconsistent with the proposal or the specs, or missing; keep the scope and invent no new requirements.';
+const pd = { c: null, tab: null, text: '', disc: true, sent: null, busy: false, err: '', current: '' };
+async function openPropose(box) {
+  const [name, tab] = box.dataset.ic.split('|');
+  Object.assign(pd, { c: ui.state.changes.find((x) => x.name === name), tab, text: box.querySelector('.ic-text').value.trim(), disc: true, sent: null, busy: false, err: '', current: '' });
+  $('propose').showModal();
+  renderPropose();
+  const f = pd.c.files.find((x) => x.path === icFiles(pd.c, tab)[0]);
+  pd.current = f ? await loadFile(f) : '';
+  renderPropose();
+  $('pd-text')?.focus();
+}
+function pdAnswer() { // Claude's reply to the request sent from the dialog
+  if (!pd.sent) return null;
+  const conv = groupBySession((ag.view?.jobs ?? []).filter((j) => j.kind === 'chat' && (j.mode ?? 'assistant') === 'assistant')).at(-1);
+  let found = false, key = null;
+  const a = [];
+  for (const j of conv?.jobs ?? []) for (const l of j.log) {
+    if (l.kind === 'user') { if (found && a.length) break; found = l.text === pd.sent; }
+    else if (found && l.kind === 'text' && !l.sub) { if (!key) key = `${j.id}:${l.t}`; a.push(l.text); }
+  }
+  return { a, key, running: ['running', 'starting'].includes(conv?.last?.status) };
+}
+function renderPropose() {
+  const dlg = $('propose');
+  if (!dlg.open || !pd.c) return;
+  const { c, tab } = pd;
+  const files = icFiles(c, tab);
+  const discussed = icExchanges(c, tab).list.length;
+  const ans = pdAnswer();
+  const keepText = $('pd-text')?.value;
+  dlg.innerHTML = `
+    <div class="set-head"><h2 id="pd-title">✎ Propose an update</h2><button class="link" type="button" data-pd-close>Close ✕</button></div>
+    <div class="pd-ctx"><b>${esc(title(c.name))}</b> · the ${esc(IC_LABEL[tab])} · ${files.map((f) => `<code>${esc(f)}</code>`).join(' ')}</div>
+    ${tab === 'validation' && c.validation && !c.validation.valid ? `<div class="pd-issues">${c.validation.issues.map((i) => `<div><b>${esc(i.level)}</b> ${esc(i.message)}</div>`).join('')}</div>` : ''}
+    <details class="pd-cur" ${pd.sent ? '' : 'open'}><summary>Current content${files.length > 1 ? ` of ${esc(files[0].split('/').slice(-2).join('/'))}` : ''}</summary><div class="md">${pd.current ? md(pd.current) : '<span class="muted">Loading…</span>'}</div></details>
+    ${pd.sent ? '' : `
+    <label class="pd-what">What should change?<textarea id="pd-text" rows="3" placeholder="e.g. ${esc((PD_CHIPS[tab] ?? [PD_REVIEW])[0])}">${esc(keepText ?? pd.text)}</textarea></label>
+    <div class="pd-chips"><span class="muted">Suggestions:</span>${[...(PD_CHIPS[tab] ?? []), PD_REVIEW].map((t) => `<button type="button" class="chip" data-pd-chip="${esc(t)}" title="${esc(t)}">${esc(t.split(/[,;:]/)[0].replace(/\.$/, ''))}</button>`).join('')}</div>
+    ${discussed ? `<label class="set-check pd-disc"><input type="checkbox" data-pd-disc ${pd.disc ? 'checked' : ''}> Take what we discussed about the ${esc(IC_LABEL[tab])} into account (${discussed} exchange${discussed > 1 ? 's' : ''} below the tab)</label>` : ''}
+    <div class="set-actions"><button class="btn primary" type="button" data-pd-go disabled>Propose</button><button class="btn" type="button" data-pd-close>Cancel</button><span class="set-note warn">${esc(pd.err)}</span></div>`}
+    ${pd.sent ? `<div class="pd-result">${ans?.a.length ? `<div class="md">${ans.a.map((t, k) => editMd(t, `${ans.key}:${k}`)).join('')}</div>` : ans?.running || pd.busy ? '<div class="ag-note"><span class="ag-spin"></span> Claude is writing the proposal…</div>' : ''}</div>
+      <div class="set-actions"><button class="btn" type="button" data-pd-again>Another proposal</button><button class="btn" type="button" data-pd-close>Close</button></div>` : ''}`;
+  const ta = $('pd-text');
+  if (ta) dlg.querySelector('[data-pd-go]').disabled = !ta.value.trim() || pd.busy;
+  edFill();
+}
+async function pdGo() {
+  const text = $('pd-text').value.trim();
+  if (!text) return;
+  const { c, tab } = pd;
+  const disc = icExchanges(c, tab).list.length && pd.disc;
+  const req = `${icTag(c, tab)} Please propose an updated version of ${icFiles(c, tab).join(', ')} that does this: ${text}${tab === 'validation' ? ' The goal is that openspec validate passes.' : ''}${disc ? ` Take what we discussed about the ${IC_LABEL[tab]} into account.` : ''} Write the complete new content in a fenced block whose info string is "edit" and the path (four backticks if the content contains three), one block per changed file, and say in one or two sentences what changed.`;
+  pd.busy = true; pd.err = ''; renderPropose();
+  try { await agentPost('chat', { text: req, mode: 'assistant' }); pd.sent = req; pd.text = text; }
+  catch (e) { pd.err = '✕ ' + e.message; }
+  pd.busy = false; renderPropose();
+}
+$('propose').addEventListener('input', (e) => { if (e.target.id === 'pd-text') $('propose').querySelector('[data-pd-go]').disabled = !e.target.value.trim(); });
+$('propose').addEventListener('change', (e) => { if (e.target.matches('[data-pd-disc]')) pd.disc = e.target.checked; });
+$('propose').addEventListener('keydown', (e) => { if (e.target.id === 'pd-text' && e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); pdGo(); } });
+$('propose').addEventListener('click', (e) => {
+  const t = e.target;
+  if (t === $('propose') || t.closest('[data-pd-close]')) return $('propose').close();
+  const chip = t.closest('[data-pd-chip]');
+  if (chip) { const ta = $('pd-text'); ta.value = chip.dataset.pdChip; ta.dispatchEvent(new Event('input', { bubbles: true })); return ta.focus(); }
+  if (t.closest('[data-pd-go]')) return pdGo();
+  if (t.closest('[data-pd-again]')) { pd.sent = null; return renderPropose(); }
+});
+async function icSend(box) {
   const ta = box.querySelector('.ic-text');
   const q = ta.value.trim();
-  if (!q && !propose) return;
+  if (!q) return;
   const [name, tab] = box.dataset.ic.split('|');
   const c = ui.state.changes.find((x) => x.name === name);
-  const files = icFiles(c, tab);
-  // what to change: what was typed; else what was discussed about this tab; else Claude reviews the file itself
-  const discussed = icExchanges(c, tab).list.length > 0;
-  const what = q ? ` that does this: ${q}`
-    : discussed ? ` that applies what we discussed about the ${IC_LABEL[tab]} above`
-    : tab === 'validation' ? ''
-    : ': review it and make the changes you consider most worthwhile (clearer, consistent with the proposal and the specs, nothing missing); keep the scope and invent no new requirements';
-  const text = propose
-    ? `${icTag(c, tab)} Please propose an updated version of ${files.join(', ')}${what}${tab === 'validation' ? ', so that openspec validate passes' : ''}. Write the complete new content in a fenced block whose info string is "edit" and the path (four backticks if the content contains three), one block per changed file, and say in one or two sentences what changed${!q && !discussed ? ', as a short list' : ''}.`
-    : `${icTag(c, tab)} ${q}`;
+  const text = `${icTag(c, tab)} ${q}`;
   try {
     await agentPost('chat', { text, mode: 'assistant' });
-    ui.icDrafts.delete(box.dataset.ic); ta.value = ''; box.querySelector('.ic-err').textContent = '';
+    ui.icDrafts.delete(box.dataset.ic); ta.value = ''; box.querySelector('[data-ic-send]').disabled = true; box.querySelector('.ic-err').textContent = '';
   } catch (e) { box.querySelector('.ic-err').textContent = `✕ ${e.message} `; }
 }
 document.addEventListener('focusin', (e) => { ui.icFocus = e.target.matches?.('.ic-text') ? e.target.closest('.ic').dataset.ic : null; });
@@ -1907,6 +1992,7 @@ document.addEventListener('input', (e) => {
   if (!e.target.matches?.('.ic-text')) return;
   ui.icDrafts.set(e.target.closest('.ic').dataset.ic, e.target.value);
   ui.icCaret = e.target.selectionStart;
+  e.target.closest('.ic').querySelector('[data-ic-send]').disabled = !e.target.value.trim();
 });
 document.addEventListener('keyup', (e) => { if (e.target.matches?.('.ic-text')) ui.icCaret = e.target.selectionStart; });
 document.addEventListener('keydown', (e) => {
@@ -1915,7 +2001,7 @@ document.addEventListener('keydown', (e) => {
 });
 document.addEventListener('click', (e) => {
   const b = e.target.closest?.('[data-ic-send], [data-ic-propose]');
-  if (b) { e.stopPropagation(); icSend(b.closest('.ic'), b.matches('[data-ic-propose]')); }
+  if (b) { e.stopPropagation(); return b.matches('[data-ic-propose]') ? openPropose(b.closest('.ic')) : icSend(b.closest('.ic')); }
 }, true);
 
 // ------------------------------------------------------------ render: side
@@ -2841,7 +2927,7 @@ function connect() {
   es.onopen = () => { $('conn').innerHTML = '<span class="dot on"></span>live'; };
   es.onmessage = (ev) => { const d = JSON.parse(ev.data); $('conn').innerHTML = `<span class="dot on"></span>live · ${hhmm(d.scannedAt)}`; accept(d); };
   es.onerror = () => { $('conn').innerHTML = '<span class="dot off"></span>disconnected, retrying…'; };
-  es.addEventListener('agent', (ev) => { ag.view = JSON.parse(ev.data); renderAgentLive(); icRefresh(); });
+  es.addEventListener('agent', (ev) => { ag.view = JSON.parse(ev.data); renderAgentLive(); icRefresh(); if (pd.sent) renderPropose(); });
 }
 
 // ------------------------------------------------------------ interaction

@@ -81,16 +81,21 @@ the agent works. It updates within a second of every file change. The screenshot
 - The tabs show the proposal, design, spec deltas and the `openspec validate` result of the change (see
   [Validation](#validation) below). With `--agent`, every tab has a question box below its content: the question
   goes to the assistant with that context (e.g. "the design of add-due-dates" and its file), and the answer shows
-  right there; **Continue in chat** opens the whole conversation.
+  right there (**Ask** works once there is a question); **Continue in chat** opens the whole conversation.
 
 ![Asking about the design right in the tab](images/dashboard-inline-chat.png)
 
-  When the conversation shows something to change, **✎ Propose update** (next to Ask) asks Claude for an updated
-  version of that tab's file: with what you typed as the instructions; with an empty box from what was discussed
-  about it, or, if nothing was, Claude reviews the file and proposes what it would improve. The proposal shows as
-  a diff (added lines green, removed lines red, unchanged ones folded); **Accept** writes the file, **Reject** leaves
-  it as it is. Claude itself never writes: only Accept does, and only if the file has not changed since the preview
-  (otherwise you get a new preview). This also works in the chat, when Claude proposes an update there.
+  When something should change, **✎ Propose update…** (next to Ask) opens a dialog for that tab: it shows the change,
+  the file and its current content, and asks what should change (suggestions fill it in, e.g. "Split tasks that
+  are too big"; if you discussed the tab below it, that can be taken into account). **Propose** asks Claude for an
+  updated version of the file.
+
+![Proposing an update of the tasks](images/dashboard-propose-dialog.png)
+
+  The proposal shows as a diff (removed lines red, added lines green, unchanged ones folded), in the dialog and
+  below the tab; **Accept** writes the file, **Reject** leaves it as it is. Claude itself never writes: only Accept
+  does, and only if the file has not changed since the preview (otherwise you get a new preview). This also works
+  in the chat, when you ask Claude there to change a file.
 
 ![A proposed update of the design, as a diff to accept or reject](images/dashboard-propose-update.png)
 - **Current milestone** lists the other changes of the milestone; **Activity** lists every checked-off task and
