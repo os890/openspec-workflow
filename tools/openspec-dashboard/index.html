@@ -3451,8 +3451,8 @@ function renderPodman() {
   const dlg = $('settings');
   const v = st.pm;
   const head = `<div class="set-head"><h2 id="set-title">Settings</h2><button class="link" type="button" data-set-close>Close ✕</button></div>${setTabs()}`;
-  if (!v) { dlg.innerHTML = head + `<div class="ag-note">${esc(st.pmNote)}</div>`; return; }
-  if (!v.available) { dlg.innerHTML = head + `<div class="set-status bad">✕ ${esc(v.reason)}</div>`; return; }
+  if (!v) { morphHtml(dlg, head + `<div class="ag-note">${esc(st.pmNote)}</div>`); return; }
+  if (!v.available) { morphHtml(dlg, head + `<div class="set-status bad">✕ ${esc(v.reason)}</div>`); return; }
   const i = v.inside, op = v.op;
   const bar = (used, total) => `<span class="pm-bar"><span style="width:${Math.min(100, (used / total) * 100).toFixed(0)}%;background:${used / total > 0.85 ? 'var(--st-blocked)' : used / total > 0.65 ? 'var(--st-progress)' : 'var(--st-complete)'}"></span></span>`;
   const running = op?.state === 'running';
@@ -3466,7 +3466,8 @@ function renderPodman() {
       <td class="num">${c.state === 'running' ? esc(c.mem ?? '') : ''}</td>
       <td>${running ? '' : c.state === 'running' ? `<button class="btn" type="button" data-pm="stop" data-name="${esc(c.name)}">Stop</button>` : c.autoRemove ? '' : `<button class="btn" type="button" data-pm="start" data-name="${esc(c.name)}">Start</button>`}</td>
     </tr>`;
-  dlg.innerHTML = head + `
+  // updated in place (not rebuilt), so the container list keeps its scroll position across the refreshes
+  morphHtml(dlg, head + `
     <section class="set-sec">
       <h3>${v.vm ? `VM <code>${esc(v.vm.name)}</code> · ${esc(v.vm.state)}` : 'Podman'}</h3>
       ${v.vm ? `<div class="pm-grid">
@@ -3486,7 +3487,7 @@ function renderPodman() {
       <div class="pm-table"><table><thead><tr><th title="Start after restart">↻</th><th>Container</th><th>State</th><th>Memory</th><th></th></tr></thead>
         <tbody>${recent.length ? `<tr class="pm-group"><td colspan="5">Used last</td></tr>${recent.map(row).join('')}` : '<tr><td colspan="5" class="muted">No containers.</td></tr>'}
         ${rest.length ? `<tr class="pm-group"><td colspan="5">All others, by name (${rest.length})</td></tr>${rest.map(row).join('')}` : ''}</tbody></table></div>
-    </section>`;
+    </section>`);
 }
 async function pmSaveAutostart() {
   const names = [...$('settings').querySelectorAll('[data-pm-auto]:checked')].map((x) => x.dataset.pmAuto);
