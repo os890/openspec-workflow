@@ -107,6 +107,7 @@ http://127.0.0.1:4590/?style=paper&theme=dark.
 | Paper, light | Paper, dark |
 |---|---|
 | ![Paper style, light](images/style-paper-light.png) | ![Paper style, dark](images/style-paper-dark.png) |
+| ![Paper style, board in full screen, light](images/style-paper-board-light.png) | ![Paper style, board in full screen, dark](images/style-paper-board-dark.png) |
 
 ## Tips
 
