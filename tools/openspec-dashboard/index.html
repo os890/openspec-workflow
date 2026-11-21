@@ -1688,7 +1688,7 @@ body.remote #folder-btn, body.remote #hm-install { display: none !important; }
   box-shadow: 0 0 0 calc(var(--lvl, 0) * 6px) color-mix(in srgb, var(--st-blocked) 25%, transparent); transition: box-shadow .15s; }
 .ag-mic.busy { color: var(--muted); }
 .rec-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st-blocked); animation: pulse 1.2s infinite; }
-.ag-rp { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; flex: none; }
+.ag-rp { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 30px; min-width: 34px; flex: none; } /* the icon alone (✨), the name in its tooltip */
 .ag-rp[hidden] { display: none !important; }
 .ag-suggest-wrap { padding: 0 var(--agp); }
 .ag-suggest-wrap:empty { display: none; }
@@ -4675,7 +4675,7 @@ const draftKey = () => (ag.panel === 'chat' ? 'chat-' + ag.convo : 'ticket-' + a
 function rephraseBtnHtml() {
   const on = !!ag.view?.rephrase?.available;
   return `<button class="btn ag-rp" type="button" data-ag-rephrase ${on ? '' : 'hidden'} ${rps.state === 'busy' ? 'disabled' : ''}
-    title="Rephrase the text into a clear prompt with the local model${ag.view?.rephrase?.model ? ` (${esc(ag.view.rephrase.model)})` : ''}; you accept or reject the suggestion">${RP_SVG}<span>Rephrase</span></button>`
+    title="Rephrase the text into a clear prompt with the local model${ag.view?.rephrase?.model ? ` (${esc(ag.view.rephrase.model)})` : ''}; you accept or reject the suggestion" aria-label="Rephrase">${RP_SVG}</button>`
     + '<button class="link ag-gear" type="button" data-set-open title="Settings: local models (rephrasing, speech-to-text) and, while writing to a session, the write mode" aria-label="Settings">⚙</button>';
 }
 function suggestHtml() {

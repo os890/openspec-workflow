@@ -424,7 +424,7 @@ speak (default: the browser's language). With a fixed language a short clip take
 window is sized to the clip, with a floor that keeps it from repeating itself); **Auto** detects the language
 first, which takes noticeably longer on a CPU.
 
-**Rephrase.** If a local language model is available, **✨ Rephrase** next to the microphone rewrites the draft in
+**Rephrase.** If a local language model is available, **✨** (Rephrase) next to the microphone rewrites the draft in
 the box into a clear prompt: to the point, nothing important dropped, in the language of the draft. The result is a
 suggestion: **Accept** replaces the text (you can still edit it), **Reject** keeps yours. Like the transcription it
 runs locally, never through Claude. Two ways to provide a model:

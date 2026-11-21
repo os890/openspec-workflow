@@ -473,7 +473,7 @@ lands in the box for you to check before you send it. Pick the language you spea
 than **Auto**.
 
 **Rephrase**: with a local language model (an OpenAI-compatible server given with `--rephrase-url`, or a Podman image
-with an LLM adapter), **✨ Rephrase** turns a rough draft into a clear prompt: to the point, nothing important
+with an LLM adapter), **✨** (Rephrase, next to the microphone) turns a rough draft into a clear prompt: to the point, nothing important
 dropped, in the language you wrote. It shows a suggestion; **Accept** replaces your text, **Reject** keeps it. On a
 CPU the first request waits until the model has loaded.
 
