@@ -212,6 +212,8 @@ What makes it more than a status page:
   review topics, workflow steps, documentation, diagram format (Mermaid by default) and types, and container engine up front,
   and lets Claude check your local containers for a service to reuse (e.g. a running Postgres) before anything is
   installed on the host.
+- **Git history** of the project: the commits with a graph of branches, tags and remote branches, and each commit's
+  message, files and diff, read-only; **openspec/ only** shows just the commits that changed the specs.
 - **Ten styles**, from Flat and Glass to Clay, Paper, Blackboard or a green-screen Terminal.
 
 | Charts | Brainstorming an idea next to the backlog |

@@ -188,6 +188,21 @@ whole history, but only as finely as the commits: a ticket committed once shows 
 dashboard's own history**, recorded within seconds while it runs. Per change and status (and per task) the earlier
 time wins. Hover a chart for the values; **Data** under a chart shows them as a table.
 
+## Git history
+
+**⎇** in the header (on a project's page) opens a read-only history of the project's repository, like a file
+manager's history view: the commits of HEAD and of every branch, tag and remote branch, newest first, with a graph
+of the branches and badges for the refs (150 at a time, more on scroll); below (side by side when maximized) the
+selected commit with author, date, message, parents (click to jump), the changed files (status, +/−) and their
+unified diff, a merge against its first parent. **openspec/ only** keeps the commits that changed `openspec/`.
+↑/↓, j/k, Page Up/Down, Home/End move; `Esc` restores, then closes; it reloads when the newest commit or the branch
+changes. `GET /api/git/log?skip=&only=1` and `GET /api/git/commit?h=` serve it.
+
+A repository's content and configuration are untrusted: git runs without pager, external diff or textconv drivers,
+fsmonitor, prompts, optional locks or any transport (a partial clone does not fetch missing objects), with a
+timeout of 20 s and output limits (a diff is cut at 2 MB, a file's diff at 3000 lines, a line at 2000 characters);
+commit ids are checked before they reach git.
+
 ## Agent panel (optional)
 
 Started with `--agent`, the dashboard talks to Claude Code in two places:

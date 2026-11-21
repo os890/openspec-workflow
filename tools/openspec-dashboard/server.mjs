@@ -312,6 +312,94 @@ const git = (root, args) => new Promise((resolve) => {
   execFile('git', ['-C', root, ...args], { timeout: 30000, maxBuffer: 64 * 1024 * 1024, env: { ...process.env, GIT_PAGER: 'cat', LC_ALL: 'C' } },
     (err, stdout) => resolve(err ? null : stdout));
 });
+
+// ---------------------------------------------------------------- git history (read-only, the ⎇ panel)
+// Pages of the commits of HEAD and of every branch, tag and remote branch (with their parents, for the graph, and the refs pointing at them) and one commit's details
+// (message, changed files, diff). A repository's content and configuration are untrusted: git runs without pager,
+// external diff or textconv drivers, fsmonitor, prompts, optional locks or any transport (a partial clone does not
+// fetch missing objects), with a timeout and an output limit; commit ids are checked before they reach git.
+const GIT_SAFE = ['-c', 'core.fsmonitor=false', '-c', 'core.pager=cat', '-c', 'diff.external=', '-c', 'protocol.allow=never', '-c', 'core.quotePath=false', '--no-pager', '--no-optional-locks'];
+const GIT_ENV = { ...process.env, GIT_PAGER: 'cat', PAGER: 'cat', LC_ALL: 'C', GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0', GIT_ASKPASS: '', SSH_ASKPASS: '', GIT_EXTERNAL_DIFF: '' };
+function gitRead(root, args, max = 4 << 20) { // → { out, cut } or null; output beyond `max` bytes is cut off
+  return new Promise((resolve) => {
+    let child;
+    try { child = spawn('git', ['-C', root, ...GIT_SAFE, ...args], { env: GIT_ENV, stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return resolve(null); }
+    const chunks = []; let size = 0, cut = false;
+    const timer = setTimeout(() => child.kill('SIGKILL'), 20000);
+    child.stdout.on('data', (d) => {
+      if (cut) return;
+      size += d.length;
+      if (size > max) { cut = true; chunks.push(d.subarray(0, d.length - (size - max))); child.kill('SIGKILL'); } else chunks.push(d);
+    });
+    child.on('error', () => { clearTimeout(timer); resolve(null); });
+    child.on('close', (code) => { clearTimeout(timer); resolve(code === 0 || cut ? { out: Buffer.concat(chunks).toString('utf8'), cut } : null); });
+  });
+}
+const GIT_PAGE = 150;
+const COMMIT_ID = /^[0-9a-f]{7,64}$/;
+async function gitLog(root, { skip = 0, only = false } = {}) {
+  const top = await gitRead(root, ['rev-parse', '--abbrev-ref', 'HEAD']);
+  if (!top) return { repo: false };
+  const branch = top.out.trim();
+  const remotes = new Set(((await gitRead(root, ['remote']))?.out ?? '').split('\n').map((x) => x.trim()).filter(Boolean));
+  const n = Math.max(0, Math.min(1e6, Number(skip) || 0));
+  const r = await gitRead(root, ['log', '--date-order', '--parents', `--skip=${n}`, `-n${GIT_PAGE + 1}`, '--format=%H%x00%P%x00%D%x00%an%x00%ae%x00%at%x00%s%x1e', 'HEAD', '--branches', '--tags', '--remotes', ...(only ? ['--', ':(literal)openspec'] : [])]);
+  if (!r) return { repo: true, branch, commits: [], more: false, error: 'git log failed (an empty repository?)' };
+  const commits = r.out.split('\x1e').map((x) => x.replace(/^\n/, '')).filter(Boolean).map((line) => {
+    const [h, p, d, an, ae, at, sub] = line.split('\x00');
+    const refs = (d ?? '').split(', ').filter(Boolean).flatMap((x) => {
+      if (x.startsWith('HEAD -> ')) return [{ kind: 'head', name: x.slice(8) }];
+      if (x === 'HEAD') return [{ kind: 'head', name: 'HEAD' }];
+      if (x.startsWith('tag: ')) return [{ kind: 'tag', name: x.slice(5) }];
+      if (x.endsWith('/HEAD')) return [];
+      return [{ kind: remotes.has(x.split('/')[0]) && x.includes('/') ? 'remote' : 'branch', name: x }];
+    });
+    return { h, p: (p ?? '').split(' ').filter(Boolean), refs, an: (an ?? '').slice(0, 200), ae: (ae ?? '').slice(0, 200), t: Number(at) * 1000, s: (sub ?? '').slice(0, 500) };
+  });
+  return { repo: true, branch, only: !!only, skip: n, commits: commits.slice(0, GIT_PAGE), more: commits.length > GIT_PAGE };
+}
+async function gitShow(root, id) {
+  if (!COMMIT_ID.test(String(id ?? ''))) throw httpError(400, 'Not a commit id.');
+  const common = ['--no-ext-diff', '--no-textconv', '-M', '--diff-merges=first-parent', '--no-color'];
+  const [meta, numstat, status, patch] = await Promise.all([
+    gitRead(root, ['show', '-s', '--format=%H%x00%P%x00%an%x00%ae%x00%at%x00%cn%x00%ct%x00%B', id, '--']),
+    gitRead(root, ['show', '--format=', '--numstat', ...common, id, '--']),
+    gitRead(root, ['show', '--format=', '--name-status', ...common, id, '--']),
+    gitRead(root, ['show', '--format=', '--patch', '--unified=3', ...common, id, '--'], 2 << 20),
+  ]);
+  if (!meta) throw httpError(404, 'No such commit.');
+  const [h, p, an, ae, at, cn, ct, ...msg] = meta.out.split('\x00');
+  const st = (status?.out ?? '').split('\n').filter(Boolean).map((l) => l.split('\t'));
+  const files = (numstat?.out ?? '').split('\n').filter(Boolean).slice(0, 2000).map((l, i) => {
+    const [a, d] = l.split('\t');
+    const s = st[i] ?? [];
+    const letter = (s[0] ?? 'M')[0];
+    return { st: letter, path: s[2] ?? s[1] ?? l.split('\t').slice(2).join('\t'), from: letter === 'R' || letter === 'C' ? s[1] : null, add: a === '-' ? null : +a, del: d === '-' ? null : +d, bin: a === '-' };
+  });
+  const diffs = [];
+  for (const block of (patch?.out ?? '').split(/^diff --git /m).slice(1)) {
+    const lines = block.split('\n');
+    let file = null, oldN = 0, newN = 0, cut = false; const out = [];
+    for (const raw of lines.slice(1)) {
+      if (!out.length && !raw.startsWith('@@')) {
+        const m = raw.match(/^\+\+\+ b\/(.*)$/) ?? raw.match(/^rename to (.*)$/) ?? raw.match(/^--- a\/(.*)$/);
+        if (m && (!file || raw.startsWith('+++'))) file = m[1];
+        if (raw.startsWith('Binary files')) out.push(['b', null, null, 'Binary file']);
+        continue;
+      }
+      if (out.length >= 3000) { cut = true; break; }
+      const text = raw.length > 2000 ? raw.slice(0, 2000) + ' … (line shortened)' : raw;
+      const hunk = text.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+      if (hunk) { oldN = +hunk[1]; newN = +hunk[2]; out.push(['@', null, null, text]); }
+      else if (text.startsWith('+')) out.push(['+', null, newN++, text.slice(1)]);
+      else if (text.startsWith('-')) out.push(['-', oldN++, null, text.slice(1)]);
+      else if (text.startsWith(' ')) out.push([' ', oldN++, newN++, text.slice(1)]);
+      else if (text.startsWith('\\')) out.push(['\\', null, null, text]);
+    }
+    diffs.push({ path: file ?? block.split('\n')[0].replace(/^a\/(.*) b\/.*$/, '$1'), lines: out, cut });
+  }
+  return { h, p: (p ?? '').split(' ').filter(Boolean), an, ae, t: Number(at) * 1000, cn, ct: Number(ct) * 1000, message: msg.join('\x00').slice(0, 65536).trimEnd(), files, diffs, cut: !!patch?.cut };
+}
 // openspec/changes/<name>/…, openspec/changes/archive/<YYYY-MM-DD>-<name>/…, openspec/backlog/<name>.md
 function changeOfPath(f) {
   let m = f.match(/^openspec\/changes\/archive\/\d{4}-\d{2}-\d{2}-([^/]+)\/(.+)$/);
@@ -751,7 +839,7 @@ function createProject(root, id, historyFile, onChange) {
     return mergeTimeline(g, history.events, project.state?.changes ?? []);
   }
 
-  return Object.assign(project, { timeline, publish, schedule, cliDebounced, cliRetry, refreshCli, scanWorkspace, summary, start, openspecDir: OPENSPEC });
+  return Object.assign(project, { timeline, gitLog: (q) => gitLog(root, q), gitShow: (h) => gitShow(root, h), publish, schedule, cliDebounced, cliRetry, refreshCli, scanWorkspace, summary, start, openspecDir: OPENSPEC });
 }
 
 // ---------------------------------------------------------------- agent (opt-in with --agent)
@@ -2269,6 +2357,11 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === '/api/projects') return json(res, overview());
     if (url.pathname === '/api/timeline') return json(res, await projectFor(url).timeline());
+    if (url.pathname === '/api/git/log') return json(res, await projectFor(url).gitLog({ skip: url.searchParams.get('skip'), only: url.searchParams.get('only') === '1' }));
+    if (url.pathname === '/api/git/commit') {
+      try { return json(res, await projectFor(url).gitShow(url.searchParams.get('h'))); }
+      catch (e) { if (!e.status) throw e; res.writeHead(e.status, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: e.message })); }
+    }
     if (url.pathname === '/api/state') {
       const p = projectFor(url);
       return json(res, { rev: p.rev, scannedAt: Date.now(), ...p.state });

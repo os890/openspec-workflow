@@ -1487,6 +1487,56 @@ body.board-max { overflow: hidden; }
 .agent-panel.max .np-row { flex-wrap: nowrap; }
 .agent-panel.max .np-parent input { max-width: 520px; }
 .agent-panel.max .ag-route { padding-bottom: 8px; }
+/* git history panel */
+.gh-panel { width: min(640px, calc(100vw - 24px)); z-index: 71; }
+.gh-panel.max { inset: 8px; width: auto; --agp: 22px; }
+.gh-panel .ag-head h2 { white-space: nowrap; }
+.gh-branch { font-size: 12.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gh-bar { padding: 0 var(--agp) 8px; display: flex; gap: 6px 14px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid var(--line); font-size: 12.5px; flex-shrink: 0; }
+.gh-only { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.gh-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.gh-list { flex: 0 0 42%; overflow: auto; border-bottom: 1px solid var(--line); outline: none; padding: 4px 0; }
+.gh-detail { flex: 1; min-height: 0; overflow: auto; padding: 12px var(--agp) 18px; font-size: 13px; }
+.gh-panel.max .gh-body { flex-direction: row; }
+.gh-panel.max .gh-list { flex: 0 0 46%; border-bottom: 0; border-right: 1px solid var(--line); }
+.gh-row { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 var(--agp) 0 6px; cursor: pointer; font-size: 13px; white-space: nowrap; }
+.gh-row:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.gh-row.sel { background: var(--accent-soft); box-shadow: inset 3px 0 var(--accent); }
+.gh-graph { flex: none; overflow: visible; }
+.gh-s { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.gh-t { color: var(--muted); font-size: 12px; flex: none; font-variant-numeric: tabular-nums; }
+.gh-ref { font-size: 11px; line-height: 1.5; border-radius: 999px; padding: 0 7px; border: 1px solid var(--line); flex: none; color: var(--muted); max-width: 40%; overflow: hidden; text-overflow: ellipsis; }
+.gh-ref.head { background: var(--st-complete); color: #fff; border-color: transparent; font-weight: 600; }
+.gh-ref.branch { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.gh-ref.tag { color: var(--st-progress); border-color: color-mix(in srgb, var(--st-progress) 50%, transparent); }
+.gh-more { padding: 8px var(--agp); font-size: 12px; color: var(--muted); }
+.gh-meta { display: flex; gap: 12px; align-items: flex-start; }
+.gh-av { flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 13px; }
+.gh-subj { font-weight: 700; font-size: 15px; overflow-wrap: anywhere; }
+.gh-who { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+.gh-ids { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 6px; font-size: 12px; color: var(--muted); }
+.gh-id { font-family: var(--font-mono); font-size: 12px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); border-radius: 6px; padding: 1px 7px; cursor: pointer; }
+.gh-msg { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 10px 0 0; color: var(--ink); }
+.gh-files-h { margin: 14px 0 6px; display: flex; gap: 8px; align-items: baseline; }
+.gh-files { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.gh-files li { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.gh-files a { cursor: pointer; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.gh-files a .muted { color: var(--muted); }
+.gh-stat { font-size: 12px; font-variant-numeric: tabular-nums; flex: none; }
+.gh-add { color: var(--st-complete); } .gh-del { color: var(--st-blocked); }
+.gh-st { flex: none; width: 18px; height: 18px; border-radius: 5px; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff; background: var(--st-progress); }
+.gh-st.A { background: var(--st-complete); } .gh-st.D { background: var(--st-blocked); } .gh-st.R, .gh-st.C { background: var(--st-specified); }
+.gh-diff { border: 1px solid var(--line); border-radius: 10px; margin: 8px 0; overflow: hidden; background: var(--surface); }
+.gh-diff > summary { cursor: pointer; padding: 6px 10px; display: flex; gap: 8px; align-items: center; font-size: 12.5px; background: var(--surface-2); }
+.gh-diff > summary .p { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 12px; }
+.gh-dt { width: 100%; border-collapse: collapse; font: 12px/1.5 var(--font-mono); }
+.gh-dt td { vertical-align: top; }
+.gh-dt td.n { color: var(--muted); text-align: right; padding: 0 6px; width: 1%; white-space: nowrap; user-select: none; }
+.gh-dt td.c { white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 8px; }
+.gh-dt tr.add td { background: color-mix(in srgb, var(--st-complete) 14%, transparent); }
+.gh-dt tr.del td { background: color-mix(in srgb, var(--st-blocked) 13%, transparent); }
+.gh-dt tr.hunk td { color: var(--st-specified); background: color-mix(in srgb, var(--st-specified) 8%, transparent); }
+.gh-empty { padding: 18px var(--agp); color: var(--muted); }
 .ag-head .ag-maxbtn { margin-left: auto; font-size: 13px; }
 .ag-head .ag-maxbtn + .link { margin-left: 14px; }
 body.ag-max { overflow: hidden; }
@@ -1576,6 +1626,7 @@ body.ag-max { overflow: hidden; }
       </select>
       <button class="btn" id="agent-btn" type="button" data-chat-btn aria-controls="agent" hidden>Chat</button>
       <button class="btn" id="theme" type="button" aria-label="Toggle light or dark theme">◐</button>
+      <button class="btn" id="git-btn" type="button" aria-label="Git history" aria-controls="githist" title="Git history: the commits, branches and tags, and what each commit changed" hidden>⎇</button>
       <button class="btn" id="settings-btn" type="button" aria-label="Settings" title="Settings: local models and Podman" hidden>⚙</button>
     </div>
   </div>
@@ -1595,6 +1646,7 @@ body.ag-max { overflow: hidden; }
 <dialog class="set-dialog" id="settings" aria-labelledby="set-title"></dialog>
 <dialog class="set-dialog pd-dialog" id="propose" aria-labelledby="pd-title"></dialog>
 <aside class="drawer agent-panel" id="agent" aria-label="Agent" hidden></aside>
+<aside class="drawer agent-panel gh-panel" id="githist" aria-label="Git history" hidden></aside>
 
 <script>
 const STATUS = {
@@ -2929,6 +2981,7 @@ function render() {
 
 // ------------------------------------------------------------ live data
 function accept(next) {
+  $('git-btn').hidden = false; ghOnState();
   const prev = ui.state;
   if (prev) {
     const before = new Map(prev.changes.map((c) => [c.name, c]));
@@ -3986,6 +4039,169 @@ $('settings').addEventListener('click', async (e) => {
 if (AGENT_TOKEN) { $('settings-btn').hidden = false; $('settings-btn').addEventListener('click', () => openSettings(false)); }
 document.addEventListener('click', (e) => { if (e.target.closest?.('[data-set-open]')) { e.stopPropagation(); openSettings(false); } }, true);
 
+// ------------------------------------------------------------ git history (⎇ in the header)
+// Read-only, like a file manager's history view: the commits of HEAD and of every branch, tag and remote branch,
+// newest first, with a graph of the branches and badges for the refs; below (on the right when maximized) the
+// selected commit: author, message, parents, the changed files and their diff. "openspec/ only" keeps the commits
+// that changed the specs. More load on scroll; ↑/↓ (or j/k) move, Esc closes.
+const gh = { open: false, max: false, only: false, commits: [], rows: [], lanes: [], more: false, loading: false, sel: null, detail: null, repo: null, branch: null, note: '', seq: 0 };
+try { gh.only = localStorage.getItem('osd-gh-only') === '1'; gh.max = localStorage.getItem('osd-gh-max') === '1'; } catch {}
+const GH_COLORS = ['#4f6bed', '#e0861a', '#1f9d68', '#d0517a', '#3a9bd5', '#8a63d2', '#b8862b'];
+const GH_W = 14, GH_H = 30;
+// one row per commit: its column, the columns coming in from above and going out below, and the lines to its parents
+function ghLanes(commits, lanes) {
+  const rows = [];
+  for (const c of commits) {
+    const before = lanes.slice();
+    let col = before.indexOf(c.h);
+    const incoming = col >= 0;
+    if (col < 0) { col = before.indexOf(null); if (col < 0) col = before.length; }
+    const after = before.slice();
+    const joins = [];
+    before.forEach((x, i) => { if (x === c.h && i !== col) { joins.push(i); after[i] = null; } });
+    after[col] = c.p[0] ?? null;
+    const links = c.p.length ? [col] : [];
+    for (const p of c.p.slice(1)) {
+      let i = after.indexOf(p);
+      if (i < 0) { i = after.findIndex((x, k) => x == null && k !== col); if (i < 0) i = Math.max(after.length, col + 1); after[i] = p; }
+      links.push(i);
+    }
+    for (let i = 0; i < after.length; i++) if (after[i] === undefined) after[i] = null;
+    while (after.length && after.at(-1) === null) after.pop();
+    rows.push({ col, incoming, before, joins, links, width: Math.max(before.length, after.length, col + 1, ...links.map((l) => l + 1)) });
+    lanes = after;
+  }
+  return { rows, lanes };
+}
+function ghSvg(r, lanes) {
+  const x = (i) => 8 + i * GH_W, mid = GH_H / 2, color = (i) => GH_COLORS[i % GH_COLORS.length];
+  const ln = (x1, y1, x2, y2, c) => `<path d="M${x1} ${y1}${x1 === x2 ? `L${x2} ${y2}` : `C${x1} ${(y1 + y2) / 2} ${x2} ${(y1 + y2) / 2} ${x2} ${y2}`}" stroke="${c}" stroke-width="2" fill="none"/>`;
+  const parts = [];
+  r.before.forEach((v, i) => {
+    if (v == null) return;
+    if (i === r.col) { if (r.incoming) parts.push(ln(x(i), 0, x(i), mid, color(i))); }
+    else if (r.joins.includes(i)) parts.push(ln(x(i), 0, x(r.col), mid, color(i)));
+    else parts.push(ln(x(i), 0, x(i), GH_H, color(i)));
+  });
+  for (const t of r.links) parts.push(ln(x(r.col), mid, x(t), GH_H, color(t === r.col ? r.col : t)));
+  parts.push(`<circle cx="${x(r.col)}" cy="${mid}" r="4.5" fill="var(--surface)" stroke="${color(r.col)}" stroke-width="2.5"/>`);
+  return `<svg class="gh-graph" width="${16 + (lanes - 1) * GH_W}" height="${GH_H}" aria-hidden="true">${parts.join('')}</svg>`;
+}
+const ghDate = (t) => { const d = new Date(t), now = new Date(); return d.toDateString() === now.toDateString() ? hhmm(t) : d.toLocaleDateString([], { month: 'short', day: 'numeric', ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}) }); };
+const ghFull = (t) => new Date(t).toLocaleString([], { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+const ghRefs = (refs) => refs.map((r) => `<span class="gh-ref ${r.kind}" title="${esc({ head: 'current branch', branch: 'branch', remote: 'remote branch', tag: 'tag' }[r.kind])}: ${esc(r.name)}">${r.kind === 'head' ? '● ' : r.kind === 'tag' ? '◆ ' : ''}${esc(r.name)}</span>`).join('');
+function ghOpen() {
+  if (ag.open) closeAgent();
+  if (typeof sc !== 'undefined' && sc.open) closeScout();
+  gh.open = true;
+  const el = $('githist');
+  el.hidden = false; el.classList.toggle('max', gh.max);
+  el.innerHTML = `<div class="ag-head"><h2>⎇ History</h2><span class="muted gh-branch" id="gh-branch"></span><button class="link ag-maxbtn" type="button" data-gh-max></button><button class="link" type="button" data-gh-close>Close ✕</button></div>
+    <div class="gh-bar"><label class="gh-only" title="Only the commits that changed openspec/"><input type="checkbox" data-gh-only ${gh.only ? 'checked' : ''}> openspec/ only</label><button class="link" type="button" data-gh-refresh title="Load the history again">↻ Refresh</button><span class="ag-note" id="gh-note"></span></div>
+    <div class="gh-body"><div class="gh-list" id="gh-list" tabindex="0" role="listbox" aria-label="Commits"></div><div class="gh-detail" id="gh-detail"></div></div>`;
+  ghMaxBtn(); $('git-btn').setAttribute('aria-expanded', 'true');
+  ghLoad(true);
+}
+// a live update: when the newest commit changed (a commit was made, a branch switched), load the history again
+async function ghOnState() {
+  if (!gh.open || gh.loading || Date.now() - (gh.checked ?? 0) < 3000) return;
+  gh.checked = Date.now();
+  const r = await fetch(withProject(`/api/git/log?only=${gh.only ? 1 : 0}`)).then((x) => x.json()).catch(() => null);
+  if (r?.commits && (r.commits[0]?.h !== gh.commits[0]?.h || r.branch !== gh.branch)) ghLoad(true);
+}
+function ghClose() { if (!gh.open) return; gh.open = false; $('githist').hidden = true; $('git-btn').setAttribute('aria-expanded', 'false'); }
+function ghMaxBtn() { const b = $('githist').querySelector('[data-gh-max]'); if (b) b.textContent = gh.max ? '⤡ Restore' : '⤢ Maximize'; }
+async function ghLoad(fresh) {
+  if (gh.loading && !fresh) return;
+  const seq = ++gh.seq;
+  gh.loading = true;
+  try {
+    const r = await (await fetch(withProject(`/api/git/log?skip=${fresh ? 0 : gh.commits.length}&only=${gh.only ? 1 : 0}`))).json();
+    if (seq !== gh.seq || !gh.open) return;
+    gh.repo = r.repo; gh.branch = r.branch; gh.note = r.error ?? '';
+    if (fresh) { gh.commits = []; gh.lanes = []; gh.rows = []; }
+    const { rows, lanes } = ghLanes(r.commits ?? [], gh.lanes);
+    gh.commits.push(...(r.commits ?? [])); gh.rows.push(...rows); gh.lanes = lanes; gh.more = !!r.more;
+    if (fresh && !gh.commits.some((c) => c.h === gh.sel)) gh.sel = gh.commits[0]?.h ?? null;
+    ghRender();
+    if (fresh && gh.sel) ghSelect(gh.sel, false);
+  } catch (e) { if (seq === gh.seq) { gh.note = '✕ ' + e.message; ghRender(); } }
+  finally { if (seq === gh.seq) gh.loading = false; }
+}
+function ghRender() {
+  if (!gh.open) return;
+  $('gh-branch').textContent = gh.repo ? `${ui.state?.project ?? ''} · ${gh.branch === 'HEAD' ? 'detached HEAD' : gh.branch ?? ''}` : '';
+  $('gh-note').textContent = gh.note;
+  if (gh.repo === false) { $('gh-list').innerHTML = '<div class="gh-empty">This project is not in a git repository.</div>'; $('gh-detail').innerHTML = ''; return; }
+  const lanes = Math.min(12, Math.max(1, ...gh.rows.map((r) => r.width)));
+  morphHtml($('gh-list'), gh.commits.map((c, i) => `<div class="gh-row ${c.h === gh.sel ? 'sel' : ''}" role="option" aria-selected="${c.h === gh.sel}" data-gh="${c.h}" title="${esc(c.an)} · ${esc(ghFull(c.t))}">${ghSvg(gh.rows[i], lanes)}${ghRefs(c.refs)}<span class="gh-s">${esc(c.s)}</span><span class="gh-t">${esc(ghDate(c.t))}</span></div>`).join('')
+    + (gh.more ? '<div class="gh-more">Scroll for more…</div>' : gh.commits.length ? `<div class="gh-more">${gh.commits.length} commit${gh.commits.length === 1 ? '' : 's'}${gh.only ? ' that changed openspec/' : ''}</div>` : '<div class="gh-empty">No commits.</div>'));
+}
+async function ghSelect(h, scroll = true) {
+  gh.sel = h;
+  for (const r of document.querySelectorAll('#gh-list .gh-row')) { const on = r.dataset.gh === h; r.classList.toggle('sel', on); r.setAttribute('aria-selected', String(on)); if (on && scroll) r.scrollIntoView({ block: 'nearest' }); }
+  const d = await (await fetch(withProject(`/api/git/commit?h=${encodeURIComponent(h)}`))).json().catch(() => ({ error: 'failed' }));
+  if (gh.sel !== h || !gh.open) return;
+  gh.detail = d;
+  $('gh-detail').innerHTML = d.error ? `<div class="gh-empty">✕ ${esc(d.error)}</div>` : ghDetailHtml(d);
+  $('gh-detail').scrollTop = 0;
+}
+function ghDetailHtml(d) {
+  const [subj, ...rest] = d.message.split('\n');
+  const body = rest.join('\n').trim();
+  const initials = (d.an.match(/\b\p{L}/gu) ?? ['?']).slice(0, 2).join('').toUpperCase();
+  let hue = 0; for (const ch of d.ae || d.an) hue = (hue * 31 + ch.charCodeAt(0)) % 360;
+  const add = d.files.reduce((a, f) => a + (f.add ?? 0), 0), del = d.files.reduce((a, f) => a + (f.del ?? 0), 0);
+  const split = (p) => { const i = p.lastIndexOf('/'); return i < 0 ? `<b>${esc(p)}</b>` : `<span class="muted">${esc(p.slice(0, i + 1))}</span><b>${esc(p.slice(i + 1))}</b>`; };
+  const stat = (f) => f.bin ? '<span class="gh-stat muted">binary</span>' : `<span class="gh-stat"><span class="gh-add">+${f.add}</span> <span class="gh-del">−${f.del}</span></span>`;
+  const row = ([k, o, n, t]) => k === '@' ? `<tr class="hunk"><td class="n"></td><td class="n"></td><td class="c">${esc(t)}</td></tr>`
+    : `<tr class="${k === '+' ? 'add' : k === '-' ? 'del' : 'ctx'}"><td class="n">${o ?? ''}</td><td class="n">${n ?? ''}</td><td class="c">${k === '+' ? '+' : k === '-' ? '−' : ' '}${esc(t)}</td></tr>`;
+  return `<div class="gh-meta"><span class="gh-av" style="background:hsl(${hue} 45% 48%)">${esc(initials)}</span><div style="min-width:0">
+      <div class="gh-subj">${esc(subj)}</div>
+      <div class="gh-who">${esc(d.an)} &lt;${esc(d.ae)}&gt; · ${esc(ghFull(d.t))}</div>
+      <div class="gh-ids"><button class="gh-id" type="button" data-gh-copy="${d.h}" title="Copy the commit id">${d.h.slice(0, 10)}</button>${d.p.length ? `${d.p.length > 1 ? 'Parents' : 'Parent'} ${d.p.map((p) => `<button class="gh-id" type="button" data-gh-go="${p}" title="Go to the parent (copies its id if it is not loaded)">${p.slice(0, 10)}</button>`).join('')}` : 'first commit'}</div>
+    </div></div>
+    ${body ? `<pre class="gh-msg">${esc(body)}</pre>` : ''}
+    <div class="gh-files-h"><b>${d.files.length} file${d.files.length === 1 ? '' : 's'}</b><span class="muted">changed${d.p.length > 1 ? ' (against the first parent)' : ''}</span><span class="gh-stat"><span class="gh-add">+${add}</span> <span class="gh-del">−${del}</span></span></div>
+    <ul class="gh-files">${d.files.map((f, i) => `<li><span class="gh-st ${f.st}" title="${esc({ A: 'added', D: 'deleted', M: 'modified', R: 'renamed', C: 'copied', T: 'type changed' }[f.st] ?? f.st)}">${esc(f.st)}</span><a data-gh-file="${i}" title="${esc(f.from ? `${f.from} → ${f.path}` : f.path)}">${split(f.path)}</a>${stat(f)}</li>`).join('')}</ul>
+    ${d.diffs.map((x, i) => `<details class="gh-diff" id="gh-d-${i}" ${i < 6 ? 'open' : ''}><summary><span class="p" title="${esc(x.path)}">${esc(x.path)}</span></summary><table class="gh-dt">${x.lines.map(row).join('')}</table>${x.cut ? '<div class="ag-note" style="padding:4px 10px">… the rest of this file’s diff is not shown</div>' : ''}</details>`).join('')}
+    ${d.cut ? '<div class="ag-note">The diff is too large; the rest is not shown.</div>' : ''}`;
+}
+$('git-btn').addEventListener('click', () => (gh.open ? ghClose() : ghOpen()));
+$('githist').addEventListener('click', (e) => {
+  const t = e.target;
+  if (t.closest('[data-gh-close]')) return ghClose();
+  if (t.closest('[data-gh-max]')) { gh.max = !gh.max; try { localStorage.setItem('osd-gh-max', gh.max ? '1' : '0'); } catch {} $('githist').classList.toggle('max', gh.max); return ghMaxBtn(); }
+  if (t.closest('[data-gh-refresh]')) return ghLoad(true);
+  const row = t.closest('[data-gh]'); if (row) return ghSelect(row.dataset.gh, false);
+  const cp = t.closest('[data-gh-copy]');
+  if (cp) { navigator.clipboard?.writeText(cp.dataset.ghCopy).then(() => { gh.note = 'Commit id copied'; $('gh-note').textContent = gh.note; setTimeout(() => { if (gh.note === 'Commit id copied') { gh.note = ''; $('gh-note') && ($('gh-note').textContent = ''); } }, 2000); }).catch(() => {}); return; }
+  const go = t.closest('[data-gh-go]');
+  if (go) { if (gh.commits.some((c) => c.h === go.dataset.ghGo)) return ghSelect(go.dataset.ghGo); navigator.clipboard?.writeText(go.dataset.ghGo).catch(() => {}); gh.note = 'Not loaded yet; its id was copied'; $('gh-note').textContent = gh.note; return; }
+  const f = t.closest('[data-gh-file]');
+  if (f) { const d = $(`gh-d-${f.dataset.ghFile}`); if (d) { d.open = true; d.scrollIntoView({ block: 'start', behavior: 'smooth' }); } }
+});
+$('githist').addEventListener('change', (e) => {
+  if (!e.target.matches('[data-gh-only]')) return;
+  gh.only = e.target.checked; try { localStorage.setItem('osd-gh-only', gh.only ? '1' : '0'); } catch {}
+  ghLoad(true);
+});
+$('githist').addEventListener('scroll', (e) => {
+  const l = e.target;
+  if (l.id === 'gh-list' && gh.more && !gh.loading && l.scrollTop + l.clientHeight > l.scrollHeight - 200) ghLoad(false);
+}, true);
+document.addEventListener('keydown', (e) => {
+  if (!gh.open || e.target.closest?.('input, textarea, select, [contenteditable]') || document.querySelector('dialog[open]')) return;
+  if (e.key === 'Escape') { e.preventDefault(); return gh.max ? $('githist').querySelector('[data-gh-max]').click() : ghClose(); }
+  const k = { ArrowDown: 1, j: 1, ArrowUp: -1, k: -1, PageDown: 10, PageUp: -10, Home: -1e9, End: 1e9 }[e.key];
+  if (!k || !e.target.closest?.('#githist') && document.activeElement !== document.body) return;
+  e.preventDefault(); e.stopPropagation();
+  const i = Math.max(0, Math.min(gh.commits.length - 1, gh.commits.findIndex((c) => c.h === gh.sel) + k));
+  if (gh.commits[i]) ghSelect(gh.commits[i].h);
+}, true);
+// the chat and the other panels take the same place
+document.addEventListener('click', (e) => { if (gh.open && e.target.closest?.('[data-chat-btn], [data-agent], [data-sc-open], [data-np-open]')) ghClose(); }, true);
+
 // ------------------------------------------------------------ several projects
 // ?project=<id> shows one project; with several projects and no ?project= the overview is the start page.
 const PARAMS = new URLSearchParams(location.search);
@@ -4001,6 +4217,7 @@ function hrefFor(id) {
 
 const CUR_LABEL = { 'in-progress': 'Working on', complete: 'Ready to archive', specified: 'Up next · planned', proposed: 'Up next' };
 function renderOverview(o) {
+  $('git-btn').hidden = true;
   const prev = new Map((ui.overview?.projects ?? []).map((p) => [p.id, p.lastEvent?.t ?? 0]));
   ui.overview = o;
   const list = [...o.projects].sort((a, b) => (b.lastActivity ?? 0) - (a.lastActivity ?? 0));

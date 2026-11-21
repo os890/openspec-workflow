@@ -173,6 +173,22 @@ only: no archived band in the flow, no archived changes in the cycle times and t
 
 ![Charts](images/dashboard-charts.png)
 
+### Git history
+
+**⎇** in the header (on a project's page, in a git repository) opens the history of the project's repository:
+
+- at the top the commits, newest first, with a graph of the branches and badges for the current branch, other
+  branches, tags and remote branches; more load as you scroll;
+- below the selected commit: who made it and when, its message, its parents, the files it changed and their diff
+  (a merge against its first parent).
+
+Click a commit or move with ↑ ↓ (or j k), Page Up, Page Down, Home and End. Click the commit id to copy it, a parent
+to jump to it, a file to scroll to its diff. **openspec/ only** shows only the commits that changed the specs.
+**⤢ Maximize** puts the commits and the details side by side; `Esc` restores, then closes. A new commit shows up on
+its own. It only reads: nothing in the repository changes.
+
+![The git history with a merge commit selected](images/dashboard-git-history.png)
+
 ## Talk to the agent (optional)
 
 Start the dashboard with `--agent` to chat with Claude about the project, start a session on a ticket and talk to
