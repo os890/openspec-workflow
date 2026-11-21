@@ -379,6 +379,7 @@ body.board-max { overflow: hidden; }
    Paper redefines the base tokens; its dark blocks carry one more selector part so they win over both the base
    dark blocks and its own light block. */
 :root {
+  --pi-blocked: #ffcdd4; --pi-ready: #cfe6fb; --pi-specified: #e2d8fb; --pi-progress: #fff1a6; --pi-complete: #cdeec4; --pi-archived: #ece5d6;
   --p-note: #fff1a6; --p-cork: #e8dcc6; --p-rule: rgba(47, 95, 168, .10); --p-margin: rgba(194, 65, 47, .45);
   --p-tape: rgba(255, 251, 232, .78); --p-highlight: rgba(255, 212, 0, .45); --p-shadow: rgba(60, 45, 20, .20);
   --font-hand: "Patrick Hand", "Segoe Print", "Comic Sans MS", cursive;
@@ -386,11 +387,13 @@ body.board-max { overflow: hidden; }
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    --pi-blocked: #5a3940; --pi-ready: #2f4357; --pi-specified: #41395a; --pi-progress: #4a4220; --pi-complete: #304a33; --pi-archived: #3d3933;
     --p-note: #4a4220; --p-cork: #35322d; --p-rule: rgba(143, 176, 230, .10); --p-margin: rgba(240, 138, 122, .35);
     --p-tape: rgba(240, 230, 200, .16); --p-highlight: rgba(240, 200, 60, .30); --p-shadow: rgba(0, 0, 0, .45);
   }
 }
 :root[data-theme="dark"] {
+  --pi-blocked: #5a3940; --pi-ready: #2f4357; --pi-specified: #41395a; --pi-progress: #4a4220; --pi-complete: #304a33; --pi-archived: #3d3933;
   --p-note: #4a4220; --p-cork: #35322d; --p-rule: rgba(143, 176, 230, .10); --p-margin: rgba(240, 138, 122, .35);
   --p-tape: rgba(240, 230, 200, .16); --p-highlight: rgba(240, 200, 60, .30); --p-shadow: rgba(0, 0, 0, .45);
 }
@@ -419,12 +422,6 @@ body.board-max { overflow: hidden; }
 }
 /* ---------------------------------------------------------------- style: paper
    Index cards on cork, a sticky note for the current task, stamps for status, highlighter for "selected". */
-:root[data-style="paper"] body {
-  background-image:
-    radial-gradient(color-mix(in srgb, var(--ink) 6%, transparent) .8px, transparent 1px),
-    radial-gradient(color-mix(in srgb, var(--surface) 40%, transparent) .8px, transparent 1px);
-  background-size: 6px 6px, 9px 9px; background-position: 0 0, 2px 4px;
-}
 :root[data-style="paper"] header.top h1,
 :root[data-style="paper"] .f-name,
 :root[data-style="paper"] .ms-title,
@@ -444,7 +441,15 @@ body.board-max { overflow: hidden; }
   border-radius: 3px;
   box-shadow: 0 1px 1px var(--p-shadow), 0 8px 16px -8px var(--p-shadow), 5px 5px 0 -1px var(--surface-2), 5px 5px 0 0 var(--line);
 }
-:root[data-style="paper"] .board.max { box-shadow: none; border-radius: 0; background: transparent; }
+:root[data-style="paper"] .board.max { box-shadow: none; border-radius: 0; }
+:root[data-style="paper"] body,
+:root[data-style="paper"] .board.max {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(color-mix(in srgb, var(--ink) 6%, transparent) .8px, transparent 1px),
+    radial-gradient(color-mix(in srgb, var(--surface) 40%, transparent) .8px, transparent 1px);
+  background-size: 6px 6px, 9px 9px; background-position: 0 0, 2px 4px;
+}
 :root[data-style="paper"] .col {
   background-color: var(--p-cork);
   background-image:
@@ -459,22 +464,24 @@ body.board-max { overflow: hidden; }
 :root[data-style="paper"] .col-empty { color: color-mix(in srgb, var(--ink) 55%, transparent); }
 :root[data-style="paper"] .col-body { padding: 12px 14px 16px; gap: 14px; }
 :root[data-style="paper"] .kc {
-  position: relative; border-radius: 2px; padding-top: 12px;
-  background-color: var(--surface);
-  background-image: linear-gradient(var(--p-margin), var(--p-margin)),
-    repeating-linear-gradient(to bottom, transparent 0 19px, var(--p-rule) 19px 20px);
-  background-size: 100% 1.5px, 100% 100%; background-repeat: no-repeat;
-  background-position: 0 31px, 0 32px;
-  box-shadow: 0 1px 1px var(--p-shadow), 0 6px 10px -4px var(--p-shadow);
+  position: relative; border-radius: 1px; padding-top: 14px;
+  /* post-it: colour per column, a slightly darker adhesive strip at the top */
+  background-color: var(--pi, var(--p-note));
+  background-image: linear-gradient(to bottom, color-mix(in srgb, var(--ink) 6%, transparent) 0 8px, transparent 8px);
+  box-shadow: 0 1px 1px var(--p-shadow), 0 8px 10px -6px var(--p-shadow), 4px 10px 12px -10px var(--p-shadow);
   transform: rotate(-.6deg);
 }
+:root[data-style="paper"] .col-body[data-col="blocked"] { --pi: var(--pi-blocked); }
+:root[data-style="paper"] .col-body[data-col="ready"] { --pi: var(--pi-ready); }
+:root[data-style="paper"] .col-body[data-col="specified"] { --pi: var(--pi-specified); }
+:root[data-style="paper"] .col-body[data-col="in-progress"] { --pi: var(--pi-progress); }
+:root[data-style="paper"] .col-body[data-col="complete"] { --pi: var(--pi-complete); }
+:root[data-style="paper"] .col-body[data-col="archived"] { --pi: var(--pi-archived); }
+:root[data-style="paper"] .kc .kc-top .m { background: color-mix(in srgb, var(--surface) 55%, transparent); }
+:root[data-style="paper"] .kc .bar { background: color-mix(in srgb, var(--ink) 9%, transparent); }
 :root[data-style="paper"] .col-body .kc:nth-child(even) { transform: rotate(.5deg); }
 :root[data-style="paper"] .col-body .kc:nth-child(3n) { transform: rotate(-.2deg); }
 :root[data-style="paper"] .kc:hover { transform: rotate(0) translateY(-2px); box-shadow: 0 2px 2px var(--p-shadow), 0 14px 18px -8px var(--p-shadow); }
-:root[data-style="paper"] .kc::before {
-  content: ""; position: absolute; top: -8px; left: 50%; width: 54px; height: 16px;
-  transform: translateX(-50%) rotate(-3deg); background: var(--p-tape); box-shadow: 0 1px 2px var(--p-shadow);
-}
 :root[data-style="paper"] .kc.focus { box-shadow: 0 0 0 2px var(--accent), 0 6px 10px -4px var(--p-shadow); }
 :root[data-style="paper"] .kc-top .m { border-radius: 2px; }
 :root[data-style="paper"] .now,

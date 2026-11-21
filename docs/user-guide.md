@@ -95,7 +95,7 @@ Click a card to open its details next to the board; `Esc` closes them. A link to
 ## Styles
 
 The dashboard has three styles, each in light and dark: **Flat** (the default), **Glass** (frosted panels over a
-soft colour field) and **Paper** (index cards on cork boards, the current task on a sticky note). The style picker
+soft colour field) and **Paper** (post-its on cork boards, one colour per column, the current task on a sticky note). The style picker
 in the header switches the style, ◐ switches light and dark; both choices are remembered per browser.
 In a link, `?style=flat|glass|paper` and `?theme=light|dark` set them, e.g.
 http://127.0.0.1:4590/?style=paper&theme=dark.
