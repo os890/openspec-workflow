@@ -221,6 +221,18 @@ its own. It only reads: nothing in the repository changes.
 
 ![The git history with a merge commit selected](images/dashboard-git-history.png)
 
+**Back in time.** Double-click a commit (or select it and press Enter): the whole page shows the project as it was
+at that commit: board, focus, milestone, roadmap, backlog and the files behind them (proposal, design, tasks). The
+history shrinks to a small box at the bottom right, so the board has the room, and an orange bar at the top says
+which commit you look at, with **◀ Earlier**, **Later ▶** and **Back to now**. With the box in front, ↑ and ↓ step
+through the commits and the page follows: a time-lapse of how the project grew. **Board:** in the history's bar
+picks a branch instead (its last commit), e.g. to see what a feature branch has done before it is merged. While you
+look at an earlier state nothing can be changed (the agent's buttons and the question boxes are hidden), and the
+live updates wait: **Back to now**, or closing the history, shows the current state again. Validation results and
+the charts are those of today; the unchecked commits of the working tree are only in the live state.
+
+![Back in time: the board at an earlier commit, with the history as a small box](images/dashboard-time-travel.png)
+
 ### Open the project folder
 
 The folder button in the header (with `--agent`, on a project's page) opens the project's folder in a file manager.

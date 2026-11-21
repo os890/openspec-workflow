@@ -356,7 +356,8 @@ async function gitLog(root, { skip = 0, only = false } = {}) {
     });
     return { h, p: (p ?? '').split(' ').filter(Boolean), refs, an: (an ?? '').slice(0, 200), ae: (ae ?? '').slice(0, 200), t: Number(at) * 1000, s: (sub ?? '').slice(0, 500) };
   });
-  return { repo: true, branch, only: !!only, skip: n, commits: commits.slice(0, GIT_PAGE), more: commits.length > GIT_PAGE };
+  const branches = n ? undefined : ((await gitRead(root, ['for-each-ref', '--sort=-committerdate', '--format=%(refname:short)', 'refs/heads', 'refs/remotes']))?.out ?? '').split('\n').map((x) => x.trim()).filter((x) => x && !x.endsWith('/HEAD') && !remotes.has(x)).slice(0, 60);
+  return { repo: true, branch, branches, only: !!only, skip: n, commits: commits.slice(0, GIT_PAGE), more: commits.length > GIT_PAGE };
 }
 async function gitShow(root, id) {
   if (!COMMIT_ID.test(String(id ?? ''))) throw httpError(400, 'Not a commit id.');
@@ -541,6 +542,23 @@ function parseJsonOutput(s) {
 }
 
 // ---------------------------------------------------------------- one followed project
+// a tree of a commit into a folder: git archive | tar -x (both without a shell)
+function extractTree(root, treeish, dest) {
+  return new Promise((resolve, reject) => {
+    const git = spawn('git', ['-C', root, ...GIT_SAFE, 'archive', '--format=tar', treeish], { env: GIT_ENV, stdio: ['ignore', 'pipe', 'ignore'] });
+    const tar = spawn('tar', ['-x', '-f', '-', '-C', dest], { stdio: ['pipe', 'ignore', 'ignore'] });
+    git.stdout.pipe(tar.stdin);
+    const timer = setTimeout(() => { git.kill('SIGKILL'); tar.kill('SIGKILL'); }, 30000);
+    git.on('error', reject); tar.on('error', reject);
+    tar.on('close', (code) => { clearTimeout(timer); code === 0 ? resolve() : reject(httpError(502, 'Unpacking openspec/ of that commit failed.')); });
+  });
+}
+function pruneSnapshots(dir) {
+  try {
+    const all = fs.readdirSync(dir).map((n) => ({ n, t: fs.statSync(path.join(dir, n)).mtimeMs })).sort((a, b) => b.t - a.t);
+    for (const x of all.slice(40)) fs.rmSync(path.join(dir, x.n), { recursive: true, force: true });
+  } catch { /* best effort */ }
+}
 function createProject(root, id, historyFile, onChange) {
   const OPENSPEC = path.join(root, 'openspec');
   const rel = (p) => relTo(root, p);
@@ -676,7 +694,11 @@ function createProject(root, id, historyFile, onChange) {
     }
   }
 
-  async function scan() {
+  // `at` (time travel in the git history): the openspec/ of a commit, unpacked into `at.root`, as of `at.t`; then
+  // nothing is recorded, validated or taken from the working tree
+  async function scan(at = null) {
+    const base = at?.root ?? root, OPENSPEC = path.join(base, 'openspec');
+    const cli0 = { validate: {}, list: {}, show: {} }, cv = at ? cli0 : cli;
     const roadmapMd = await readText(path.join(OPENSPEC, 'roadmap.md'));
     const { rows, milestones } = parseRoadmap(roadmapMd);
     const changesDir = path.join(OPENSPEC, 'changes');
@@ -684,7 +706,7 @@ function createProject(root, id, historyFile, onChange) {
 
     for (const e of await fsp.readdir(changesDir, { withFileTypes: true }).catch(() => [])) {
       if (!e.isDirectory() || e.name === 'archive') continue;
-      found.set(e.name, await readChange(root, path.join(changesDir, e.name), e.name, 'active'));
+      found.set(e.name, await readChange(base, path.join(changesDir, e.name), e.name, 'active'));
     }
     const archiveDir = path.join(changesDir, 'archive');
     for (const e of await fsp.readdir(archiveDir, { withFileTypes: true }).catch(() => [])) {
@@ -692,13 +714,13 @@ function createProject(root, id, historyFile, onChange) {
       const m = e.name.match(/^(\d{4}-\d{2}-\d{2})-(.+)$/);
       const name = m ? m[2] : e.name;
       if (found.has(name) && found.get(name).location === 'active') continue;
-      found.set(name, await readChange(root, path.join(archiveDir, e.name), name, 'archive', m ? m[1] : null));
+      found.set(name, await readChange(base, path.join(archiveDir, e.name), name, 'archive', m ? m[1] : null));
     }
     const backlogDir = path.join(OPENSPEC, 'backlog');
     for (const e of await fsp.readdir(backlogDir, { withFileTypes: true }).catch(() => [])) {
       if (!e.isFile() || !e.name.endsWith('.md')) continue;
       const name = e.name.slice(0, -3);
-      if (!found.has(name)) found.set(name, await readBacklog(root, path.join(backlogDir, e.name), name));
+      if (!found.has(name)) found.set(name, await readBacklog(base, path.join(backlogDir, e.name), name));
     }
 
     const changes = [];
@@ -714,9 +736,9 @@ function createProject(root, id, historyFile, onChange) {
     for (const c of changes) {
       c.status = statusOf(c);
       c.milestone = c.inRoadmap ? milestones.find((m) => orderNum(c.order) >= m.from && orderNum(c.order) <= m.to)?.id ?? null : null;
-      c.validation = cli.validate[`change:${c.name}`] ?? null;
-      c.cliList = cli.list[c.name] ?? null;
-      c.deltas = cli.show[c.name] ?? null;
+      c.validation = cv.validate[`change:${c.name}`] ?? null;
+      c.cliList = cv.list[c.name] ?? null;
+      c.deltas = cv.show[c.name] ?? null;
     }
     for (const c of changes) {
       c.blockedBy = c.dependsOn.filter((o) => !isDone(byOrder.get(o)));
@@ -730,9 +752,9 @@ function createProject(root, id, historyFile, onChange) {
       total: tickets.reduce((a, c) => a + (c.tasks?.total ?? 0), 0),
       archived: changes.filter((c) => c.status === 'archived').length,
     };
-    recordHistory(changes, totals);
+    if (!at) recordHistory(changes, totals);
 
-    const specValidation = Object.entries(cli.validate).filter(([k]) => k.startsWith('spec:'))
+    const specValidation = Object.entries(cv.validate).filter(([k]) => k.startsWith('spec:'))
       .map(([k, v]) => ({ id: k.slice(5), ...v }));
 
     return {
@@ -747,10 +769,54 @@ function createProject(root, id, historyFile, onChange) {
       totals,
       specs: { validation: specValidation },
       cli: { available: cli.available, version: cli.version, lastRun: cli.lastRun, durationMs: cli.durationMs, error: cli.error, command: CLI, state: cli.state ?? 'idle', since: cli.since ?? null, nextTry: cli.nextTry ?? null },
-      workspace,
-      events: history.events.slice(-200).reverse(),
-      series: history.series,
+      workspace: at ? { recent: [], changedLast15m: 0, changedLastHour: 0, uncommitted: null, scannedAt: at.t } : workspace,
+      events: (at ? history.events.filter((e) => e.t <= at.t) : history.events).slice(-200).reverse(),
+      series: at ? history.series.filter((x) => x.t <= at.t) : history.series,
+      ...(at ? { at: at.commit } : {}),
     };
+  }
+  // the board at a commit or branch: its openspec/ unpacked once into a temporary folder (git archive), then read
+  // like the working tree; the last few are kept
+  const atCache = new Map(); // commit -> state
+  const atDirs = new Map();  // commit -> its unpacked folder (for the file contents of the board at that commit)
+  async function stateAt(rev) {
+    rev = String(rev ?? '');
+    if (!/^[\w][\w./@^~-]{0,200}$/.test(rev) || rev.includes('..')) throw httpError(400, 'Not a revision.');
+    const meta = await gitRead(root, ['log', '-1', '--format=%H%x00%at%x00%an%x00%D%x00%s', '--end-of-options', rev, '--']);
+    if (!meta?.out.trim()) throw httpError(404, 'No such commit or branch.');
+    const [h, at, an, d, sub] = meta.out.trim().split('\x00');
+    const commit = { h, t: Number(at) * 1000, an, s: sub, refs: d ? d.split(', ').filter(Boolean) : [], rev };
+    if (atCache.has(h)) return { ...atCache.get(h), at: commit };
+    const prefix = (await gitRead(root, ['rev-parse', '--show-prefix']))?.out.trim() ?? '';
+    const base = path.join(os.tmpdir(), 'openspec-dashboard-at', `${id}-${h.slice(0, 16)}`);
+    if (!fs.existsSync(path.join(base, 'ok'))) {
+      fs.rmSync(base, { recursive: true, force: true });
+      fs.mkdirSync(path.join(base, 'openspec'), { recursive: true });
+      const has = await gitRead(root, ['cat-file', '-t', `${h}:${prefix}openspec`]);
+      if (has?.out.trim() === 'tree') {
+        await extractTree(root, `${h}:${prefix}openspec`, path.join(base, 'openspec'));
+        // a tree (not a commit) is archived with the current time: each file gets the time of its last commit up to
+        // this one (one git log for all), else the commit's time
+        const last = new Map();
+        let t = commit.t;
+        for (const l of ((await gitRead(root, ['log', '--format=@%at', '--name-only', '--no-renames', h, '--', `:(literal)${prefix}openspec`], 16 << 20))?.out ?? '').split('\n')) {
+          if (l.startsWith('@')) t = Number(l.slice(1)) * 1000;
+          else if (l && !last.has(l)) last.set(l, t);
+        }
+        await walk(path.join(base, 'openspec'), async (f) => {
+          const when = new Date(last.get(prefix + path.relative(base, f).split(path.sep).join('/')) ?? commit.t);
+          await fsp.utimes(f, when, when).catch(() => {});
+        });
+      }
+      fs.writeFileSync(path.join(base, 'ok'), '');
+      pruneSnapshots(path.dirname(base));
+    }
+    atDirs.set(h, base);
+    const st = await scan({ root: base, t: commit.t, commit });
+    const out = { projectId: id, ...st, missing: !fs.readdirSync(path.join(base, 'openspec')).length };
+    atCache.set(h, out);
+    if (atCache.size > 20) atCache.delete(atCache.keys().next().value);
+    return { ...out, at: commit };
   }
 
   async function publish() {
@@ -849,7 +915,8 @@ function createProject(root, id, historyFile, onChange) {
     return mergeTimeline(g, history.events, project.state?.changes ?? []);
   }
 
-  return Object.assign(project, { stop, timeline, gitLog: (q) => gitLog(root, q), gitShow: (h) => gitShow(root, h), publish, schedule, cliDebounced, cliRetry, refreshCli, scanWorkspace, summary, start, openspecDir: OPENSPEC });
+  const atDir = (h) => { const d = atDirs.get(String(h ?? '')); return d && fs.existsSync(path.join(d, 'ok')) ? d : null; };
+  return Object.assign(project, { stop, timeline, stateAt, atDir, gitLog: (q) => gitLog(root, q), gitShow: (h) => gitShow(root, h), publish, schedule, cliDebounced, cliRetry, refreshCli, scanWorkspace, summary, start, openspecDir: OPENSPEC });
 }
 
 // ---------------------------------------------------------------- agent (opt-in with --agent)
@@ -3118,6 +3185,10 @@ const server = http.createServer(async (req, res) => {
       try { return json(res, await projectFor(url).gitShow(url.searchParams.get('h'))); }
       catch (e) { if (!e.status) throw e; res.writeHead(e.status, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: e.message })); }
     }
+    if (url.pathname === '/api/state-at') {
+      try { return json(res, await projectFor(url).stateAt(url.searchParams.get('rev'))); }
+      catch (e) { if (!e.status) throw e; res.writeHead(e.status, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: e.message })); }
+    }
     if (url.pathname === '/api/state') {
       const p = projectFor(url);
       return json(res, { rev: p.rev, scannedAt: Date.now(), ...p.state });
@@ -3141,8 +3212,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === '/api/file') {
       const p = projectFor(url);
-      const file = path.resolve(p.root, url.searchParams.get('path') ?? '');
-      if (!file.startsWith(p.openspecDir + path.sep) || !file.endsWith('.md')) { res.writeHead(400); return res.end('only openspec/**/*.md'); }
+      const at = url.searchParams.get('at'), base = at ? p.atDir(at) : p.root; // `at`: the board at a commit
+      if (!base) { res.writeHead(404); return res.end('that commit is not loaded'); }
+      const file = path.resolve(base, url.searchParams.get('path') ?? '');
+      if (!file.startsWith(path.join(base, 'openspec') + path.sep) || !file.endsWith('.md')) { res.writeHead(400); return res.end('only openspec/**/*.md'); }
       const text = await readText(file);
       if (text === null) { res.writeHead(404); return res.end('not found'); }
       res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });

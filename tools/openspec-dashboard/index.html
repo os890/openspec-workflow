@@ -1653,6 +1653,23 @@ body.board-max { overflow: hidden; }
 /* git history panel */
 .gh-panel { width: min(640px, calc(100vw - 24px)); z-index: 71; }
 .gh-panel.max { inset: 8px; width: auto; --agp: 22px; }
+/* time travel: the history shrinks to a small box at the bottom right, the board is the earlier state */
+.gh-panel.travel, .gh-panel.travel.max { inset: auto 12px 12px auto; top: auto; height: min(44vh, 420px); width: min(400px, calc(100vw - 24px)); }
+.gh-panel.travel .gh-detail { display: none; }
+.gh-panel.travel .gh-list { flex: 1; border: 0; }
+.gh-panel.travel .ag-maxbtn { display: none; }
+.gh-row.tt-on, .gh-row.tt-on.sel { box-shadow: inset 3px 0 #f08c2e; background: color-mix(in srgb, #f08c2e 14%, transparent); }
+.gh-board { font-size: 12.5px; max-width: 220px; }
+.tt-bar { position: sticky; top: 0; z-index: 60; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 8px 20px; font-size: 13.5px;
+  background: color-mix(in srgb, #f08c2e 15%, var(--surface)); border-bottom: 2px solid #f08c2e; color: var(--ink); }
+.tt-bar .tt-ico { font-size: 16px; }
+.tt-bar .tt-what { min-width: 0; flex: 1 1 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-bar .tt-s { font-weight: 600; }
+.tt-bar .tt-nav { display: inline-flex; gap: 6px; margin-left: auto; }
+.tt-bar .warn { color: var(--st-blocked); }
+/* nothing can be changed in an earlier state */
+body.time-travel .ic-compose, body.time-travel .ic-note, body.time-travel [data-agent], body.time-travel [data-nt-open], body.time-travel [data-idea-plan],
+body.time-travel [data-idea-delete], body.time-travel [data-idea-refine], body.time-travel #agent-btn, body.time-travel #conn { display: none !important; }
 .gh-panel .ag-head h2 { white-space: nowrap; }
 .gh-branch { font-size: 12.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gh-bar { padding: 0 var(--agp) 8px; display: flex; gap: 6px 14px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid var(--line); font-size: 12.5px; flex-shrink: 0; }
@@ -1807,6 +1824,7 @@ body.ag-max { overflow: hidden; }
   <div class="hm-row hm-set"><span>Settings</span><button class="btn" id="settings-btn" type="button" aria-label="Settings" title="Settings: local models, Podman, write mode, file manager" hidden>⚙ Open…</button></div>
 </div>
 <div class="bg-pop" id="bg-pop" role="dialog" aria-label="Sessions in the background" hidden></div>
+<div class="tt-bar" id="tt-bar" role="status" hidden></div>
 <div class="wrap">
   <section class="overview" id="overview" aria-live="polite" hidden></section>
   <div class="main">
@@ -1998,11 +2016,11 @@ function md(src) {
   return out;
 }
 async function loadFile(f) {
-  const hit = ui.fileCache.get(f.path);
+  const key = `${tt.h ?? ''}:${f.path}`, hit = ui.fileCache.get(key);
   if (hit && hit.mtime === f.mtime) return hit.text;
-  const r = await fetch(withProject('/api/file?path=' + encodeURIComponent(f.path)));
+  const r = await fetch(withProject('/api/file?path=' + encodeURIComponent(f.path) + (tt.h ? `&at=${tt.h}` : '')));
   const text = r.ok ? await r.text() : `Could not load ${f.path} (${r.status}).`;
-  ui.fileCache.set(f.path, { mtime: f.mtime, text });
+  ui.fileCache.set(key, { mtime: f.mtime, text });
   return text;
 }
 
@@ -3224,6 +3242,7 @@ function accept(next) {
     b.title = n > 0 ? `Git history · ${n} uncommitted change${n === 1 ? '' : 's'} (files changed, added or deleted)` : 'Git history: the commits, branches and tags, and what each commit changed';
   }
   if (AGENT_TOKEN) $('folder-btn').hidden = false;
+  if (tt.rev) { tt.live = next; return; } // looking at an earlier state: the live one waits for "Back to now"
   const prev = ui.state;
   if (prev) {
     const before = new Map(prev.changes.map((c) => [c.name, c]));
@@ -4787,7 +4806,7 @@ function ghOpen() {
   const el = $('githist');
   el.hidden = false; el.classList.toggle('max', gh.max);
   el.innerHTML = `<div class="ag-head"><h2>⎇ History</h2><span class="muted gh-branch" id="gh-branch"></span><button class="link ag-maxbtn" type="button" data-gh-max></button><button class="link" type="button" data-gh-close>Close ✕</button></div>
-    <div class="gh-bar"><label class="gh-only" title="Only the commits that changed openspec/"><input type="checkbox" data-gh-only ${gh.only ? 'checked' : ''}> openspec/ only</label><button class="link" type="button" data-gh-refresh title="Load the history again">↻ Refresh</button><span class="ag-note" id="gh-note"></span></div>
+    <div class="gh-bar"><label class="gh-only" title="Only the commits that changed openspec/"><input type="checkbox" data-gh-only ${gh.only ? 'checked' : ''}> openspec/ only</label><span id="gh-board"></span><button class="link" type="button" data-gh-refresh title="Load the history again">↻ Refresh</button><span class="ag-note" id="gh-note"></span></div>
     <div class="gh-body"><div class="gh-list" id="gh-list" tabindex="0" role="listbox" aria-label="Commits"></div><div class="gh-detail" id="gh-detail"></div></div>`;
   ghMaxBtn(); $('git-btn').setAttribute('aria-expanded', 'true');
   ghLoad(true);
@@ -4799,7 +4818,7 @@ async function ghOnState() {
   const r = await fetch(withProject(`/api/git/log?only=${gh.only ? 1 : 0}`)).then((x) => x.json()).catch(() => null);
   if (r?.commits && (r.commits[0]?.h !== gh.commits[0]?.h || r.branch !== gh.branch)) ghLoad(true);
 }
-function ghClose() { if (!gh.open) return; gh.open = false; $('githist').hidden = true; $('git-btn').setAttribute('aria-expanded', 'false'); }
+function ghClose() { if (!gh.open) return; gh.open = false; $('githist').hidden = true; $('git-btn').setAttribute('aria-expanded', 'false'); travelBack(); }
 function ghMaxBtn() { const b = $('githist').querySelector('[data-gh-max]'); if (b) b.textContent = gh.max ? '⤡ Restore' : '⤢ Maximize'; }
 async function ghLoad(fresh) {
   if (gh.loading && !fresh) return;
@@ -4809,6 +4828,7 @@ async function ghLoad(fresh) {
     const r = await (await fetch(withProject(`/api/git/log?skip=${fresh ? 0 : gh.commits.length}&only=${gh.only ? 1 : 0}`))).json();
     if (seq !== gh.seq || !gh.open) return;
     gh.repo = r.repo; gh.branch = r.branch; gh.note = r.error ?? '';
+    if (r.branches) gh.branches = r.branches;
     if (fresh) { gh.commits = []; gh.lanes = []; gh.rows = []; }
     const { rows, lanes } = ghLanes(r.commits ?? [], gh.lanes);
     gh.commits.push(...(r.commits ?? [])); gh.rows.push(...rows); gh.lanes = lanes; gh.more = !!r.more;
@@ -4822,9 +4842,16 @@ function ghRender() {
   if (!gh.open) return;
   $('gh-branch').textContent = gh.repo ? `${ui.state?.projectLabel ?? ui.state?.project ?? ''} · ${gh.branch === 'HEAD' ? 'detached HEAD' : gh.branch ?? ''}` : '';
   $('gh-note').textContent = gh.note;
+  // the board of a branch: its last commit, as with a double-click on a commit
+  const bs = gh.branches ?? [], cur = tt.rev && bs.includes(tt.rev) ? tt.rev : '';
+  morphHtml($('gh-board'), bs.length > 1 || tt.rev ? `<select class="style-select gh-board" data-gh-board aria-label="Show the board of a branch" title="Show the board as it is on another branch (its last commit); double-click a commit for the board at that commit">
+      <option value="" ${tt.rev ? '' : 'selected'}>Board: now${gh.branch && gh.branch !== 'HEAD' ? ` (${esc(gh.branch)}, working tree)` : ''}</option>
+      ${tt.rev && !cur ? `<option value="${esc(tt.rev)}" selected>Board: ${esc(tt.rev.slice(0, 8))}</option>` : ''}
+      ${bs.map((b) => `<option value="${esc(b)}" ${b === cur ? 'selected' : ''}>Board: ${esc(b)}</option>`).join('')}</select>` : '');
+  const bsel = $('gh-board').querySelector('select'); if (bsel) bsel.value = tt.rev ?? ''; // morphing keeps the old choice
   if (gh.repo === false) { $('gh-list').innerHTML = '<div class="gh-empty">This project is not in a git repository.</div>'; $('gh-detail').innerHTML = ''; return; }
   const lanes = Math.min(12, Math.max(1, ...gh.rows.map((r) => r.width)));
-  morphHtml($('gh-list'), gh.commits.map((c, i) => `<div class="gh-row ${c.h === gh.sel ? 'sel' : ''}" role="option" aria-selected="${c.h === gh.sel}" data-gh="${c.h}" title="${esc(c.an)} · ${esc(ghFull(c.t))}">${ghSvg(gh.rows[i], lanes)}${ghRefs(c.refs)}<span class="gh-s">${esc(c.s)}</span><span class="gh-t">${esc(ghDate(c.t))}</span></div>`).join('')
+  morphHtml($('gh-list'), gh.commits.map((c, i) => `<div class="gh-row ${c.h === gh.sel ? 'sel' : ''} ${c.h === tt.h ? 'tt-on' : ''}" role="option" aria-selected="${c.h === gh.sel}" data-gh="${c.h}" title="${esc(c.an)} · ${esc(ghFull(c.t))} · double-click: the board at this commit">${ghSvg(gh.rows[i], lanes)}${ghRefs(c.refs)}<span class="gh-s">${esc(c.s)}</span><span class="gh-t">${esc(ghDate(c.t))}</span></div>`).join('')
     + (gh.more ? '<div class="gh-more">Scroll for more…</div>' : gh.commits.length ? `<div class="gh-more">${gh.commits.length} commit${gh.commits.length === 1 ? '' : 's'}${gh.only ? ' that changed openspec/' : ''}</div>` : '<div class="gh-empty">No commits.</div>'));
 }
 async function ghSelect(h, scroll = true) {
@@ -4857,6 +4884,61 @@ function ghDetailHtml(d) {
     ${d.diffs.map((x, i) => `<details class="gh-diff" id="gh-d-${i}" ${i < 6 ? 'open' : ''}><summary><span class="p" title="${esc(x.path)}">${esc(x.path)}</span></summary><table class="gh-dt">${x.lines.map(row).join('')}</table>${x.cut ? '<div class="ag-note" style="padding:4px 10px">… the rest of this file’s diff is not shown</div>' : ''}</details>`).join('')}
     ${d.cut ? '<div class="ag-note">The diff is too large; the rest is not shown.</div>' : ''}`;
 }
+// ---- time travel: the page at a commit or at the tip of a branch (double-click in the history, the branch picker,
+// ↑/↓ while looking), read-only, until "Back to now" or the history closes; the live state waits in the meantime
+const tt = { rev: null, h: null, info: null, live: null, busy: false, err: '', seq: 0 };
+async function travelTo(rev) {
+  if (!rev) return travelBack();
+  const seq = ++tt.seq;
+  tt.busy = true; tt.err = ''; ttBar();
+  try {
+    const r = await fetch(withProject('/api/state-at?rev=' + encodeURIComponent(rev)));
+    const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+    if (seq !== tt.seq || !gh.open) return;
+    if (!tt.rev) tt.live = ui.state;
+    Object.assign(tt, { rev, h: d.at.h, info: d.at, missing: d.missing });
+    ui.fresh.clear();
+    ui.state = d;
+    document.body.classList.add('time-travel');
+    $('githist').classList.add('travel');
+    render();
+    if (gh.sel !== d.at.h && gh.commits.some((c) => c.h === d.at.h)) ghSelect(d.at.h); // a branch: its commit in the list
+  } catch (e) { if (seq === tt.seq) tt.err = e.message; }
+  finally { if (seq === tt.seq) { tt.busy = false; ttBar(); ghRender(); } }
+}
+function travelBack() {
+  tt.seq++;
+  const was = tt.rev;
+  Object.assign(tt, { rev: null, h: null, info: null, busy: false, err: '' });
+  document.body.classList.remove('time-travel');
+  $('githist').classList.remove('travel');
+  if (was && tt.live) { ui.state = tt.live; render(); }
+  tt.live = null;
+  ttBar(); ghRender();
+}
+function ttBar() {
+  const b = $('tt-bar');
+  b.hidden = !tt.rev && !tt.busy && !tt.err;
+  if (b.hidden) return;
+  const i = gh.commits.findIndex((c) => c.h === tt.h), c = tt.info;
+  const branch = c && tt.rev !== c.h && !/^[0-9a-f]{7,64}$/.test(tt.rev) ? tt.rev : null;
+  b.innerHTML = `<span class="tt-ico" aria-hidden="true">⏪</span>${c ? `<span class="tt-what">${branch ? `Branch <b>${esc(branch)}</b> · ` : 'The project at '}<code>${esc(c.h.slice(0, 8))}</code> <span class="tt-s">${esc(c.s)}</span> <span class="muted">· ${esc(ghFull(c.t))}${tt.missing ? ' · no openspec/ at that point' : ''}</span></span>` : '<span class="tt-what">Loading…</span>'}
+    ${tt.busy ? '<span class="ag-spin"></span>' : ''}${tt.err ? `<span class="warn">✕ ${esc(tt.err)}</span>` : ''}
+    <span class="tt-nav"><button class="btn" type="button" data-tt-step="1" ${i < 0 || i >= gh.commits.length - 1 ? 'disabled' : ''} title="One commit earlier (↓ in the history)">◀ Earlier</button><button class="btn" type="button" data-tt-step="-1" ${i <= 0 ? 'disabled' : ''} title="One commit later (↑ in the history)">Later ▶</button><button class="btn primary" type="button" data-tt-back title="The live state of the working tree again">Back to now</button></span>`;
+}
+document.addEventListener('click', (e) => {
+  const st = e.target.closest?.('[data-tt-step]'), back = e.target.closest?.('[data-tt-back]');
+  if (back) return travelBack();
+  if (st) { const i = gh.commits.findIndex((c) => c.h === tt.h) + Number(st.dataset.ttStep); if (gh.commits[i]) { ghSelect(gh.commits[i].h); travelTo(gh.commits[i].h); } return; }
+  // while looking at an earlier state, nothing can be changed: the controls that would are hidden or blocked
+  if (tt.rev && e.target.closest?.('[data-agent], [data-ic-send], [data-ic-propose], [data-nt-open], [data-nt-save], [data-idea-plan], [data-idea-delete], [data-idea-refine], [data-ed-accept], [data-tk-save], [data-np-open], [data-brainstorm]')) {
+    e.preventDefault(); e.stopPropagation();
+    tt.err = 'This is an earlier state, read-only: Back to now to change things.'; ttBar();
+    setTimeout(() => { if (tt.err.startsWith('This is an earlier')) { tt.err = ''; ttBar(); } }, 3500);
+  }
+}, true);
+$('githist').addEventListener('dblclick', (e) => { const row = e.target.closest('[data-gh]'); if (row) { ghSelect(row.dataset.gh, false); travelTo(row.dataset.gh); } });
 $('git-btn').addEventListener('click', () => (gh.open ? ghClose() : ghOpen()));
 // the project folder in the file manager (settings › General says which one)
 $('folder-btn').addEventListener('click', async () => {
@@ -4881,6 +4963,7 @@ $('githist').addEventListener('click', (e) => {
   if (f) { const d = $(`gh-d-${f.dataset.ghFile}`); if (d) { d.open = true; d.scrollIntoView({ block: 'start', behavior: 'smooth' }); } }
 });
 $('githist').addEventListener('change', (e) => {
+  if (e.target.matches('[data-gh-board]')) return travelTo(e.target.value);
   if (!e.target.matches('[data-gh-only]')) return;
   gh.only = e.target.checked; try { localStorage.setItem('osd-gh-only', gh.only ? '1' : '0'); } catch {}
   ghLoad(true);
@@ -4897,7 +4980,9 @@ document.addEventListener('keydown', (e) => {
   e.preventDefault(); e.stopPropagation();
   const i = Math.max(0, Math.min(gh.commits.length - 1, gh.commits.findIndex((c) => c.h === gh.sel) + k));
   if (gh.commits[i]) ghSelect(gh.commits[i].h);
+  if (gh.commits[i] && tt.rev) { clearTimeout(tt.key); tt.key = setTimeout(() => travelTo(gh.commits[i].h), 200); } // scrubbing through time
 }, true);
+document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && gh.open && e.target.closest?.('#gh-list') && gh.sel) { e.preventDefault(); travelTo(gh.sel); } });
 // the chat and the other panels take the same place
 document.addEventListener('click', (e) => { if (gh.open && e.target.closest?.('[data-chat-btn], #term-btn, [data-agent], [data-sc-open], [data-np-open]')) ghClose(); }, true);
 

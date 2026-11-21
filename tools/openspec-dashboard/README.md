@@ -262,6 +262,17 @@ fsmonitor, prompts, optional locks or any transport (a partial clone does not fe
 timeout of 20 s and output limits (a diff is cut at 2 MB, a file's diff at 3000 lines, a line at 2000 characters);
 commit ids are checked before they reach git.
 
+**Back in time**: a double-click on a commit (or Enter), or a branch in the history's **Board:** picker, asks
+`GET /api/state-at?rev=<commit or branch>`: the server resolves it (`git log -1 --end-of-options <rev>`; a revision
+must start with a letter or digit and contain no `..`), unpacks `openspec/` of that commit into a temporary folder
+(`git archive <commit>:<prefix>openspec | tar -x`, kept for the last 40 commits), sets each file's time to its last
+commit up to that one (one `git log --name-only`), and reads it with the same code as the working tree, without the
+CLI's validation and without recording history; the result carries `at` (commit, time, subject) and the events up
+to that time. `GET /api/file?at=<commit>` serves the files of such a snapshot. The page keeps the live state aside
+(SSE updates go there), hides the controls that would change something, shows an orange bar with ◀ Earlier,
+Later ▶ and Back to now, and shrinks the history to a box; ↑/↓ there travel along (debounced). Closing the history
+returns to the live state.
+
 **The folder button** (with `--agent`, on a project's page) opens the project's folder: `POST /api/open-folder` runs
 the command from `settings.json` (`files.open`, set in **⚙ Settings › General**). Empty: `open` (macOS), `explorer`
 (Windows) or `xdg-open`; an app name on macOS: `open -a <app> <folder>`; a command with `{dir}`: split into words
