@@ -242,7 +242,9 @@ Before the first session:
 opens **Chat › Terminal session**. The drop-down lists the Claude Code sessions of the project (in a terminal or an
 IDE), with the last prompt you typed there, whether it is working or waiting for input, and when it last did
 something; ended ones stay in the list for 12 hours. Pick one to join it: you see what it does, live (your prompts,
-Claude's replies and its steps).
+Claude's replies and its steps). The end of the thread says where it stands: **Working: <its current step> · since
+<time>** while it works (an answer is on its way), **✓ Done · waiting for your next message** once it has answered,
+or **Session ended**.
 
 Following a session works without any setup: the dashboard finds the running sessions in Claude Code's own records
 (`~/.claude/sessions`) and reads their transcripts.

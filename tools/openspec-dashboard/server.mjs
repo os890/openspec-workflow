@@ -1573,7 +1573,10 @@ function createAgent(project) {
     if (cut) from0 = buf.indexOf(10) + 1; // start at a whole line
     const end = buf.lastIndexOf(10) + 1;    // up to the last whole line
     const entries = end > from0 ? buf.subarray(from0, end).toString('utf8').split('\n').filter(Boolean).flatMap(transcriptEntries) : [];
-    return { entries, next: start + Math.max(end, from0), cut, size };
+    // the state right now, for "working…" / "done" at the end of the thread (Claude Code's own idle/busy when it runs)
+    const r = runningSessions().find((y) => y.sessionId === x.sessionId);
+    const state = x.listening ? 'listening' : r ? (r.waiting ? 'waiting' : 'working') : x.ended || x.elsewhere || x.hookless ? 'ended' : x.waiting ? 'waiting' : 'working';
+    return { entries, next: start + Math.max(end, from0), cut, size, state };
   }
 
   function control({ job: jobId, action }) {
