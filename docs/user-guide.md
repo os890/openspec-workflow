@@ -86,8 +86,8 @@ node <path-to>/tools/openspec-dashboard/launcher.mjs install -- --agent --scan=~
 `--port=` picks the port (4590 by default), `--name=` the app's name, `--tab` opens the dashboard in a tab of the
 default browser instead (also what happens when none of those browsers is installed).
 
-**With its own icon in the Dock.** The page can be installed as a web app: open it in Chrome (or Edge, Brave) and
-click **Install** in the address bar (Safari: File › Add to Dock). It then runs in its own window with the logo in
+**With its own icon in the Dock.** The page can be installed as a web app: in Chrome (or Edge, Brave), **☰ › Install…**
+or **Install** in the address bar (Safari: File › Add to Dock). It then runs in its own window with the logo in
 the Dock, where it can stay (right click › Options › Keep in Dock); the launcher opens it from then on. A web app
 cannot start the dashboard by itself, so install the launcher with `--service`: the dashboard then runs from login
 on (macOS: a LaunchAgent, restarted if it ends; Linux: a systemd user service), and the pinned icon always finds

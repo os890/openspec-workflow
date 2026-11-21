@@ -1466,6 +1466,8 @@ body.board-max { overflow: hidden; }
 .hm-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 5px 4px; font-size: 13px; }
 .hm-row .style-select { min-width: 130px; }
 .hm-set:has(#settings-btn[hidden]) { display: none; }
+.hm-row[hidden] { display: none; }
+.hdr-menu .btn.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 /* uncommitted changes: a dot on ⎇ */
 #git-btn { position: relative; }
 #git-btn.git-dirty::after { content: ""; position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background: #f08c2e; border: 2px solid var(--surface); }
@@ -1785,6 +1787,7 @@ body.ag-max { overflow: hidden; }
     </select>
   </label>
   <div class="hm-row"><span>Light or dark</span><button class="btn" id="theme" type="button" aria-label="Toggle light or dark theme">◐ Switch</button></div>
+  <div class="hm-row" id="hm-install" hidden><span>As an app, with its own icon in the Dock</span><button class="btn primary" id="install-btn" type="button">Install…</button></div>
   <div class="hm-row hm-set"><span>Settings</span><button class="btn" id="settings-btn" type="button" aria-label="Settings" title="Settings: local models, Podman, write mode, file manager" hidden>⚙ Open…</button></div>
 </div>
 <div class="bg-pop" id="bg-pop" role="dialog" aria-label="Sessions in the background" hidden></div>
@@ -3272,6 +3275,12 @@ $('style').addEventListener('change', (e) => {
   const st = applyStyle(e.target.value);
   try { localStorage.setItem('osd-style', st); } catch {}
 });
+// "Install as app" (☰): Chrome offers an installable page with beforeinstallprompt; its dialog installs it as a web
+// app with its own window and Dock icon. Not shown once it runs as that app.
+let installPrompt = null;
+addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; $('hm-install').hidden = false; });
+addEventListener('appinstalled', () => { installPrompt = null; $('hm-install').hidden = true; });
+$('install-btn').addEventListener('click', async () => { if (!installPrompt) return; hdrMenu(false); await installPrompt.prompt(); installPrompt = null; $('hm-install').hidden = true; });
 // the menu at the end of the header: style, light or dark, settings
 const hdrMenu = (open) => { $('hdr-menu').hidden = !open; $('menu-btn').setAttribute('aria-expanded', String(open)); };
 $('menu-btn').addEventListener('click', (e) => { e.stopPropagation(); hdrMenu($('hdr-menu').hidden); });
