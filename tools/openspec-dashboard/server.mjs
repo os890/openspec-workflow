@@ -2634,7 +2634,7 @@ function remapDeps(raw, map) {
 }
 // ---------------------------------------------------------------- accepting a proposed update of a file (with --agent)
 // The assistant only proposes (an ```edit <path> block); the user's Accept writes it. Only Markdown under openspec/,
-// new files only below openspec/changes/, and only when the file is still what the preview was computed against.
+// new files only below openspec/changes/ or as a ticket draft in openspec/backlog/, and only when the file is still what the preview was computed against.
 const textHash = (t) => { let h = 0x811c9dc5; for (const ch of String(t ?? '')) { h ^= ch.codePointAt(0); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16); };
 async function writeOpenspecFile(project, { path: rel, content, base }) {
   const file = path.resolve(project.root, String(rel ?? ''));
@@ -2642,7 +2642,9 @@ async function writeOpenspecFile(project, { path: rel, content, base }) {
   if (!file.startsWith(openspec + path.sep) || !file.endsWith('.md')) throw httpError(400, 'Only Markdown files under openspec/ can be updated here.');
   if (typeof content !== 'string' || content.length > 400000) throw httpError(400, 'No content, or too long.');
   const now = await readText(file);
-  if (now === null && !file.startsWith(path.join(openspec, 'changes') + path.sep)) throw httpError(404, `${rel} does not exist; new files only below openspec/changes/.`);
+  // new files: anything below openspec/changes/, and a ticket draft directly in openspec/backlog/
+  const newOk = file.startsWith(path.join(openspec, 'changes') + path.sep) || path.dirname(file) === path.join(openspec, 'backlog');
+  if (now === null && !newOk) throw httpError(404, `${rel} does not exist; new files only below openspec/changes/ or as a draft in openspec/backlog/.`);
   if ((now ?? '') !== '' && textHash(now) !== base) throw httpError(409, `${rel} changed since the preview was made; look at the new preview.`);
   await writeAtomic(file, content.endsWith('\n') ? content : content + '\n');
   project.schedule(0);

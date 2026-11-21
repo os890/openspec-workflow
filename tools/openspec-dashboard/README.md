@@ -400,7 +400,7 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
   content and asks what should change (with suggestions per tab; the discussion of that tab can be included);
   **Propose** (or a request in the chat) makes the assistant write the complete new version of the file in a ```` ```edit <path> ```` block. The dashboard shows it as a diff against the
   file as it is now; **Accept** writes it, **Reject** drops it. The assistant stays read-only: only Accept writes,
-  only Markdown under `openspec/` (new files only below `openspec/changes/`), and only if the file is unchanged
+  only Markdown under `openspec/` (new files only below `openspec/changes/`, or a draft directly in `openspec/backlog/`), and only if the file is unchanged
   since the preview.
 - **Agent…** on a ticket, with the ticket's context added automatically:
   - **Ask**: a read-only question about the ticket; "Ask about this task" next to the current task prefills one.

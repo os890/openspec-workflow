@@ -4263,14 +4263,14 @@ function barHtml(c) {
   }
   if (c.brainstorm) {
     const idea = c.jobs.find((j) => j.idea)?.idea;
-    return c.jobs.length ? `<div class="ag-row"><span class="ag-note">Brainstorming${idea ? ` on the idea <code>${esc(idea)}</code>` : ''} · read-only · nothing is saved until you save the ticket</span><button class="link" type="button" data-ag-new style="margin-left:auto">New brainstorm</button><button class="btn" type="button" data-ag-chat-bg title="Keep it working in the background: the button with the number in the header shows how it is doing and when the answer is in">⤓ Background</button></div>` : '';
+    return c.jobs.length ? `<div class="ag-row"><span class="ag-note">Brainstorming${idea ? ` on the idea <code>${esc(idea)}</code>` : ''} · read-only · nothing is saved until you save the ticket</span><button class="link" type="button" data-ag-chat-bg style="margin-left:auto" title="Keep it working in the background: the button with the number in the header shows how it is doing and when the answer is in">⤓ Background</button><button class="link" type="button" data-ag-new>New brainstorm</button></div>` : '';
   }
-  if (!c.session) return c.jobs.length ? `<div class="ag-row"><span class="ag-note">Read-only assistant · remembers this conversation</span><button class="link" type="button" data-ag-new style="margin-left:auto">New chat</button><button class="btn" type="button" data-ag-chat-bg title="Keep it working in the background: the button with the number in the header shows how it is doing and when the answer is in">⤓ Background</button></div>` : '';
+  if (!c.session) return c.jobs.length ? `<div class="ag-row"><span class="ag-note">Read-only assistant · remembers this conversation</span><button class="link" type="button" data-ag-chat-bg style="margin-left:auto" title="Keep it working in the background: the button with the number in the header shows how it is doing and when the answer is in">⤓ Background</button><button class="link" type="button" data-ag-new>New chat</button></div>` : '';
   const j = c.last;
   return `<div class="ag-row"><span class="pill" style="--st:${stVar(JOB_ST[j.status])}">${JOB_LABEL[j.status] ?? j.status}</span>
       ${j.status === 'running' ? `<button class="btn" type="button" data-ag-control="end" data-job="${esc(j.id)}" title="Finish the current turn, then end">End after this turn</button><button class="btn" type="button" data-ag-control="stop" data-job="${esc(j.id)}">Stop now</button>` : ''}
       ${j.status === 'idle' ? `<button class="btn" type="button" data-ag-control="end" data-job="${esc(j.id)}">End session</button>` : ''}
-      <button class="link" type="button" data-agent="${esc(j.change)}" style="margin-left:auto">Ticket →</button><button class="btn" type="button" data-ag-chat-bg title="Keep it working in the background: the button with the number in the header shows how it is doing and when the answer is in">⤓ Background</button></div>
+      <button class="link" type="button" data-ag-chat-bg style="margin-left:auto" title="Keep it working in the background: the button with the number in the header shows how it is doing and when the answer is in">⤓ Background</button><button class="link" type="button" data-agent="${esc(j.change)}">Ticket →</button></div>
     <div class="ag-note">${alive(j) ? 'Your messages go straight to this session.' : 'Ended. A message continues it.'} Take over in a terminal${alive(j) ? ' once it has ended' : ''}: <code>claude --resume ${esc(j.sessionId)}</code></div>`;
 }
 function ticketItem(j) {
