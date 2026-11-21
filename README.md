@@ -9,6 +9,8 @@ is any new session or sub-agent that has not seen the implementation.
 
 ![The OpenSpec dashboard: the board of a project's changes, with the chat about the project next to it](docs/images/dashboard-chat.png)
 
+![Writing to a Claude Code session from the dashboard, in terminal colors: green code falls behind the conversation while the answer is on its way and stops when it is done](docs/images/dashboard-terminal-rain.webp)
+
 The repository contains:
 
 - the workflow as diagrams ([Mermaid](diagrams/openspec-workflow.mmd), horizontal in
