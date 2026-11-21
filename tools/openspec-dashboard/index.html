@@ -1352,6 +1352,7 @@ body.board-max { overflow: hidden; }
 .ov-unf { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: baseline; margin-top: 14px; font-size: 13px; }
 .ov-unf-i { display: inline-flex; gap: 8px; align-items: baseline; }
 .ov-note { font-size: 12.5px; color: var(--st-blocked); }
+.lbl-pre { font-weight: 400; color: var(--muted); }
 .ov-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .ov-name { font-size: 19px; font-weight: 800; letter-spacing: -.01em; overflow-wrap: anywhere; }
 .ov-top .pill { margin-left: auto; }
@@ -2993,9 +2994,11 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowDown' && i < rows.length - 1) blMove(row.dataset.bl, rows[i + 2]?.dataset.bl ?? null);
 });
 
+// "examples/todo-app": the part that tells two projects of the same name apart, muted, before the name
+const labelHtml = (l) => { const i = String(l).lastIndexOf('/'); return i < 0 ? esc(l) : `<span class="lbl-pre">${esc(l.slice(0, i + 1))}</span>${esc(l.slice(i + 1))}`; };
 function renderHeader(s) {
-  $('title').innerHTML = `${esc(s.project)} <span>· OpenSpec</span>`;
-  document.title = `${s.project} · OpenSpec`;
+  $('title').innerHTML = `${labelHtml(s.projectLabel ?? s.project)} <span>· OpenSpec</span>`;
+  document.title = `${s.projectLabel ?? s.project} · OpenSpec`;
   const cli = $('cli');
   if (!s.cli.available) { cli.textContent = 'CLI off'; cli.title = s.cli.error || 'started with --no-cli'; }
   else if (s.cli.error) { cli.innerHTML = '<span class="dot off"></span>openspec CLI error'; cli.title = s.cli.error; }
@@ -4164,7 +4167,7 @@ async function ghLoad(fresh) {
 }
 function ghRender() {
   if (!gh.open) return;
-  $('gh-branch').textContent = gh.repo ? `${ui.state?.project ?? ''} · ${gh.branch === 'HEAD' ? 'detached HEAD' : gh.branch ?? ''}` : '';
+  $('gh-branch').textContent = gh.repo ? `${ui.state?.projectLabel ?? ui.state?.project ?? ''} · ${gh.branch === 'HEAD' ? 'detached HEAD' : gh.branch ?? ''}` : '';
   $('gh-note').textContent = gh.note;
   if (gh.repo === false) { $('gh-list').innerHTML = '<div class="gh-empty">This project is not in a git repository.</div>'; $('gh-detail').innerHTML = ''; return; }
   const lanes = Math.min(12, Math.max(1, ...gh.rows.map((r) => r.width)));
@@ -4257,14 +4260,14 @@ function parkedHtml(o) {
   const back = (x, act, label) => x.exists ? `<button class="${act === 'reactivate' ? 'btn primary' : 'link'}" type="button" data-proj-act="${act}" data-root="${esc(x.root)}">${label}</button>`
     : `<span class="muted">its openspec/ folder is gone</span><button class="link" type="button" data-proj-act="forget" data-root="${esc(x.root)}">Remove from the list</button>`;
   const arch = (x) => { const m = x.summary; return `<div class="panel ov-card ov-arch">
-      <div class="ov-top"><span class="ov-name">${esc(x.name)}</span><span class="pill" style="--st:var(--st-archived)">Archived</span></div>
+      <div class="ov-top"><span class="ov-name">${labelHtml(x.label ?? x.name)}</span><span class="pill" style="--st:var(--st-archived)">Archived</span></div>
       <div class="ov-path">${esc(x.display)}</div>
       ${m && !m.loading ? `<div class="ov-row"><span class="num">${m.done}/${m.changes} changes done</span><span class="num">${m.totals.done}/${m.totals.total} tasks</span>${m.current ? `<span>last: ${esc(title(m.current.name))}</span>` : ''}</div>` : ''}
       <div class="ov-row"><span>archived ${ago(x.at)}</span></div>
       ${AGENT_TOKEN ? `<div class="ov-acts show">${back(x, 'reactivate', 'Reactivate')}</div>` : ''}</div>`; };
   return `<details class="ov-parked" ${ui.parkedOpen ? 'open' : ''} data-parked><summary><span class="label">${a.length ? 'Archived' : 'Unfollowed'}</span><span class="muted">${[a.length && `${a.length} archived`, u.length && `${u.length} unfollowed`].filter(Boolean).join(' · ')} · not watched, scanned or validated</span></summary>
     ${a.length ? `<div class="ov-grid">${a.map(arch).join('')}</div>` : ''}
-    ${u.length ? `<div class="ov-unf"><span class="muted">Unfollowed:</span>${u.map((x) => `<span class="ov-unf-i" title="${esc(x.display)}"><b>${esc(x.name)}</b>${AGENT_TOKEN ? back(x, 'follow', 'Follow again') : ''}${AGENT_TOKEN && x.exists ? `<button class="link" type="button" data-proj-act="forget" data-root="${esc(x.root)}" title="Remove it from this list">✕</button>` : ''}</span>`).join('')}</div>` : ''}
+    ${u.length ? `<div class="ov-unf"><span class="muted">Unfollowed:</span>${u.map((x) => `<span class="ov-unf-i" title="${esc(x.display)}"><b>${labelHtml(x.label ?? x.name)}</b>${AGENT_TOKEN ? back(x, 'follow', 'Follow again') : ''}${AGENT_TOKEN && x.exists ? `<button class="link" type="button" data-proj-act="forget" data-root="${esc(x.root)}" title="Remove it from this list">✕</button>` : ''}</span>`).join('')}</div>` : ''}
   </details>`;
 }
 document.addEventListener('toggle', (e) => { if (e.target.matches?.('[data-parked]')) ui.parkedOpen = e.target.open; }, true);
@@ -4296,7 +4299,7 @@ function renderOverview(o) {
   $('cli').textContent = '';
   const order = ['archived', 'complete', 'in-progress', 'specified', 'proposed', 'missing'];
   const card = (p) => {
-    if (p.loading) return `<a class="panel ov-card" href="${esc(hrefFor(p.id))}"><div class="ov-top"><span class="ov-name">${esc(p.name)}</span></div><div class="ov-empty">Reading openspec/…</div></a>`;
+    if (p.loading) return `<a class="panel ov-card" href="${esc(hrefFor(p.id))}"><div class="ov-top"><span class="ov-name">${labelHtml(p.label ?? p.name)}</span></div><div class="ov-empty">Reading openspec/…</div></a>`;
     const c = p.current;
     const fresh = prev.has(p.id) && (p.lastEvent?.t ?? 0) > prev.get(p.id);
     const n = Object.entries(p.counts).filter(([k]) => k !== 'parking' && k !== 'idea').reduce((a, [, v]) => a + v, 0) || 1;
@@ -4307,13 +4310,13 @@ function renderOverview(o) {
         ${c.task ? `<div class="ov-now"><span class="tid">${esc(c.task.id)}</span>${inline(c.task.text)}</div>` : c.blockedBy?.length ? `<div class="ov-now">waits for ${c.blockedBy.map((x) => '#' + x).join(', ')}</div>` : ''}
       </div>` : '<div class="ov-empty">No change to work on.</div>';
     return `<a class="panel ov-card ${fresh ? 'fresh' : ''}" href="${esc(hrefFor(p.id))}" title="Open ${esc(p.name)}">
-      <div class="ov-top"><span class="ov-name">${esc(p.name)}</span>${c ? `<span class="pill" style="--st:${stVar(c.status)}">${STATUS[c.status]?.label ?? c.status}</span>` : ''}</div>
+      <div class="ov-top"><span class="ov-name">${labelHtml(p.label ?? p.name)}</span>${c ? `<span class="pill" style="--st:${stVar(c.status)}">${STATUS[c.status]?.label ?? c.status}</span>` : ''}</div>
       <div class="ov-path">${esc(p.displayPath ?? p.name)}</div>
       ${cur}
       <div class="ov-stack" title="${order.filter((k) => p.counts[k]).map((k) => `${STATUS[k].label}: ${p.counts[k]}`).join(' · ')}">${order.filter((k) => p.counts[k]).map((k) => `<span style="width:${(p.counts[k] / n) * 100}%;background:${stVar(k)}"></span>`).join('')}</div>
       <div class="ov-row"><span class="num">${p.done}/${p.changes} changes done</span><span class="num">${p.totals.done}/${p.totals.total} tasks</span>${p.milestone ? `<span>${esc(p.milestone.id)} ${esc(p.milestone.title)} · <span class="num">${p.milestone.done}/${p.milestone.total}</span></span>` : ''}</div>
       <div class="ov-row"><span>last activity ${ago(p.lastActivity)}</span>${p.filesLast15m ? `<span class="num">${p.filesLast15m} files written in 15 min</span>` : ''}${p.invalid ? `<span class="warn">✕ ${p.invalid} failing validation</span>` : ''}${p.agent?.session ? `<span><span class="dot on"></span>session on ${esc(title(p.agent.session))}</span>` : p.agent?.external ? '<span><span class="dot on"></span>Claude Code active</span>' : ''}${p.agent?.queued ? `<span>${p.agent.queued} message${p.agent.queued > 1 ? 's' : ''} queued</span>` : ''}${p.cli?.error ? '<span class="warn">CLI error</span>' : ''}</div>
-      ${AGENT_TOKEN ? `<div class="ov-acts"><button class="link" type="button" data-proj-act="archive" data-id="${esc(p.id)}" data-name="${esc(p.name)}" title="Stop following it for now; it stays below, folded, with its last status">Archive</button><button class="link" type="button" data-proj-act="unfollow" data-id="${esc(p.id)}" data-name="${esc(p.name)}" title="Stop following it; its files stay as they are">Unfollow</button></div>` : ''}
+      ${AGENT_TOKEN ? `<div class="ov-acts"><button class="link" type="button" data-proj-act="archive" data-id="${esc(p.id)}" data-name="${esc(p.label ?? p.name)}" title="Stop following it for now; it stays below, folded, with its last status">Archive</button><button class="link" type="button" data-proj-act="unfollow" data-id="${esc(p.id)}" data-name="${esc(p.label ?? p.name)}" title="Stop following it; its files stay as they are">Unfollow</button></div>` : ''}
     </a>`;
   };
   morphHtml($('overview'), `
@@ -4325,7 +4328,7 @@ function renderOverview(o) {
   const sel = $('project');
   if (sel && sel.dataset.ids !== o.projects.map((p) => p.id).join(' ')) {
     sel.dataset.ids = o.projects.map((p) => p.id).join(' ');
-    sel.innerHTML = `<option value="">All projects (${list.length})</option>` + o.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+    sel.innerHTML = `<option value="">All projects (${list.length})</option>` + o.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.label ?? p.name)}</option>`).join('');
     sel.value = '';
   }
   if (sc.open) renderScout();
@@ -4702,7 +4705,7 @@ function startOverview() {
     if (gone) { PROJECT = null; history.replaceState(null, '', hrefFor(null)); }
     if (!PROJECT && list.length === 1 && !PARAMS.has('overview') && !gone) PROJECT = list[0].id;
     const sel = $('project');
-    sel.innerHTML = `<option value="">All projects (${list.length})</option>` + list.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+    sel.innerHTML = `<option value="">All projects (${list.length})</option>` + list.map((p) => `<option value="${esc(p.id)}">${esc(p.label ?? p.name)}</option>`).join('');
     sel.value = PROJECT ?? '';
     sel.hidden = false;
     sel.addEventListener('change', () => { location.href = hrefFor(sel.value); });

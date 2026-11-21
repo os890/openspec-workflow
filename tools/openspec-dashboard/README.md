@@ -23,7 +23,9 @@ With more than one project, the start page is an overview: one card per project 
 its current task and progress, the status mix, the current milestone, validation problems and the last activity,
 most recently active first and updated live. A card (or the project picker in the header) opens that project's
 dashboard; `?project=<id>` in the address links to it directly. Each project keeps its own history, and OpenSpec
-CLI calls for all projects run one at a time.
+CLI calls for all projects run one at a time. Projects with the same folder name (followed, archived or unfollowed)
+are labelled with the shortest end of their path that tells them apart (`examples/todo-app`, `acme/todo-app`) on the
+cards, in the picker, the title and the history panel.
 
 **What a followed project costs.** A watcher on `openspec/` plus a re-read every 5 s; the workspace scan (the
 modification time of every file, up to 40,000, without `node_modules`, `.git` and the like, for "files written

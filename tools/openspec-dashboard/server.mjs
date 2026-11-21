@@ -734,6 +734,7 @@ function createProject(root, id, historyFile, onChange) {
     return {
       projectId: id,
       project: project.name,
+      projectLabel: labelOf(root),
       projectPath: root,
       roadmapFound: roadmapMd !== null,
       milestones,
@@ -797,7 +798,7 @@ function createProject(root, id, historyFile, onChange) {
   // The overview: what someone glancing at several projects needs, computed from the full state.
   function summary() {
     const s = project.state;
-    if (!s) return { id, name: project.name, displayPath: displayPath(root), loading: true };
+    if (!s) return { id, name: project.name, label: labelOf(root), displayPath: displayPath(root), loading: true };
     const rank = { 'in-progress': 0, complete: 1, specified: 2 };
     const active = s.changes.filter((c) => c.status in rank)
       .sort((a, b) => rank[a.status] - rank[b.status] || (b.lastModified ?? 0) - (a.lastModified ?? 0));
@@ -811,7 +812,7 @@ function createProject(root, id, historyFile, onChange) {
     const msChanges = ms ? s.changes.filter((c) => c.milestone === ms.id) : [];
     const lastActivity = Math.max(s.events[0]?.t ?? 0, s.workspace.recent[0]?.mtime ?? 0, ...s.changes.map((c) => c.lastModified ?? 0)) || null;
     return {
-      id, name: s.project, displayPath: displayPath(root),
+      id, name: s.project, label: labelOf(root), displayPath: displayPath(root),
       totals: s.totals,
       counts,
       changes: s.changes.filter(isTicket).length,
@@ -2141,6 +2142,20 @@ try {
   parkedState.archived = new Map(Object.entries(d.archived ?? {}));
 } catch { /* first use */ }
 const saveParked = () => { try { fs.mkdirSync(STATE_DIR, { recursive: true }); fs.writeFileSync(PROJ_FILE, JSON.stringify({ unfollowed: Object.fromEntries(parkedState.unfollowed), archived: Object.fromEntries(parkedState.archived) }, null, 1)); } catch { /* not essential */ } };
+// Projects with the same folder name (followed, archived or unfollowed) get the shortest end of their path that tells
+// them apart, e.g. "examples/todo-app" and "work/todo-app"; the others keep their name.
+function labelOf(root) {
+  const segs = (r) => r.split(path.sep).filter(Boolean);
+  const mine = segs(root), name = mine.at(-1);
+  const roots = [...new Set([...(typeof projects === 'undefined' ? [] : projects.map((p) => p.root)), ...parkedState.archived.keys(), ...parkedState.unfollowed.keys()])];
+  const same = roots.filter((r) => r !== root && path.basename(r) === name).map(segs);
+  if (!same.length) return name;
+  for (let n = 2; n <= mine.length; n++) {
+    const tail = mine.slice(-n).join('/');
+    if (!same.some((o) => o.slice(-n).join('/') === tail)) return tail;
+  }
+  return root;
+}
 const isParked = (root) => { let r = root; try { r = fs.realpathSync(root); } catch { /* gone */ } return [root, r].some((x) => parkedState.unfollowed.has(x) || parkedState.archived.has(x)); };
 
 const projects = [];
@@ -2159,7 +2174,7 @@ for (const root of startRoots) {
 }
 const byId = new Map(projects.map((p) => [p.id, p]));
 const projectFor = (url) => byId.get(url.searchParams.get('project')) ?? projects[0];
-const parkedList = (m) => [...m.entries()].map(([root, x]) => ({ root, ...x, exists: fs.existsSync(path.join(root, 'openspec')) })).sort((a, b) => b.at - a.at);
+const parkedList = (m) => [...m.entries()].map(([root, x]) => ({ root, ...x, label: labelOf(root), exists: fs.existsSync(path.join(root, 'openspec')) })).sort((a, b) => b.at - a.at);
 const overview = () => ({ scannedAt: Date.now(), projects: projects.map((p) => p.summary()), archived: parkedList(parkedState.archived), unfollowed: parkedList(parkedState.unfollowed), discovery: AGENT ? discoveryView() : null });
 async function bootProject(p) { await p.scanWorkspace(); await p.publish(); p.start(); p.agent?.startWatching(); p.cliDebounced(); }
 // Follow one more project while the dashboard runs (after onboarding, or a folder that has openspec/ already).
