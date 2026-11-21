@@ -17,6 +17,14 @@ shortened.*
 
 ![Charts from the git history of a demo project: cumulative flow, burn-up with a forecast, cycle times and the critical path](docs/images/dashboard-charts.png)
 
+*Ten styles out of the box, most of them light and dark: from Flat and Glass to Paper, Blackboard or a
+green-screen Terminal. Two of them, Whiteboard and Notebook (click for the [styles](docs/user-guide.md#styles) in the user guide):*
+
+<p>
+<a href="docs/user-guide.md#styles"><img src="docs/images/style-whiteboard-light.png" alt="The Whiteboard style (light)" width="49%"></a>
+<a href="docs/user-guide.md#styles"><img src="docs/images/style-notebook-light.png" alt="The Notebook style (light)" width="49%"></a>
+</p>
+
 The repository contains:
 
 - the workflow as diagrams ([Mermaid](diagrams/openspec-workflow.mmd), horizontal in
