@@ -209,10 +209,10 @@ Every question, chat message and session is a normal Claude Code run and counts 
 Pass several projects, or `--scan` a folder, and the dashboard starts with an overview of all of them:
 
 ```sh
-node tools/openspec-dashboard/server.mjs --scan=examples
+node tools/openspec-dashboard/server.mjs --scan=examples            # add --agent for onboarding (below)
 ```
 
-![Overview of two projects](images/dashboard-projects.png)
+![Overview of two projects, and projects to onboard below them](images/dashboard-projects.png)
 
 Each card shows the change being worked on and its current task, the task progress, the mix of statuses (the
 coloured bar), the current milestone, validation problems and when something last happened; the most recently
@@ -221,11 +221,10 @@ dashboard; **All projects** in the picker returns to the overview.
 
 ### Onboard more projects
 
-With `--agent`, the overview also finds projects to onboard. Enter a folder under **Onboard more projects** and press
-**Discover**: it lists the folders below it with a `CLAUDE.md` or `AGENTS.md` that the dashboard does not follow
-yet, with the first line of their README and their last commit.
-
-![Projects to onboard](images/dashboard-discover.png)
+With `--agent`, the overview also finds projects to onboard (the lower half of the screenshot above). Enter a folder
+under **Onboard more projects** and press **Discover**: it lists the folders below it with a `CLAUDE.md` or
+`AGENTS.md` that the dashboard does not follow yet, with the first line of their README and their last commit. A
+folder that has `openspec/` already gets **Follow**.
 
 **Onboard** lets Claude set up OpenSpec and the ticket workflow in that project in the background (nothing is
 committed; check the result in git), and adds the project to the dashboard when it is done. Not sure? **Chat about
