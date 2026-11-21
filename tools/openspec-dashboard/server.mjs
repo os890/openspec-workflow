@@ -1623,8 +1623,11 @@ async function podmanView() {
   const auto = new Set(settings.podman.autostart);
   const containers = (jsonOf(ps, []) ?? []).map((c) => {
     const name = c.Names?.[0] ?? c.Id?.slice(0, 12);
-    return { name, image: c.Image, state: c.State, status: c.Status, autoRemove: !!c.AutoRemove, created: (c.Created ?? 0) * 1000, autostart: auto.has(name), ...(usage[name] ?? {}) };
-  }).sort((a, b) => (a.state === 'running' ? 0 : 1) - (b.state === 'running' ? 0 : 1) || b.created - a.created);
+    // last used: running ones are in use now, the others by when they last stopped, started or were created
+    // (never started, state "created": not used at all; they sort by name with the others)
+    const lastUsed = c.State === 'running' ? Date.now() : Math.max(0, c.ExitedAt ?? 0, c.StartedAt ?? 0) * 1000; // Go's empty time is year 1, i.e. negative
+    return { name, image: c.Image, state: c.State, status: c.Status, autoRemove: !!c.AutoRemove, created: (c.Created ?? 0) * 1000, lastUsed, autostart: auto.has(name), ...(usage[name] ?? {}) };
+  }).sort((a, b) => b.lastUsed - a.lastUsed || a.name.localeCompare(b.name));
   const dfOf = (type) => (jsonOf(df, []) ?? []).find((x) => x.Type === type);
   return {
     available: true, vmBased,
