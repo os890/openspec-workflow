@@ -396,7 +396,7 @@ The choice is saved in `$XDG_STATE_HOME/openspec-dashboard/settings.json`, appli
 command-line options. If a model container ends while loading, the panel says why: how much memory the model needs,
 how much the VM has available, and which other model container is running.
 
-**Podman (⚙ › Podman).** Local models, speech-to-text and a containerised OpenSpec CLI all share one Podman VM on
+**Podman (⚙ › Podman; on the overview also the box button in the header).** Local models, speech-to-text and a containerised OpenSpec CLI all share one Podman VM on
 macOS and Windows, so the second tab shows how it is doing: the VM's memory, CPU load and disk (with images and how
 much of it is reclaimable), and its containers with their state and memory: the 15 used last at the top (running
 ones count as in use now, never-started ones as not used), then all others by name. Containers can be started and

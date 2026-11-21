@@ -397,7 +397,8 @@ Apple's on-device model on macOS 26 with Apple Intelligence, or off; for speech-
 ![Settings: the local models in use](images/dashboard-settings-models.png)
 
 The **Write mode** tab holds the settings for writing to a session, **General** the file manager for the folder
-button (see above). The **Podman** tab of the same dialog shows how the Podman VM is doing (memory, CPU load, disk) and its containers:
+button (see above). The **Podman** tab of the same dialog (on the overview also behind the box button in the header)
+shows how the Podman VM is doing (memory, CPU load, disk) and its containers:
 the 15 used last at the top (running ones first), then all others by name, each with a **Start** or **Stop**
 button. When the VM is stuck or full, **Restart the VM** stops and starts it; the containers you checked (↻) come
 back, the others stay stopped. The dashboard's own model container cannot be checked: it is removed when it stops

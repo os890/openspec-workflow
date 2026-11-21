@@ -1505,6 +1505,7 @@ body.board-max { overflow: hidden; }
 .term-only .link { margin-left: 4px; }
 .term-setup p { margin: 6px 0 8px; color: var(--muted); line-height: 1.45; }
 #term-btn { position: relative; display: inline-flex; align-items: center; }
+#podman-btn { display: inline-flex; align-items: center; }
 .ag-head h2 .ic-term { vertical-align: -2px; margin-right: 4px; }
 #term-btn .tb-n { position: absolute; top: -5px; right: -5px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: var(--st-complete, #2e9d5b); color: #fff; font-size: 10px; line-height: 15px; font-weight: 600; }
 .term-pick { font: inherit; font-size: 13px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
@@ -1775,6 +1776,7 @@ body.ag-max { overflow: hidden; }
       <button class="btn" id="term-btn" type="button" aria-label="Terminal sessions" aria-controls="agent" title="Sessions running in a terminal or an IDE: join one, follow it live, write to it" hidden><svg class="ic-term" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="3"/><path d="M7 9.5l3 2.5-3 2.5M12.5 15h4.5"/></svg></button>
       <button class="btn" id="folder-btn" type="button" aria-label="Open the project folder" title="Open the project folder in the file manager (which one: ⚙ Settings › General)" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg></button>
       <button class="btn" id="git-btn" type="button" aria-label="Git history" aria-controls="githist" title="Git history: the commits, branches and tags, and what each commit changed" hidden>⎇</button>
+      <button class="btn" id="podman-btn" type="button" aria-label="Podman" title="Podman: the VM and its containers (start, stop, restart)" hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8l8.5 4.6v9.2L12 21.2l-8.5-4.6V7.4z"/><path d="M3.5 7.4L12 12l8.5-4.6M12 12v9.2"/></svg></button>
       <button class="btn" id="menu-btn" type="button" aria-label="Look and settings" aria-haspopup="true" aria-expanded="false" aria-controls="hdr-menu" title="Style, light or dark, settings">☰</button>
     </div>
   </div>
@@ -3287,6 +3289,7 @@ $('menu-btn').addEventListener('click', (e) => { e.stopPropagation(); hdrMenu($(
 document.addEventListener('click', (e) => { if (!$('hdr-menu').hidden && !e.target.closest?.('#hdr-menu, #menu-btn')) hdrMenu(false); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('hdr-menu').hidden) hdrMenu(false); });
 $('settings-btn').addEventListener('click', () => hdrMenu(false));
+$('podman-btn').addEventListener('click', () => { st.tab = 'podman'; openSettings(false); });
 $('theme').addEventListener('click', () => {
   const root = document.documentElement;
   const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
@@ -4887,6 +4890,7 @@ document.addEventListener('click', async (e) => {
 }, true);
 function renderOverview(o) {
   $('folder-btn').hidden = true;
+  if (AGENT_TOKEN) $('podman-btn').hidden = false; // the overview has the room: Podman management at a click
   if (AGENT_TOKEN && !ag.ovProject && o.projects?.length) setTimeout(async () => {
     await ovTermFetch(); // ⌨ with its badge right away
     if (PARAMS.get('term') && !ag.open) { await openTermOverview(); ag.term = PARAMS.get('term'); ag.termWrite = PARAMS.get('write') === '1'; renderAgentLive(); termPoll(true); } // from the background list
