@@ -8,5 +8,5 @@ context: |
 
 rules:
   tasks:
-    - Every task states its acceptance criterion as "verify: ..."; spec scenarios are the acceptance criteria.
+    - 'Every task states its acceptance criterion as "verify: ..."; spec scenarios are the acceptance criteria.'
     - The final task is always "`pnpm verify` is green".

@@ -3,7 +3,7 @@
 
 rules:
   tasks:
-    - Every task states its acceptance criterion as "verify: ..." (a test, command or observable behaviour); spec scenarios are the ticket's acceptance criteria.
+    - 'Every task states its acceptance criterion as "verify: ..." (a test, command or observable behaviour); spec scenarios are the ticket''s acceptance criteria.'
     - Every task group ends with the tests that prove it.
     - The final task is always "<quality gate> is green".
 
