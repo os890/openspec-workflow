@@ -1426,6 +1426,20 @@ body.board-max { overflow: hidden; }
 .agent-panel.term-look #ag-thread details.steps, .agent-panel.term-look #ag-thread details.steps summary { color: #8b949e; }
 .agent-panel.term-look #ag-thread .term-done, .agent-panel.term-look #ag-thread .msg.typing { background: #161b22; color: #8b949e; border-color: #30363d; }
 .agent-panel.term-look #ag-thread .rx { filter: none; }
+.cli-step { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: calc(var(--term-fs, 13.5px) - 1px); line-height: 1.45; align-self: stretch; }
+.cli-step.sub { margin-left: 16px; opacity: .8; }
+.cli-call { color: #7ee787; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cli-res { color: #8b949e; white-space: pre-wrap; overflow-wrap: anywhere; padding-left: 2ch; }
+.cli-res.err { color: #ff7b72; }
+.cli-more { display: block; color: #6e7681; }
+/* the third state: the whole panel in terminal colors */
+.agent-panel.term-look-all { background: #0d1117; color: #d6dde6; --ink: #d6dde6; --muted: #8b949e; --line: #30363d; --surface: #161b22; --surface-2: #1f2630; --accent: #2563eb; --accent-soft: #1e3a8a; }
+.agent-panel.term-look-all .ag-head, .agent-panel.term-look-all .ag-bar, .agent-panel.term-look-all .ag-compose, .agent-panel.term-look-all .ag-route, .agent-panel.term-look-all .ag-chips { background: #0d1117; color: #d6dde6; border-color: #30363d; }
+.agent-panel.term-look-all textarea { background: #161b22; color: #d6dde6; border-color: #30363d; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.agent-panel.term-look-all .link { color: #79c0ff; }
+.agent-panel.term-look-all .btn:not(.primary) { background: #161b22; color: #d6dde6; border-color: #30363d; }
+.agent-panel.term-look-all .chip { background: #161b22; color: #d6dde6; border-color: #30363d; }
+.agent-panel.term-look-all .chip[aria-selected="true"] { background: #1e3a8a; color: #fff; }
 .term-compact .link, .term-compact .btn { white-space: nowrap; flex-shrink: 0; }
 .term-compact .ag-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .term-done { align-self: center; font-size: 12.5px; color: var(--muted); padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); margin: 4px 0 2px; }
@@ -3198,20 +3212,23 @@ async function agentPost(action, body) {
 const recentExternal = () => (ag.view?.sessions ?? []).filter((x) => !x.ended && !x.dashboardJob && Date.now() - x.t < 15 * 60e3);
 // ---- joining a session that runs in a terminal (or an IDE): pick it, see its transcript live (read-only), write to it
 // how a joined session looks while writing to it: terminal colors and the text size (remembered in this browser)
-const termView = (() => { try { return { look: false, fs: 13.5, ...JSON.parse(localStorage.getItem('osd-term-view') || '{}') }; } catch { return { look: false, fs: 13.5 }; } })();
+// look: 0 normal colors, 1 terminal colors for the conversation, 2 for the whole panel
+const TERM_FS = 13.5;
+const termView = (() => { let v = {}; try { v = JSON.parse(localStorage.getItem('osd-term-view') || '{}'); } catch {} return { fs: TERM_FS, ...v, look: v.look === true ? 1 : Number(v.look) || 0 }; })();
 const termViewSave = () => { try { localStorage.setItem('osd-term-view', JSON.stringify(termView)); } catch {} };
 function termViewApply(on) {
   const a = $('agent');
   a.classList.toggle('term-writing', !!on);
-  a.classList.toggle('term-look', !!on && termView.look);
+  a.classList.toggle('term-look', !!on && termView.look > 0);
+  a.classList.toggle('term-look-all', !!on && termView.look > 1);
   a.style.setProperty('--term-fs', `${termView.fs}px`);
 }
 document.addEventListener('click', (e) => {
   const lk = e.target.closest?.('[data-term-look]'), fs = e.target.closest?.('[data-term-fs]');
   if (!lk && !fs) return;
   e.stopPropagation();
-  if (lk) termView.look = !termView.look;
-  else termView.fs = Math.min(22, Math.max(10.5, termView.fs + Number(fs.dataset.termFs)));
+  if (lk) termView.look = (termView.look + 1) % 3;
+  else termView.fs = fs.dataset.termFs === '0' ? TERM_FS : Math.min(22, Math.max(10.5, termView.fs + Number(fs.dataset.termFs)));
   termViewSave(); renderAgentLive();
 }, true);
 const typedHere = new Set(); // messages typed into a session's terminal from this page (marked in its transcript)
@@ -3233,7 +3250,21 @@ function termThreadHtml(sid) {
   let n = 0;
   let steps = [];
   const flush = () => { if (!steps.length) return; out.push(`<details class="steps"><summary>${steps.length === 1 ? esc(steps[0].text) : `${steps.length} steps · ${esc(steps.at(-1).text)}`}</summary>${steps.map((x) => `<div class="${x.kind}">${esc(x.text)}</div>`).join('')}</details>`); steps = []; };
+  // terminal colors: the steps as the CLI shows them (⏺ Tool(argument), ⎿ the first lines of the result)
+  const cli = termView.look > 0 && ag.termWrite;
+  const results = new Map(items.filter((e) => e.kind === 'result' || (e.kind === 'error' && e.id)).map((e) => [e.id, e]));
   for (const e of items) {
+    if (e.kind === 'result' || (e.kind === 'error' && e.id && cli)) continue;
+    if (cli && e.kind === 'tool') {
+      flush();
+      const r = results.get(e.id);
+      const res = !r ? '' : r.kind === 'error' ? `<div class="cli-res err">⎿  ${esc(r.text)}</div>`
+        : /^(Read|Write)\(/.test(e.cli ?? '') && r.lines > 1 ? `<div class="cli-res">⎿  ${/^Read/.test(e.cli) ? 'Read' : 'Wrote'} ${r.lines} lines</div>`
+        : r.text ? `<div class="cli-res">⎿  ${esc(r.text)}${r.lines > 4 ? `<span class="cli-more">… +${r.lines - 4} lines</span>` : ''}</div>` : '<div class="cli-res">⎿  (no output)</div>';
+      out.push(`<div class="cli-step ${e.sub ? 'sub' : ''}"><div class="cli-call">⏺ ${esc(e.cli ?? e.text)}</div>${res}</div>`);
+      continue;
+    }
+    if (e.kind === 'result') continue;
     if (e.kind === 'tool' || e.kind === 'error') { steps.push(e); continue; }
     flush();
     if (e.kind === 'mine') out.push(`<div class="msg me"><span class="ic-chip">from the dashboard</span>${esc(e.m.text)}<span class="meta">${hhmm(e.m.t)} · ${e.m.state === 'queued' ? `${waitingNow ? 'queued: arrives with the next prompt typed in its terminal' : 'queued: arrives with its next step'}${e.m.state === 'queued' ? ` · <button class="link" type="button" data-ag-cancel="${esc(e.m.id)}" ${e.folder ? `data-folder="${esc(e.folder)}"` : ''}>cancel</button>` : ''}` : 'delivered ' + hhmm(e.m.deliveredAt)}</span></div>`);
@@ -3680,7 +3711,7 @@ function barHtml(c) {
       ${ag.view?.hooks ? `<div class="ag-note">The hook is set up, but this session started before it: restart it to write to it (<code>/exit</code>, then <code>claude --resume ${esc(x.sessionId)}</code>).</div>` : setup('To write to it, set up the hook')}`;
     const state = x2.listening ? '<span class="dot on"></span>Listening: waiting for your message' : x2.waiting ? '<span class="dot"></span>Waiting for input in the terminal' : '<span class="dot on"></span>Working';
     // writing: the details fold into one line, so the conversation gets the panel ("Details" brings them back)
-    const look = `<button class="link term-v" type="button" data-term-look aria-pressed="${!!termView.look}" title="Terminal colors for the conversation (your messages stay highlighted)">▣ Terminal</button><button class="link term-v" type="button" data-term-fs="-1" title="Smaller text" aria-label="Smaller text">A−</button><button class="link term-v" type="button" data-term-fs="1" title="Larger text" aria-label="Larger text">A+</button>`;
+    const look = `<button class="link term-v" type="button" data-term-look aria-pressed="${termView.look > 0}" title="${['Terminal colors for the conversation (your messages stay highlighted)', 'Terminal colors for the whole panel', 'Back to the normal colors'][termView.look]}">${['▣ Terminal', '▣ Terminal: conversation', '▣ Terminal: all'][termView.look]}</button><button class="link term-v" type="button" data-term-fs="-1" title="Smaller text" aria-label="Smaller text">A−</button>${termView.fs !== TERM_FS ? `<button class="link term-v" type="button" data-term-fs="0" title="Default text size (${TERM_FS}px)" aria-label="Default text size">A</button>` : ''}<button class="link term-v" type="button" data-term-fs="1" title="Larger text" aria-label="Larger text">A+</button>`;
     if (ag.termWrite && !ag.termDetails) return `<div class="ag-row term-compact"><span class="ag-note">✎ Writing to <b>${esc(xo ? xo.display : x2.prompt ? `“${x2.prompt.replace(/\s+/g, ' ').slice(0, 40)}${x2.prompt.length > 40 ? '…' : ''}”` : x2.sessionId.slice(0, 8))}</b> · ${state}</span>
         <span class="term-vs" style="margin-left:auto">${look}</span><button class="link" type="button" data-ag-term-details aria-expanded="false" title="Show the session picker and the details again">Details ▾</button>
         <button class="btn" type="button" data-ag-term-write aria-pressed="true" title="Back to read-only">Read only</button></div>${termLog.get(x2.sessionId)?.err ? `<div class="ag-note warn">✕ ${esc(termLog.get(x2.sessionId).err)}</div>` : ''}`;

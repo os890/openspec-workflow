@@ -1099,6 +1099,12 @@ function createAgent(project) {
     push(job, 'tool', planLine(job));
     return true;
   }
+  // a tool call as the CLI shows it: Name(argument)
+  const cliLine = (b) => {
+    const i = b.input ?? {};
+    const arg = b.name === 'Bash' ? i.command : i.file_path || i.path || i.pattern || i.url || i.query || i.description || i.skill || i.subject || Object.values(i).find((v) => typeof v === 'string') || '';
+    return `${b.name}(${homeDisplay(rel(String(arg))).replace(/\s+/g, ' ').slice(0, 200)})`;
+  };
   const toolLine = (b) => {
     const i = b.input ?? {};
     const arg = b.name === 'Bash' ? (i.description || i.command) : (i.file_path || i.path || i.pattern || i.description || i.url || i.skill || '');
@@ -1546,11 +1552,17 @@ function createAgent(project) {
       if (typeof c === 'string') { const x = cleanUser(c); return x ? [{ t, kind: 'user', text: x, sub }] : []; }
       return (Array.isArray(c) ? c : []).flatMap((b) => {
         if (b.type === 'text') { const x = cleanUser(b.text); return x ? [{ t, kind: 'user', text: x, sub }] : []; }
-        if (b.type === 'tool_result' && b.is_error) return [{ t, kind: 'error', text: (Array.isArray(b.content) ? b.content.map((y) => y.text ?? '').join(' ') : String(b.content ?? '')).slice(0, 400), sub }];
+        if (b.type === 'tool_result' && b.is_error) return [{ t, kind: 'error', text: (Array.isArray(b.content) ? b.content.map((y) => y.text ?? '').join(' ') : String(b.content ?? '')).slice(0, 400), sub, id: b.tool_use_id }];
+        // the result of a tool call, for the CLI-like view: its first lines and how many there are
+        if (b.type === 'tool_result') {
+          const all = (Array.isArray(b.content) ? b.content.map((y) => (y.type === 'text' ? y.text ?? '' : `[${y.type}]`)).join('\n') : String(b.content ?? '')).replace(/\s+$/, '');
+          const lines = all ? all.split('\n') : [];
+          return [{ t, kind: 'result', id: b.tool_use_id, text: homeDisplay(lines.slice(0, 4).join('\n')).slice(0, 600), lines: lines.length, sub }];
+        }
         return [];
       });
     }
-    if (m.type === 'assistant') return (Array.isArray(c) ? c : []).flatMap((b) => b.type === 'text' && b.text?.trim() ? [{ t, kind: 'text', text: b.text.slice(0, 20000), sub }] : b.type === 'tool_use' ? [{ t, kind: 'tool', text: toolLine(b), sub }] : []);
+    if (m.type === 'assistant') return (Array.isArray(c) ? c : []).flatMap((b) => b.type === 'text' && b.text?.trim() ? [{ t, kind: 'text', text: b.text.slice(0, 20000), sub }] : b.type === 'tool_use' ? [{ t, kind: 'tool', text: toolLine(b), cli: cliLine(b), id: b.id, sub }] : []);
     return [];
   }
   // the transcript grows; the page asks for what came after `from` (a byte offset). Only files in Claude Code's own

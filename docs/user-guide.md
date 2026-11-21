@@ -253,8 +253,11 @@ While you write to a session, the details above the conversation fold into one l
 notes again, **Fewer details ▴** folds them. Claude's answers there have the same quick replies as the chat
 (👍 ✅ 🌿 🙏 🎉 💡, 🔁 📝 📊 and ↩ to quote, also a selected part); they are typed into the session like any message,
 and the thread shows them as reactions and quotes. Also only while writing: **▣ Terminal** shows the conversation in
-terminal colors (dark, monospaced; your own messages keep a bright blue background, so they stand out), and **A−** /
-**A+** change its text size; both are remembered in the browser.
+terminal colors (dark, monospaced; your own messages keep a bright blue background, so they stand out), with the
+steps as the CLI shows them (`⏺ Bash(git log --oneline -3)`, then `⎿` and the first lines of the result); a second
+click colors the whole panel, including the input area, and a third brings the normal colors back. **A−** / **A+**
+change the text size, **A** resets it. Both are remembered in the browser. The CLI's own rendering of some tools
+(e.g. the colored diff of an edit) and live output while a command runs are not shown.
 
 Following a session works without any setup: the dashboard finds the running sessions in Claude Code's own records
 (`~/.claude/sessions`) and reads their transcripts.
