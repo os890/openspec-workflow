@@ -94,12 +94,22 @@ Click a card to open its details next to the board; `Esc` closes them. A link to
 
 ## Styles
 
-The dashboard has five styles: **Flat** (the default), **Glass** (frosted panels over a soft colour field),
-**Paper** (post-its on light wooden boards, one colour per column, the current task on a sticky note),
-**Whiteboard** (marker on a framed whiteboard, cards held by magnets; a dark glass board in dark mode) and
-**Blackboard** (chalk on a green board in a wooden frame; always dark). The style picker in the header switches
-the style, ◐ switches light and dark; both choices are remembered per browser.
-In a link, `?style=flat|glass|paper|whiteboard|blackboard` and `?theme=light|dark` set them, e.g.
+The dashboard has nine styles:
+
+| Style | Look |
+|---|---|
+| **Flat** (default) | clean and quiet |
+| **Glass** | frosted panels over a soft colour field |
+| **Paper** | post-its on light wooden boards, one colour per column, the current task on a sticky note |
+| **Whiteboard** | marker on a framed whiteboard, cards held by magnets; a dark glass board in dark mode |
+| **Blackboard** | chalk on a green board in a wooden frame; always dark |
+| **Notebook** | squared paper with a red margin line, handwritten headings, quiet cards |
+| **Matrix** | falling green code behind glowing panels; always dark; the rain stops with reduced motion |
+| **Terminal** | retro green-screen CRT with scanlines and a blinking cursor; always dark |
+| **Comic** | halftone dots, thick ink outlines, the current task in a speech bubble |
+
+The style picker in the header switches the style, ◐ switches light and dark; both choices are remembered per
+browser. In a link, `?style=<name>` (lower case, e.g. `notebook`) and `?theme=light|dark` set them, e.g.
 http://127.0.0.1:4590/?style=paper&theme=dark.
 
 | Flat, light | Flat, dark | Glass, dark |
@@ -119,6 +129,18 @@ http://127.0.0.1:4590/?style=paper&theme=dark.
 | Blackboard | Blackboard, board in full screen |
 |---|---|
 | ![Blackboard style](images/style-blackboard.png) | ![Blackboard style, board in full screen](images/style-blackboard-board.png) |
+
+| Notebook, light | Notebook, dark |
+|---|---|
+| ![Notebook style, light](images/style-notebook-light.png) | ![Notebook style, dark](images/style-notebook-dark.png) |
+
+| Matrix | Terminal |
+|---|---|
+| ![Matrix style](images/style-matrix.png) | ![Terminal style](images/style-terminal.png) |
+
+| Comic, light | Comic, dark |
+|---|---|
+| ![Comic style, light](images/style-comic-light.png) | ![Comic style, dark](images/style-comic-dark.png) |
 
 ## Tips
 
