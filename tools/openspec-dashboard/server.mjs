@@ -4,6 +4,8 @@
 //   node server.mjs [<project-dir> ...] [--project=<dir> ...] [--scan=<dir> ...]
 //                  [--port=4590] [--host=127.0.0.1] [--cli=<command>] [--no-cli]
 //                  [--parking-lot=<change>] [--history=<file-or-dir>] [--no-open]
+//                  [--agent [--claude=<command>] [--agent-permission-mode=<mode>] [--agent-model=<model>]
+//                           [--agent-prompt=<file>]]
 //
 // Follows one or more projects (each a folder with openspec/). Without arguments it follows the current folder;
 // --scan finds every project with an openspec/ folder up to three levels below the given folder.
@@ -13,6 +15,11 @@
 // another command; calls are queued across projects, one at a time. Task check-offs observed while the server runs
 // are kept per project in a history file outside the project (default: $XDG_STATE_HOME or ~/.local/state, under
 // openspec-dashboard/), so the activity feed and the chart survive restarts.
+//
+// --agent adds an agent panel: ask read-only questions, send messages to a working Claude Code session and start a
+// session on a ticket. It runs the local `claude` command (Claude Code, with its own login), only on 127.0.0.1, and
+// every action needs a per-start token that only the served page knows. Sessions started elsewhere get messages
+// through agent-hook.mjs.
 
 import http from 'node:http';
 import fs from 'node:fs';
@@ -20,8 +27,9 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFile, spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import os from 'node:os';
+import { inboxDir, readInbox, queueMessage, recordDelivered, cancelMessage, formatMessages } from './agent-hook.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -42,6 +50,17 @@ const cliArg = typeof opt('cli') === 'string' ? opt('cli') : process.env.OPENSPE
 const CLI = cliArg.includes('/') || cliArg.includes(path.sep) ? path.resolve(cliArg) : cliArg; // bare names resolve via PATH
 const USE_CLI = !opt('no-cli');
 const PARKING_LOT = typeof opt('parking-lot') === 'string' ? opt('parking-lot') : null;
+const AGENT = !!opt('agent');
+const claudeArg = typeof opt('claude') === 'string' ? opt('claude') : process.env.CLAUDE_CLI || 'claude';
+const CLAUDE = claudeArg.includes('/') || claudeArg.includes(path.sep) ? path.resolve(claudeArg) : claudeArg;
+const AGENT_MODE = typeof opt('agent-permission-mode') === 'string' ? opt('agent-permission-mode') : 'acceptEdits';
+const AGENT_MODEL = typeof opt('agent-model') === 'string' ? opt('agent-model') : null;
+const AGENT_PROMPT = typeof opt('agent-prompt') === 'string' ? fs.readFileSync(path.resolve(opt('agent-prompt')), 'utf8') : null;
+const TOKEN = randomBytes(18).toString('hex');
+if (AGENT && !['127.0.0.1', 'localhost', '::1'].includes(HOST)) {
+  console.error('--agent starts Claude Code sessions and only runs on 127.0.0.1 (no --host).');
+  process.exit(1);
+}
 const STATE_DIR = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state'), 'openspec-dashboard');
 const WORKSPACE_EXCLUDES = new Set(['.git', 'target', 'node_modules', 'node', '.angular', 'dist', 'coverage',
   '.idea', '.vscode', 'test-results', 'playwright-report', '.mvn', '.gradle', 'build', '.venv', '__pycache__']);
@@ -512,6 +531,7 @@ function createProject(root, id, historyFile, onChange) {
       lastActivity,
       lastEvent: s.events[0] ?? null,
       filesLast15m: s.workspace.changedLast15m,
+      agent: project.agent?.brief() ?? null,
     };
   }
 
@@ -521,6 +541,329 @@ function createProject(root, id, historyFile, onChange) {
   }
 
   return Object.assign(project, { publish, schedule, cliDebounced, refreshCli, scanWorkspace, summary, start, openspecDir: OPENSPEC });
+}
+
+// ---------------------------------------------------------------- agent (opt-in with --agent)
+// Runs the local `claude` command (Claude Code) in the project folder, so it uses Claude Code's own login.
+//   ask:     claude -p, read-only tools (Read, Grep, Glob), no session kept; the answer streams into the panel
+//   start:   claude -p with streaming JSON in and out, a fixed session id and the configured permission mode;
+//            stdin stays open, so messages from the dashboard go straight to it; `claude --resume <id>` takes over
+//   chat:    a read-only project assistant like ask, but one long-lived conversation (stream-json in and out,
+//            resumed with --resume after an idle timeout or a restart of the process)
+//   message: to a session started here via stdin, otherwise into the inbox that agent-hook.mjs delivers from
+const children = new Set();
+const httpError = (status, message, extra = {}) => Object.assign(new Error(message), { status, extra });
+const userLine = (text) => JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }) + '\n';
+const modelArgs = () => (AGENT_MODEL ? ['--model', AGENT_MODEL] : []);
+const readSync = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return ''; } };
+// Claude Code ignores a project's permission rules until the folder was trusted once in an interactive session.
+let trustCache = { mtime: 0, projects: {} };
+function trusted(root) {
+  const f = path.join(os.homedir(), '.claude.json');
+  const st = fs.statSync(f, { throwIfNoEntry: false });
+  if (!st) return null;
+  if (st.mtimeMs !== trustCache.mtime) {
+    try { trustCache = { mtime: st.mtimeMs, projects: JSON.parse(fs.readFileSync(f, 'utf8')).projects ?? {} }; } catch { return null; }
+  }
+  let real = root;
+  try { real = fs.realpathSync(root); } catch { /* keep */ }
+  return !!(trustCache.projects[real] ?? trustCache.projects[root])?.hasTrustDialogAccepted; // a trusted parent does not count
+}
+
+function createAgent(project) {
+  const root = project.root;
+  const jobs = [];
+  let inbox = { messages: [], sessions: [] };
+  let timer = null;
+  let lastJson = '';
+  const hookFile = path.join(HERE, 'agent-hook.mjs');
+  const hooksInstalled = () => ['settings.local.json', 'settings.json'].some((f) => readSync(path.join(root, '.claude', f)).includes('agent-hook.mjs'));
+  const liveSession = () => jobs.find((j) => j.kind === 'session' && j.child && (j.status === 'running' || j.status === 'idle'));
+  const rel = (s) => String(s).split(root + path.sep).join('');
+
+  function view() {
+    const now = Date.now();
+    return {
+      permissionMode: AGENT_MODE, model: AGENT_MODEL, claude: CLAUDE, hooks: hooksInstalled(), trusted: trusted(root),
+      hookInstall: `node ${displayPath(hookFile)} install ${displayPath(root)}`,
+      sessions: inbox.sessions.filter((x) => now - x.t < 12 * 3600e3).slice(0, 6),
+      messages: inbox.messages,
+      jobs: jobs.slice(-25).map(({ child, ...j }) => ({ ...j, log: j.log.slice(-250) })),
+    };
+  }
+  function send() {
+    const json = JSON.stringify(view());
+    if (json === lastJson) return;
+    lastJson = json;
+    const payload = `event: agent\ndata: ${json}\n\n`;
+    for (const res of project.clients) res.write(payload);
+    overviewChanged();
+  }
+  const changed = (delay = 200) => { clearTimeout(timer); timer = setTimeout(send, delay); };
+  const reloadInbox = () => { inbox = readInbox(root); changed(); };
+
+  function push(job, kind, text, sub = false) {
+    job.lastActivity = Date.now();
+    job.log.push({ t: Date.now(), kind, text: String(text).slice(0, 6000), sub });
+    if (job.log.length > 600) job.log.splice(0, job.log.length - 600);
+  }
+  const toolLine = (b) => {
+    const i = b.input ?? {};
+    const arg = b.name === 'Bash' ? (i.description || i.command) : (i.file_path || i.path || i.pattern || i.description || i.url || i.skill || '');
+    return `${b.name}${arg ? ' · ' + rel(arg).slice(0, 180) : ''}`;
+  };
+  function onLine(job, line) {
+    let m;
+    try { m = JSON.parse(line); } catch { return; }
+    const sub = !!m.parent_tool_use_id;
+    if (m.type === 'system' && m.subtype === 'init') { job.sessionId = m.session_id ?? job.sessionId; job.model = m.model ?? null; }
+    else if (m.type === 'assistant') {
+      for (const b of m.message?.content ?? []) {
+        if (b.type === 'text' && b.text.trim()) push(job, 'text', b.text, sub);
+        else if (b.type === 'tool_use') push(job, 'tool', toolLine(b), sub);
+      }
+    } else if (m.type === 'user' && Array.isArray(m.message?.content)) {
+      for (const b of m.message.content) {
+        if (b.type !== 'tool_result' || !b.is_error) continue;
+        const t = Array.isArray(b.content) ? b.content.map((x) => x.text ?? '').join(' ') : String(b.content ?? '');
+        push(job, 'error', t.slice(0, 400), sub);
+      }
+    } else if (m.type === 'result') {
+      job.turns = m.num_turns ?? job.turns;
+      job.durationMs = (job.durationMs ?? 0) + (m.duration_ms ?? 0);
+      if (job.kind === 'ask') {
+        job.answer = m.result ?? '';
+        job.status = m.is_error ? 'failed' : 'done';
+        if (m.is_error) job.error = m.result || m.subtype;
+      } else {
+        if (m.is_error) push(job, 'error', `The turn ended with an error: ${m.result ?? m.subtype}`);
+        if (job.child) job.status = 'idle';
+      }
+    }
+    changed();
+  }
+
+  function launch(job, args, firstInput, keepOpen) {
+    job.status = 'running';
+    job.command = [path.basename(CLAUDE), ...args.map((a) => (a.length > 60 ? a.slice(0, 57) + '…' : a))].join(' ');
+    let child;
+    try {
+      child = spawn(CLAUDE, args, { cwd: root, env: { ...process.env, OPENSPEC_DASHBOARD_JOB: job.id }, stdio: ['pipe', 'pipe', 'pipe'] });
+    } catch (e) { job.status = 'failed'; job.error = e.message; changed(0); return; }
+    job.child = child;
+    children.add(child);
+    let buf = '';
+    let err = '';
+    child.stdout.on('data', (d) => {
+      buf += d;
+      for (let i; (i = buf.indexOf('\n')) >= 0;) { const l = buf.slice(0, i); buf = buf.slice(i + 1); if (l.trim()) onLine(job, l); }
+    });
+    child.stderr.on('data', (d) => {
+      err = (err + d).slice(-4000);
+      for (const l of String(d).split('\n').map((x) => x.trim()).filter(Boolean)) push(job, 'error', l);
+      changed();
+    });
+    child.stdin.on('error', () => {});
+    child.on('error', (e) => {
+      job.status = 'failed';
+      job.error = e.code === 'ENOENT' ? `"${CLAUDE}" was not found. Install Claude Code or pass --claude=<command>.` : e.message;
+      changed(0);
+    });
+    child.on('close', (code) => {
+      children.delete(child);
+      job.child = null;
+      job.endedAt = Date.now();
+      if (job.status === 'running' || job.status === 'idle') {
+        job.status = job.stopRequested ? 'stopped' : code === 0 ? 'done' : 'failed';
+        if (job.status === 'failed' && !job.error) job.error = err.trim().split('\n').slice(-4).join('\n') || `claude exited with code ${code}`;
+      }
+      changed(0);
+    });
+    child.stdin.write(firstInput);
+    if (!keepOpen) child.stdin.end();
+    changed(0);
+  }
+  function newJob(kind, change, text) {
+    const job = { id: randomBytes(5).toString('hex'), kind, change: change || null, text, status: 'starting', startedAt: Date.now(), log: [] };
+    jobs.push(job);
+    if (jobs.length > 60) jobs.splice(0, jobs.length - 60);
+    return job;
+  }
+  const changeOf = (name) => (name ? project.state?.changes.find((c) => c.name === name) ?? null : null);
+  const where = (c) => (c.location === 'backlog' ? `openspec/backlog/${c.name}.md (a draft, not elaborated yet)`
+    : (c.files ?? []).map((f) => f.path).join(', ') || `openspec/changes/${c.name}/`);
+
+  function ask({ change, question }) {
+    if (!String(question ?? '').trim()) throw httpError(400, 'The question is empty.');
+    if (jobs.filter((j) => j.kind === 'ask' && j.child).length >= 2) throw httpError(429, 'Two questions are running already; wait for one of them.');
+    const c = changeOf(change);
+    const job = newJob('ask', c?.name, question);
+    const sys = [
+      'You answer a question asked in the OpenSpec dashboard of this project. Work read-only: never change a file.',
+      'OpenSpec lives in openspec/: roadmap.md (planned changes), backlog/ (drafts), changes/<name>/ (proposal.md, design.md, specs/, tasks.md), changes/archive/, specs/.',
+      c ? `The question is about the change "${c.name}" (status: ${c.status}${c.tasks ? `, ${c.tasks.done}/${c.tasks.total} tasks checked` : ''}). Its files: ${where(c)}.` : 'The question is about the project as a whole.',
+      'Read what you need, then answer briefly in Markdown, with file references where they help.',
+    ].join('\n');
+    launch(job, ['-p', '--output-format', 'stream-json', '--verbose', '--tools', 'Read,Grep,Glob', '--permission-prompts', 'none',
+      '--no-session-persistence', '--append-system-prompt', sys, ...modelArgs()], String(question), false);
+    return job;
+  }
+
+  function startPrompt(c) {
+    if (AGENT_PROMPT) return AGENT_PROMPT.replaceAll('{change}', c.name);
+    return [
+      `Work on the OpenSpec change \`${c.name}\` as one ticket.`,
+      'Follow the ticket workflow: the openspec-ticket-workflow skill if it is available, otherwise the workflow in openspec/config.yaml.',
+      c.location === 'backlog' ? `It is still a draft in openspec/backlog/${c.name}.md.` : `Its files are in ${where(c)}; continue where it stands.`,
+      'The user follows your progress in the OpenSpec dashboard and may send messages while you work; take them into account.',
+      'Nobody can answer permission prompts in this session: if a step needs a permission you do not have, say so and stop at that step.',
+    ].join('\n');
+  }
+  function start({ change, force }) {
+    const c = changeOf(change);
+    if (!c) throw httpError(404, `No change "${change}".`);
+    if (c.status === 'archived' || c.status === 'parking') throw httpError(409, `${c.name} is ${c.status === 'archived' ? 'archived already' : 'the parking lot'}.`);
+    const live = liveSession();
+    if (live) throw httpError(409, `A session started here is still working on ${live.change}. End or stop it first.`);
+    if (!force) {
+      const reasons = [];
+      const open = project.state.changes.filter((x) => x.name !== c.name && ['in-progress', 'specified', 'complete'].includes(x.status));
+      if (open.length) reasons.push(`${open.map((x) => x.name).join(', ')} ${open.length > 1 ? 'have' : 'has'} work that is not archived yet (one ticket at a time).`);
+      if (c.blockedBy?.length) reasons.push(`It waits for ${c.blockedBy.map((o) => '#' + o).join(', ')}.`);
+      const ext = inbox.sessions.find((x) => !x.ended && !x.dashboardJob && Date.now() - x.t < 3 * 60e3);
+      if (ext) reasons.push(`Another Claude Code session was active here ${Math.round((Date.now() - ext.t) / 1000)} s ago.`);
+      if (reasons.length) throw httpError(409, reasons.join(' '), { needsForce: true });
+    }
+    const job = newJob('session', c.name, null);
+    job.sessionId = randomUUID();
+    job.prompt = startPrompt(c);
+    push(job, 'prompt', job.prompt);
+    launch(job, ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--session-id', job.sessionId,
+      '--permission-mode', AGENT_MODE, '--permission-prompts', 'none', '-n', `ticket ${c.name}`, ...modelArgs()], userLine(job.prompt), true);
+    return job;
+  }
+
+  // ---- chat: the project assistant, independent of a ticket
+  const liveChat = () => jobs.find((j) => j.kind === 'chat' && j.child);
+  function chatSystem() {
+    const st = project.state;
+    const active = st?.changes.filter((c) => ['in-progress', 'complete', 'specified'].includes(c.status)) ?? [];
+    const status = st ? [
+      `${st.changes.filter(isDone).length} of ${st.changes.filter((c) => c.status !== 'parking').length} changes done, ${st.totals.done}/${st.totals.total} tasks checked.`,
+      active.length ? `Work not archived yet: ${active.map((c) => `${c.name} (${c.status}${c.tasks ? `, ${c.tasks.done}/${c.tasks.total} tasks` : ''})`).join(', ')}.` : '',
+      st.nextUp ? `Next ticket the roadmap allows: ${st.nextUp}.` : '',
+    ].filter(Boolean).join(' ') : '';
+    return [
+      `You are the project assistant in the OpenSpec dashboard of the project "${project.name}". The user chats with you about the project: its plan, specs, code, progress and ideas.`,
+      'Work read-only: read and search files, never change them. When the user wants something built or changed, suggest starting a session on a ticket (from the ticket in the dashboard) or sending a message to the session that works on it.',
+      'OpenSpec lives in openspec/: roadmap.md (planned changes, milestones), backlog/ (drafts), changes/<name>/ (proposal.md, design.md, specs/, tasks.md), changes/archive/, specs/ (current specs).',
+      status && `Status when this chat started: ${status}`,
+      'Answer like in a chat: short, in Markdown, with file references where they help.',
+    ].filter(Boolean).join('\n');
+  }
+  function chat({ text, fresh }) {
+    text = String(text ?? '').trim();
+    if (!text) throw httpError(400, 'The message is empty.');
+    let job = liveChat();
+    if (job && fresh) { job.child.stdin.end(); job = null; }
+    if (job) {
+      push(job, 'user', text);
+      job.status = 'running';
+      job.child.stdin.write(userLine(text));
+      changed(0);
+      return { job: job.id };
+    }
+    const prev = fresh ? null : [...jobs].reverse().find((j) => j.kind === 'chat');
+    job = newJob('chat', null, null);
+    push(job, 'user', text);
+    const base = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--tools', 'Read,Grep,Glob',
+      '--permission-prompts', 'none', ...modelArgs()];
+    if (prev?.sessionId) {
+      job.sessionId = prev.sessionId;
+      job.resumedFrom = prev.id;
+      launch(job, [...base, '--resume', prev.sessionId], userLine(text), true);
+    } else {
+      job.sessionId = randomUUID();
+      launch(job, [...base, '--session-id', job.sessionId, '-n', `dashboard chat ${project.name}`, '--append-system-prompt', chatSystem()], userLine(text), true);
+    }
+    return { job: job.id };
+  }
+  // an idle chat process ends after 20 minutes; the next message resumes the same conversation
+  setInterval(() => {
+    for (const j of jobs) if (j.kind === 'chat' && j.child && j.status === 'idle' && Date.now() - (j.lastActivity ?? 0) > 20 * 60e3) j.child.stdin.end();
+  }, 60e3);
+
+  function message({ change, text, job: jobId, to }) {
+    text = String(text ?? '').trim();
+    if (!text) throw httpError(400, 'The message is empty.');
+    const msg = { id: `${Date.now()}-${randomBytes(3).toString('hex')}`, change: change || null, text, t: Date.now() };
+    const target = jobId ? jobs.find((j) => j.id === jobId) : null;
+    if (target && target.kind === 'session' && !target.child) {
+      // the session has ended: continue it with this message
+      if (liveSession()) throw httpError(409, 'Another session started here is still running.');
+      const job = newJob('session', target.change, null);
+      job.sessionId = target.sessionId;
+      job.resumedFrom = target.id;
+      push(job, 'user', text);
+      launch(job, ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--resume', target.sessionId,
+        '--permission-mode', AGENT_MODE, '--permission-prompts', 'none', ...modelArgs()], userLine(formatMessages([msg])), true);
+      recordDelivered(root, { ...msg, deliveredAt: Date.now(), sessionId: job.sessionId, via: 'resumed session' });
+      reloadInbox();
+      return { delivered: true, job: job.id };
+    }
+    const live = to === 'inbox' ? null : target?.child ? target : liveSession();
+    if (live) {
+      live.child.stdin.write(userLine(formatMessages([msg])));
+      live.status = 'running';
+      push(live, 'user', text);
+      recordDelivered(root, { ...msg, deliveredAt: Date.now(), sessionId: live.sessionId, via: 'dashboard session' });
+      reloadInbox();
+      return { delivered: true, job: live.id };
+    }
+    queueMessage(root, msg);
+    reloadInbox();
+    return { queued: true };
+  }
+
+  function control({ job: jobId, action }) {
+    const job = jobs.find((j) => j.id === jobId);
+    if (!job?.child) throw httpError(409, 'That session is not running.');
+    if (action === 'end') { job.child.stdin.end(); push(job, 'note', 'Ended from the dashboard: it finishes the current turn, then exits.'); }
+    else {
+      job.stopRequested = true;
+      job.child.kill('SIGINT');
+      const child = job.child;
+      setTimeout(() => { if (children.has(child)) child.kill('SIGTERM'); }, 5000);
+    }
+    changed(0);
+    return { ok: true };
+  }
+  function cancel({ id }) {
+    if (!cancelMessage(root, String(id ?? ''))) throw httpError(409, 'The message was delivered already.');
+    reloadInbox();
+    return { ok: true };
+  }
+  function brief() {
+    const now = Date.now();
+    return {
+      running: jobs.filter((j) => j.child).length,
+      session: liveSession()?.change ?? null,
+      external: inbox.sessions.some((x) => !x.ended && !x.dashboardJob && now - x.t < 3 * 60e3),
+      queued: inbox.messages.filter((m) => m.state === 'queued').length,
+    };
+  }
+  function startWatching() {
+    const dir = inboxDir(root);
+    fs.mkdirSync(dir, { recursive: true });
+    let t = null;
+    try { fs.watch(dir, { recursive: true }, () => { clearTimeout(t); t = setTimeout(reloadInbox, 150); }); } catch { /* the interval below still runs */ }
+    setInterval(reloadInbox, 10000);
+    reloadInbox();
+  }
+  return { view, ask, chat, start, message, control, cancel, brief, startWatching };
+}
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => { for (const c of children) { try { c.kill('SIGTERM'); } catch { /* gone */ } } process.exit(0); });
 }
 
 // ---------------------------------------------------------------- which projects
@@ -579,7 +922,9 @@ for (const root of uniqueRoots) {
   let pid = base;
   for (let n = 2; usedIds.has(pid); n++) pid = `${base}-${n}`;
   usedIds.add(pid);
-  projects.push(createProject(root, pid, historyFor(root), overviewChanged));
+  const p = createProject(root, pid, historyFor(root), overviewChanged);
+  p.agent = AGENT ? createAgent(p) : null;
+  projects.push(p);
 }
 const byId = new Map(projects.map((p) => [p.id, p]));
 const projectFor = (url) => byId.get(url.searchParams.get('project')) ?? projects[0];
@@ -599,12 +944,41 @@ const INDEX = path.join(HERE, 'index.html');
 const sse = (res) => res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
 const json = (res, body) => { res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(body)); };
 
+// With --agent the page carries a token for the agent actions; only pages served under our own host name get it
+// (no DNS rebinding), and only requests from such a page (same Origin, token header) may start anything.
+const OWN_HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`, `[::1]:${PORT}`]);
+async function readBody(req) {
+  let raw = '';
+  for await (const chunk of req) { raw += chunk; if (raw.length > 100_000) throw httpError(413, 'Too large.'); }
+  try { return JSON.parse(raw || '{}'); } catch { throw httpError(400, 'Expected JSON.'); }
+}
+const AGENT_ACTIONS = { ask: 'ask', chat: 'chat', start: 'start', message: 'message', control: 'control', cancel: 'cancel' };
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   try {
+    if (AGENT && !OWN_HOSTS.has(req.headers.host)) { res.writeHead(403); return res.end('unknown host'); }
     if (url.pathname === '/' || url.pathname === '/index.html') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      return res.end(await fsp.readFile(INDEX));
+      const html = await fsp.readFile(INDEX, 'utf8');
+      return res.end(AGENT ? html.replace('<meta name="osd-agent" content="">', `<meta name="osd-agent" content="${TOKEN}">`) : html);
+    }
+    if (url.pathname.startsWith('/api/agent')) {
+      if (!AGENT) { res.writeHead(404); return res.end('start the dashboard with --agent'); }
+      const p = projectFor(url);
+      if (url.pathname === '/api/agent' && req.method === 'GET') return json(res, p.agent.view());
+      const action = AGENT_ACTIONS[url.pathname.slice('/api/agent/'.length)];
+      const origin = req.headers.origin;
+      if (!action || req.method !== 'POST') { res.writeHead(404); return res.end('not found'); }
+      if (req.headers['x-osd-token'] !== TOKEN || (origin && !OWN_HOSTS.has(new URL(origin).host))) { res.writeHead(403); return res.end('forbidden'); }
+      try {
+        const out = p.agent[action](await readBody(req));
+        return json(res, out.log ? { id: out.id } : out);
+      } catch (e) {
+        if (!e.status) throw e;
+        res.writeHead(e.status, { 'content-type': 'application/json' });
+        return res.end(JSON.stringify({ error: e.message, ...e.extra }));
+      }
     }
     if (url.pathname === '/api/projects') return json(res, overview());
     if (url.pathname === '/api/state') {
@@ -621,6 +995,7 @@ const server = http.createServer(async (req, res) => {
       }
       const p = projectFor(url);
       res.write(`retry: 2000\nid: ${p.rev}\ndata: ${JSON.stringify({ rev: p.rev, scannedAt: Date.now(), ...p.state })}\n\n`);
+      if (p.agent) res.write(`event: agent\ndata: ${JSON.stringify(p.agent.view())}\n\n`);
       p.clients.add(res);
       req.on('close', () => p.clients.delete(res));
       return;
@@ -650,10 +1025,11 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-for (const p of projects) { await p.scanWorkspace(); await p.publish(); p.start(); }
+for (const p of projects) { await p.scanWorkspace(); await p.publish(); p.start(); p.agent?.startWatching(); }
 server.listen(PORT, HOST, () => {
   const link = `http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}/`;
   console.log(`OpenSpec dashboard\n  ${link}\n  CLI: ${USE_CLI ? CLI : 'disabled'}`);
+  if (AGENT) console.log(`  Agent: ${CLAUDE} (permission mode ${AGENT_MODE}${AGENT_MODEL ? `, model ${AGENT_MODEL}` : ''})`);
   for (const p of projects) console.log(`  ${p.id.padEnd(24)} ${p.root}`);
   if (!opt('no-open') && process.platform === 'darwin') spawn('open', [link], { stdio: 'ignore', detached: true }).unref();
 });

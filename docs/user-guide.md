@@ -93,6 +93,45 @@ Click a card to open its details next to the board; `Esc` closes them. A link to
 
 ![Board with the details of a change](images/dashboard-board-details.png)
 
+## Talk to the agent (optional)
+
+Start the dashboard with `--agent` to chat with Claude about the project, start a session on a ticket and talk to
+it while it works. It runs your local Claude Code (the `claude` command) with its own login; there is no extra key.
+
+```sh
+node tools/openspec-dashboard/server.mjs --agent examples/todo-app
+```
+
+**Chat** (in the header and on the full-screen board) is a messenger, independent of any ticket. The
+**Assistant** reads the project but never changes it, knows its status and remembers the conversation; **New chat**
+starts over. Every session started from the dashboard becomes a conversation of its own, and **Terminal session**
+sends messages to a session running elsewhere. Enter sends, Shift+Enter starts a new line.
+
+![Chat next to the full-screen board](images/dashboard-chat.png)
+
+**⤢ Maximize** gives the chat the whole window; `Esc` brings the side panel back.
+
+![Maximized chat](images/dashboard-chat-max.png)
+
+**Agent…** on a ticket adds the ticket's context automatically: **Ask** a read-only question about it ("Ask about
+this task" next to the current task prefills one), or **Start session** to let a new session work on it with the
+ticket workflow. The session then shows up in the chat, where you follow its steps, send it messages, end or stop
+it, and continue it later.
+
+![Asking about a ticket](images/dashboard-ticket-agent.png)
+
+Before the first session:
+
+- Allow what the workflow needs (the quality gate, `openspec`, `git add`/`git commit`) in the project's
+  `.claude/settings.json`: nobody can answer permission prompts in a started session, so they are declined.
+- Run `claude` in the project folder once and accept the trust dialog; until then Claude Code ignores the
+  project's permission rules (the panel warns about it).
+- For a session running in a terminal, install the hook once so it receives messages:
+  `node tools/openspec-dashboard/agent-hook.mjs install <project>`.
+
+Every question, chat message and session is a normal Claude Code run and counts towards your plan. Details:
+[dashboard README](../tools/openspec-dashboard/README.md#agent-panel-optional).
+
 ## Several projects
 
 Pass several projects, or `--scan` a folder, and the dashboard starts with an overview of all of them:

@@ -63,6 +63,59 @@ A **parking lot** (a change that collects deferred items and is never archived) 
 "parking lot" at the top of its `tasks.md`, or named with `--parking-lot=<change>`. It is kept out of the board,
 the totals and "next up", and shown as its own chip.
 
+## Agent panel (optional)
+
+Started with `--agent`, the dashboard talks to Claude Code in two places:
+
+- **Chat** (in the header and on the full-screen board) is a messenger, independent of any ticket:
+  - **Assistant**: chat about the project (plan, specs, code, progress, ideas). It reads the project with
+    read-only tools (Read, Grep, Glob), never changes it, knows the project status when the chat starts and
+    remembers the conversation; **New chat** starts over.
+  - **Session · <ticket>**: every session started from the dashboard is a conversation with its steps and replies.
+    Your messages go straight to it; you can end it after the current turn or stop it, and a message to an ended
+    session continues it. `claude --resume <session-id>` takes it over in a terminal.
+  - **Terminal session**: messages for a session running elsewhere (a terminal, an IDE), delivered at its next
+    step through the hook below; its replies appear there.
+  - **⤢ Maximize** gives the chat the whole window (`Esc` restores it, a second `Esc` closes it).
+- **Agent…** on a ticket, with the ticket's context added automatically:
+  - **Ask**: a read-only question about the ticket; "Ask about this task" next to the current task prefills one.
+  - **Start session**: a new Claude Code session that works on the ticket with the ticket workflow; it opens as a
+    conversation in the chat.
+
+```sh
+node server.mjs --agent                              # in the project folder, or with --project/--scan
+```
+
+It runs the `claude` command (Claude Code) in the project folder, so it uses Claude Code's own login and counts
+towards the same plan or account as your other sessions; there is no separate key. Each question and session is
+a normal Claude Code run.
+
+**Messages to sessions started elsewhere** need a small hook in the project (once, written to the git-ignored
+`.claude/settings.local.json`; sessions that are already running pick it up after a restart):
+
+```sh
+node <path-to>/tools/openspec-dashboard/agent-hook.mjs install <project>     # uninstall removes it again
+```
+
+Messages wait in an inbox outside the project (`$XDG_STATE_HOME/openspec-dashboard/inbox/`). The hook hands them
+to the session after its next tool call, with your next prompt, or, when the session is about to stop, as the
+reason to continue. It also records a heartbeat, so the panel shows that a session is active and what it did
+last. Queued messages can be cancelled until they are delivered.
+
+**Sessions started from the dashboard** run without anyone to answer permission prompts, so prompts are declined.
+Allow what the ticket workflow needs (the quality gate, `openspec`, `git add`/`git commit`) in the project's
+`.claude/settings.json`; edits are accepted by the default permission mode `acceptEdits`. Claude Code applies a
+project's permission rules only once the folder is trusted: run `claude` in it once and accept the trust dialog
+(the panel warns when it is not). Before starting, the dashboard checks that no other change has unarchived work,
+that the ticket's prerequisites are done and that no other session is active; "Start anyway" overrides that.
+Only one session started from the dashboard runs per project.
+
+**Safety.** `--agent` only runs on `127.0.0.1`. Every action needs a token that is created at each start and
+only handed to pages served under the dashboard's own address; requests from other origins or host names are
+refused. Questions and the assistant cannot change files. Questions, chats and sessions are listed while the server runs
+(the conversations themselves stay in Claude Code, so `claude --resume` finds them); an idle chat process ends after
+20 minutes and the next message resumes the same conversation.
+
 ## OpenSpec CLI
 
 The dashboard runs `openspec validate --all --json` and `openspec list --json` after file changes and every
@@ -89,9 +142,14 @@ Without a working CLI everything except the validation results still works.
 | `--parking-lot=<change>` | auto-detected | |
 | `--history=<file-or-dir>` | `$XDG_STATE_HOME/openspec-dashboard/<project>-<hash>.json` (`~/.local/state/…`) | activity history; a directory with several projects |
 | `--no-open` | | do not open the browser (macOS) |
+| `--agent` | off | the agent panel (see above) |
+| `--claude=<command>` | `claude` (or `CLAUDE_CLI`) | the Claude Code command |
+| `--agent-permission-mode=<mode>` | `acceptEdits` | permission mode of started sessions (`acceptEdits`, `auto`, `dontAsk`, `plan`, …) |
+| `--agent-model=<model>` | Claude Code's default | model for questions and sessions, e.g. `sonnet` |
+| `--agent-prompt=<file>` | built in | first message of a started session; `{change}` is replaced by the change name |
 
 Nine styles, picked in the header: Flat, Glass, Paper, Whiteboard, Notebook and Comic (each in light and dark), Blackboard, Matrix and Terminal (always dark). In the address, `?style=flat|glass|paper|whiteboard|blackboard|notebook|matrix|terminal|comic` and `?theme=light|dark` choose the look (otherwise the header buttons and the
-system setting decide), and `?snapshot` loads the data once without the live stream (useful for screenshots).
+system setting decide), `?panel=chat` opens the chat, and `?snapshot` loads the data once without the live stream (useful for screenshots).
 
 ## Notes
 
@@ -99,4 +157,5 @@ system setting decide), and `?snapshot` loads the data once without the live str
   outside the project so nothing needs to be ignored in git.
 - The "files written" signal scans the project tree every 10 seconds, skipping `.git`, `node_modules`, `target`,
   `build`, `dist` and similar folders.
-- The server only serves `openspec/**/*.md` from the project and binds to `127.0.0.1` by default.
+- The server only serves `openspec/**/*.md` from the project and binds to `127.0.0.1` by default. Without
+  `--agent` it never writes to the project or starts anything.

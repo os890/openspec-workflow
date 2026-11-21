@@ -173,9 +173,12 @@ node <path-to>/tools/openspec-dashboard/server.mjs
 
 Shows the change being worked on with its current task, the milestone, an activity feed and a board of all
 changes, updated live from the files and the `openspec` CLI. Several projects at once (`--scan=<dir>`) get an
-overview page. No dependencies; see its [README](tools/openspec-dashboard/README.md).
+overview page. With `--agent` it also talks to Claude Code: ask about a ticket, message the working session or
+start a session on a ticket. No dependencies; see its [README](tools/openspec-dashboard/README.md).
 
 ![OpenSpec dashboard on the todo-app sample](docs/images/dashboard-overview.png)
+
+![Chat with the project assistant next to the full-screen board](docs/images/dashboard-chat.png)
 
 ## Rendering the diagrams
 

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OpenSpec Dashboard</title>
+<meta name="osd-agent" content="">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Patrick+Hand&family=Courier+Prime:wght@400;700&family=Permanent+Marker&family=Cabin+Sketch:wght@400;700&family=Architects+Daughter&family=Share+Tech+Mono&family=Bangers&family=VT323&display=swap">
 <style>
@@ -1099,6 +1100,91 @@ body.board-max { overflow: hidden; }
   .progress { grid-template-columns: 1fr; }
   .seg-labels { display: none; }
 }
+/* ---------------------------------------------------------------- agent panel (--agent) */
+.agent-panel { --agp: 18px; position: fixed; top: 12px; right: 12px; bottom: 12px; left: auto; width: min(480px, calc(100vw - 24px)); z-index: 70;
+  display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-hover), 0 24px 60px -12px rgba(0, 0, 0, .28); }
+.ag-head { padding: 16px var(--agp) 8px; display: flex; align-items: baseline; gap: 10px; }
+.ag-head h2 { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -.02em; }
+.ag-head .link { margin-left: auto; }
+.ag-status { margin: 0 var(--agp); font-size: 12.5px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+.ag-hint code { overflow-wrap: anywhere; }
+.ag-form { padding: 10px var(--agp) 12px; display: flex; flex-direction: column; gap: 9px; border-bottom: 1px solid var(--line); }
+.ag-modes { display: flex; gap: 4px; flex-wrap: wrap; margin: 0 -6px; }
+.ag-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ag-target select { flex: 1; min-width: 0; max-width: 100%; }
+.ag-form textarea { width: 100%; min-height: 76px; resize: vertical; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--ink); padding: 9px 12px; font: inherit; font-size: 13.5px; }
+.ag-note { font-size: 12px; color: var(--muted); min-width: 0; }
+.ag-note:empty { display: none; }
+.ag-note.warn, .ag-err { color: var(--st-blocked); font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* every style restyles .btn; the one primary action stays an accent-filled button in all of them */
+.agent-panel .btn.primary, .agent-panel .btn.primary:hover { background: var(--accent) !important; color: var(--bg) !important; border-color: var(--accent) !important; text-shadow: none !important; font-weight: 700; }
+.agent-panel .btn.primary:hover { filter: brightness(1.08); }
+.btn:disabled { opacity: .5; cursor: default; }
+.ag-body { flex: 1; overflow: auto; padding: 12px var(--agp) 18px; display: flex; flex-direction: column; gap: 10px; }
+.ag-item { background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 13px; display: flex; flex-direction: column; gap: 7px; min-width: 0; flex: none; }
+.ag-item .h { display: flex; gap: 4px 8px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.ag-item .h b { color: var(--ink); font-size: 13px; }
+.ag-item .h .pill { margin-left: auto; }
+.ag-q { font-weight: 600; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ag-answer, .ag-log .md { font-size: 13px; overflow-wrap: anywhere; }
+.ag-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.ag-actions .btn { background: var(--surface); }
+.ag-logbox summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.ag-log { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; max-height: 46vh; overflow: auto; }
+.ag-log li.tool { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+.ag-log li.tool::before { content: "→ "; color: var(--faint); }
+.ag-log li.user { background: var(--accent-soft); border-radius: 9px; padding: 6px 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ag-log li.error { color: var(--st-blocked); font-size: 12px; overflow-wrap: anywhere; }
+.ag-log li.sub { margin-left: 14px; }
+.ag-spin { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--st-progress); margin-right: 7px; animation: pulse 2.4s infinite; }
+.ag-open { font-size: 12px; padding: 2px 10px; }
+.ag-sub { margin: 0 var(--agp) 4px; display: flex; gap: 8px 10px; align-items: center; flex-wrap: wrap; }
+.ag-sub .link { margin-left: auto; font-size: 13px; }
+.ag-empty { color: var(--muted); font-size: 13px; padding: 6px 2px; }
+.ag-chips { display: flex; gap: 6px; flex-wrap: wrap; padding: 4px var(--agp) 8px; }
+.chip { border: 0; background: var(--surface-2); border-radius: 999px; padding: 4px 12px; font-size: 12.5px; cursor: pointer; color: var(--muted); font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+.ag-bar { padding: 0 var(--agp) 8px; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid var(--line); }
+.ag-bar:empty { display: none; }
+.ag-bar code { overflow-wrap: anywhere; }
+.ag-thread { flex: 1; overflow: auto; padding: 14px var(--agp); display: flex; flex-direction: column; gap: 8px; }
+.msg { max-width: 88%; border-radius: 16px; padding: 8px 12px; font-size: 13.5px; overflow-wrap: anywhere; display: flex; flex-direction: column; gap: 2px; flex: none; }
+.msg.me { align-self: flex-end; background: var(--accent); color: var(--bg); border-bottom-right-radius: 5px; white-space: pre-wrap; }
+.msg.them { align-self: flex-start; background: var(--surface-2); border-bottom-left-radius: 5px; }
+.msg.them.sub { margin-left: 16px; opacity: .85; }
+.msg .md { font-size: 13.5px; } .msg .md p { margin: .3em 0; } .msg .md > :first-child { margin-top: 0; } .msg .md > :last-child { margin-bottom: 0; }
+.msg .meta { font-size: 10.5px; opacity: .7; align-self: flex-end; white-space: normal; }
+.msg.me .meta .link { color: inherit; text-decoration: underline; font-size: inherit; }
+.msg.typing { color: var(--muted); font-size: 12.5px; flex-direction: row; align-items: center; }
+.steps { align-self: flex-start; max-width: 88%; font-family: var(--font-mono); font-size: 11px; color: var(--muted); flex: none; }
+.steps summary { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.steps > div { padding-left: 14px; overflow-wrap: anywhere; } .steps .error { color: var(--st-blocked); }
+.sys { align-self: center; font-size: 11.5px; color: var(--muted); text-align: center; max-width: 90%; flex: none; }
+.sys summary { cursor: pointer; } .sys > div { white-space: pre-wrap; text-align: left; margin-top: 4px; }
+.sys.err { color: var(--st-blocked); }
+.ag-compose { display: flex; gap: 8px; align-items: flex-end; padding: 10px var(--agp) 4px; border-top: 1px solid var(--line); }
+.ag-compose textarea { flex: 1; min-height: 42px; max-height: 160px; resize: vertical; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); color: var(--ink); padding: 9px 12px; font: inherit; font-size: 13.5px; }
+.ag-route { padding: 0 var(--agp) 12px; }
+/* on wide screens the full-screen board makes room for the panel instead of hiding columns under it */
+@media (min-width: 1100px) { body.ag-open:not(.ag-max) .board.max { padding-right: calc(min(480px, 100vw - 24px) + 24px); } }
+/* maximized: the panel covers the window, its content stays a readable centred column */
+.agent-panel.max { inset: 8px; width: auto; --agp: max(24px, calc((100% - 1120px) / 2)); }
+.agent-panel.max .ag-head { padding-block: 10px 8px; align-items: center; gap: 8px 14px; flex-wrap: wrap; }
+.agent-panel.max .ag-head .ag-chips { padding: 0; flex: 1 1 auto; min-width: 0; }
+.agent-panel.max .ag-bar { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 16px; padding-bottom: 6px; }
+.agent-panel.max .ag-bar > .ag-row { flex: 1 1 auto; }
+.agent-panel.max .ag-sub { margin-top: -4px; }
+.agent-panel.max .ag-form { padding-block: 6px 10px; }
+.agent-panel.max .ag-thread { padding-block: 16px; gap: 10px; }
+.agent-panel.max .msg, .agent-panel.max .steps { max-width: 80%; }
+.agent-panel.max .ag-compose { padding-block: 10px 2px; }
+.agent-panel.max .ag-route { padding-bottom: 8px; }
+.ag-head .ag-maxbtn { margin-left: auto; font-size: 13px; }
+.ag-head .ag-maxbtn + .link { margin-left: 14px; }
+body.ag-max { overflow: hidden; }
+:root[data-style="glass"] .agent-panel { background: var(--g-surface-strong); }
+:root[data-style="matrix"] .agent-panel { background: var(--surface); }
+@media (max-width: 600px) { .agent-panel { inset: 0; width: auto; border-radius: 0; } }
 </style>
 </head>
 <body>
@@ -1112,6 +1198,7 @@ body.board-max { overflow: hidden; }
       <select id="style" class="style-select" aria-label="Style" title="Visual style">
         <option value="flat">Flat</option><option value="glass">Glass</option><option value="paper">Paper</option><option value="whiteboard">Whiteboard</option><option value="blackboard">Blackboard</option><option value="notebook">Notebook</option><option value="matrix">Matrix</option><option value="terminal">Terminal</option><option value="comic">Comic</option>
       </select>
+      <button class="btn" id="agent-btn" type="button" data-chat-btn aria-controls="agent" hidden>Chat</button>
       <button class="btn" id="theme" type="button" aria-label="Toggle light or dark theme">◐</button>
     </div>
   </div>
@@ -1128,6 +1215,7 @@ body.board-max { overflow: hidden; }
   </div>
   <section class="panel board" id="board"></section>
 </div>
+<aside class="drawer agent-panel" id="agent" aria-label="Agent" hidden></aside>
 
 <script>
 const STATUS = {
@@ -1196,7 +1284,7 @@ function applyStyle(name) {
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const inline = (s) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+const inline = (s) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/(^|[\s(])\*([^*\s][^*]*?)\*(?=[\s.,;:!?)]|$)/g, '$1<em>$2</em>');
 const stVar = (s) => `var(${STATUS[s]?.v ?? '--st-proposed'})`;
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 // add-due-dates -> Add due dates (the slug stays visible where it matters)
@@ -1232,7 +1320,7 @@ function md(src) {
     const li = l.match(/^(\s*)([-*]|\d+\.)\s+(.*)$/);
     if (li) {
       const kind = /\d/.test(li[2]) ? 'ol' : 'ul';
-      if (list !== kind) { closeList(); out += `<${kind}>`; list = kind; }
+      if (list !== kind) { closeList(); out += kind === 'ol' ? `<ol start="${parseInt(li[2], 10)}">` : `<${kind}>`; list = kind; } // a nested list must not restart the numbering
       let text = li[3];
       const cb = text.match(/^\[([ xX])\]\s+(.*)$/);
       if (cb) text = (cb[1] === ' ' ? '☐ ' : '☑ ') + cb[2];
@@ -1301,6 +1389,7 @@ async function renderFocus(s, el = $('focus'), forced = null) {
         <span>${esc(cur.g.title)} · ${cur.g.done}/${cur.g.total}</span>
         ${lastDone ? `<span>last check-off ${ago(lastDone.t)}</span>` : ''}
         ${s.workspace?.recent?.[0] ? `<span>last file write ${ago(s.workspace.recent[0].mtime)}</span>` : ''}
+        ${AGENT_TOKEN ? `<button class="link" type="button" data-agent="${esc(c.name)}" data-agent-mode="ask" data-agent-draft="${esc(`About task ${cur.i.id} (${cur.i.text}): `)}">Ask about this task</button>` : ''}
       </div></div>`;
   } else if (t && !cur) {
     now = `<div class="now done"><span class="tag">Done</span><div class="t">Nice, all ${t.total} tasks are checked.</div>
@@ -1355,6 +1444,7 @@ async function renderFocus(s, el = $('focus'), forced = null) {
         <span class="label" style="color:${pinnedAway ? 'var(--muted)' : stVar(c.status)}">${eyebrow}</span>
         ${!inDrawer && active.length > 1 ? `<span class="switch">${active.map((a) => `<button type="button" data-pick="${esc(a.name)}" aria-pressed="${a.name === c.name}" title="${esc(a.name)} · ${STATUS[a.status].label}">${a.inRoadmap ? '#' + a.order : esc(a.name)}</button>`).join('')}</span>` : ''}
         ${pinnedAway ? `<button class="link back" type="button" data-pick="">← back to ${esc(title(auto.name))}</button>` : ''}
+        ${AGENT_TOKEN && c.status !== 'archived' ? `<button class="btn ag-open" type="button" data-agent="${esc(c.name)}" title="Ask about this ticket or start a session on it">Agent…</button>` : ''}
         ${inDrawer ? '<button class="link back" type="button" data-close-drawer>Close ✕</button>' : ''}
       </div>
       <h2 class="f-name">${esc(title(c.name))}</h2>
@@ -1494,6 +1584,7 @@ function renderBoard(s) {
       <span class="muted num" style="font-size:12.5px">${s.changes.filter(isDone).length} of ${s.changes.filter((c) => c.status !== 'parking').length} changes done · ${s.totals.done}/${s.totals.total} tasks</span>
       ${s.changes.filter((c) => c.status === 'parking').map((c) => `<button type="button" class="btn" data-pick="${esc(c.name)}" title="Parking lot: deferred items, never archived">Parking lot · ${c.tasks ? `${c.tasks.total - c.tasks.done} open` : esc(c.name)}</button>`).join('')}
       <span class="ms-filter">${msBtn('', '<b>All</b>', s.changes.filter((c) => c.status !== 'parking'))}${s.milestones.map((m) => msBtn(m.id, `<b>${esc(m.id)}</b><span class="ms-name">${esc(m.title)}</span>`, s.changes.filter((c) => c.milestone === m.id), m.title)).join('')}</span>
+      ${AGENT_TOKEN ? '<button class="btn board-toggle" type="button" data-chat-btn aria-controls="agent">Chat</button>' : ''}
       <button class="btn board-toggle" type="button" data-max aria-pressed="${max}" title="${max ? 'Back to the dashboard (Esc)' : 'Show the board across the whole window'}">${max ? 'Exit full screen ✕' : '⤢ Full screen'}</button>
     </div>
     ${now}
@@ -1544,12 +1635,14 @@ function accept(next) {
   ui.state = next;
   if (ui.pinned === null && location.hash.length > 1) ui.pinned = decodeURIComponent(location.hash.slice(1));
   render();
+  if (ag.open && !$('ag-thread') && !$('ag-body')) buildAgent(); else renderAgentLive();
 }
 function connect() {
   const es = new EventSource(withProject('/events'));
   es.onopen = () => { $('conn').innerHTML = '<span class="dot on"></span>live'; };
   es.onmessage = (ev) => { const d = JSON.parse(ev.data); $('conn').innerHTML = `<span class="dot on"></span>live · ${hhmm(d.scannedAt)}`; accept(d); };
   es.onerror = () => { $('conn').innerHTML = '<span class="dot off"></span>disconnected, retrying…'; };
+  es.addEventListener('agent', (ev) => { ag.view = JSON.parse(ev.data); renderAgentLive(); });
 }
 
 // ------------------------------------------------------------ interaction
@@ -1611,6 +1704,10 @@ window.addEventListener('hashchange', () => {
   render();
 });
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && ag.open) {
+    if (ag.max) { ag.max = false; try { localStorage.setItem('osd-chat-max', '0'); } catch {} return buildAgent(); }
+    return closeAgent();
+  }
   if (e.key !== 'Escape' || !ui.boardMax) return;
   if (ui.drawer) { ui.drawer = null; history.replaceState(null, '', '#board'); renderBoard(ui.state); } else setMax(false);
 });
@@ -1626,6 +1723,307 @@ if (location.hash === '#board' || location.hash.startsWith('#board:')) {
   if (location.hash.startsWith('#board:')) ui.drawer = decodeURIComponent(location.hash.slice(7));
 }
 setInterval(() => ui.state && (renderHeader(ui.state), renderFeed(ui.state)), 30000);
+
+// ------------------------------------------------------------ agent (server started with --agent)
+// Two panels in one side sheet, both running the local Claude Code with its own login:
+//   Chat (header / board): a messenger independent of tickets. "Assistant" is a read-only project assistant that
+//     remembers the conversation; every session started here is a conversation too (its steps and replies, your
+//     messages go straight to it); "Terminal session" sends messages to a session running elsewhere (via the hook).
+//   Ticket (Agent… on a change): Ask about the ticket (its context is added automatically) or start a session on it.
+const AGENT_TOKEN = document.querySelector('meta[name="osd-agent"]')?.content || '';
+let chatMax = false;
+try { chatMax = localStorage.getItem('osd-chat-max') === '1'; } catch {}
+const ag = { max: chatMax, open: false, panel: 'chat', view: null, convo: 'assistant', target: null, mode: 'ask', note: '', force: null, busy: false, expanded: new Map(), drafts: {} };
+const JOB_LABEL = { starting: 'starting', running: 'working', idle: 'waiting for you', done: 'ended', stopped: 'stopped', failed: 'failed' };
+const JOB_ST = { starting: 'in-progress', running: 'in-progress', idle: 'specified', done: 'complete', stopped: 'proposed', failed: 'missing' };
+const alive = (j) => ['starting', 'running', 'idle'].includes(j?.status);
+
+async function agentPost(action, body) {
+  const r = await fetch(withProject('/api/agent/' + action), {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-osd-token': AGENT_TOKEN }, body: JSON.stringify(body),
+  });
+  const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+  if (!r.ok) throw Object.assign(new Error(d.error || `HTTP ${r.status}`), d);
+  return d;
+}
+const recentExternal = () => (ag.view?.sessions ?? []).filter((x) => !x.ended && !x.dashboardJob && Date.now() - x.t < 15 * 60e3);
+const groupBySession = (jobs) => {
+  const m = new Map();
+  for (const j of jobs) { const k = j.sessionId || j.id; if (!m.has(k)) m.set(k, []); m.get(k).push(j); }
+  return [...m.entries()].map(([sid, js]) => ({ sid, jobs: js, last: js.at(-1) }));
+};
+function conversations() {
+  const v = ag.view;
+  if (!v) return [];
+  const chats = groupBySession(v.jobs.filter((j) => j.kind === 'chat'));
+  const cur = chats.at(-1);
+  const list = [{ id: 'assistant', label: 'Assistant', jobs: cur?.jobs ?? [], last: cur?.last, live: ['running', 'starting'].includes(cur?.last?.status) }];
+  for (const g of groupBySession(v.jobs.filter((j) => j.kind === 'session')).reverse().slice(0, 5)) {
+    list.push({ id: 'session:' + g.sid, label: title(g.last.change), jobs: g.jobs, last: g.last, live: alive(g.last), session: true });
+  }
+  const ext = recentExternal();
+  if (v.hooks || ext.length || v.messages.some((m) => m.state === 'queued')) list.push({ id: 'terminal', label: 'Terminal session', live: ext.some((x) => Date.now() - x.t < 3 * 60e3), terminal: true });
+  return list;
+}
+
+function openChat(convo) {
+  if (!AGENT_TOKEN) return;
+  Object.assign(ag, { open: true, panel: 'chat', note: '' });
+  if (convo) ag.convo = convo;
+  $('agent').hidden = false;
+  document.body.classList.add('ag-open');
+  buildAgent();
+  $('ag-text')?.focus();
+}
+function openTicket(change, mode, draft) {
+  if (!AGENT_TOKEN) return;
+  Object.assign(ag, { open: true, panel: 'ticket', note: '', force: null });
+  if (change) ag.target = change;
+  if (mode) ag.mode = mode;
+  if (draft) ag.drafts['ticket-' + ag.mode] = draft;
+  $('agent').hidden = false;
+  document.body.classList.add('ag-open');
+  buildAgent();
+  const ta = $('ag-text');
+  if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+}
+function closeAgent() { ag.open = false; $('agent').hidden = true; document.body.classList.remove('ag-open', 'ag-max'); updateAgentBtn(); }
+function applyAgentMax() {
+  $('agent').classList.toggle('max', ag.max);
+  document.body.classList.toggle('ag-max', ag.max && ag.open);
+}
+
+// ---- building the panel (on open and on switches); live parts are filled by renderAgentLive
+function buildAgent() {
+  const s = ui.state;
+  if (!ag.open || !s) return;
+  $('agent').innerHTML = ag.panel === 'chat' ? buildChat(s) : buildTicket(s);
+  applyAgentMax();
+  renderAgentLive();
+}
+function buildChat(s) {
+  const c = conversations().find((x) => x.id === ag.convo) ?? conversations()[0];
+  if (c) ag.convo = c.id;
+  const ph = c?.terminal ? 'Message to the session running in a terminal' : c?.session ? `Message to the session on ${c?.label}` : `Message the assistant about ${s.project}`;
+  const chips = '<div class="ag-chips" id="ag-chips" role="tablist"></div>';
+  return `
+    <div class="ag-head"><h2>Chat</h2><span class="muted" style="font-size:12.5px">${esc(s.project)}</span>${ag.max ? chips : ''}<button class="link ag-maxbtn" type="button" data-ag-max aria-pressed="${ag.max}" title="${ag.max ? 'Back to the side panel' : 'Use the whole window'}">${ag.max ? '⤡ Restore' : '⤢ Maximize'}</button><button class="link" type="button" data-ag-close>Close ✕</button></div>
+    ${ag.max ? '' : chips}
+    <div class="ag-bar" id="ag-bar"></div>
+    <div class="ag-thread" id="ag-thread" aria-live="polite"></div>
+    <div class="ag-compose">
+      <textarea id="ag-text" rows="2" placeholder="${esc(ph)}">${esc(ag.drafts['chat-' + ag.convo] ?? '')}</textarea>
+      <button class="btn primary" type="button" data-ag-send>Send</button>
+    </div>
+    <div class="ag-note ag-route" id="ag-route"></div>`;
+}
+function buildTicket(s) {
+  if (!s.changes.some((c) => c.name === ag.target)) ag.target = currentChange(s)?.name ?? '';
+  const c = s.changes.find((x) => x.name === ag.target);
+  if (!c) return '<div class="ag-head"><h2>Ticket</h2><button class="link" type="button" data-ag-close>Close ✕</button></div><div class="empty" style="padding:18px">No change selected.</div>';
+  const modes = [['ask', 'Ask'], ['start', 'Start session']];
+  let form;
+  if (ag.mode === 'ask') {
+    form = `<textarea id="ag-text" rows="3" placeholder="Ask about ${esc(title(c.name))}, e.g. What is left to do? Which scenario covers …?">${esc(ag.drafts['ticket-ask'] ?? '')}</textarea>
+      <div class="ag-row"><button class="btn primary" type="button" data-ag-send>Ask</button><span class="ag-note">Claude reads this ticket's files read-only and answers here. ⌘/Ctrl+Enter sends.</span></div>`;
+  } else {
+    form = `<div class="ag-note">Starts a new Claude Code session that works on <b>${esc(title(c.name))}</b> with the ticket workflow. You follow and talk to it in the <b>Chat</b>.</div>
+      ${ag.view?.trusted === false ? `<div class="ag-note warn">Claude Code does not trust this folder yet, so it ignores the project's permission rules and the session will be stuck at the first command. Run <code>claude</code> in ${esc(s.project)} once and accept the trust dialog.</div>` : ''}
+      <div class="ag-row"><button class="btn primary" type="button" data-ag-send ${['archived', 'parking'].includes(c.status) ? 'disabled' : ''}>Start session</button>
+        ${ag.force ? '<button class="btn" type="button" data-ag-force>Start anyway</button>' : ''}</div>
+      <div class="ag-note">Permission mode <code>${esc(ag.view?.permissionMode ?? '')}</code>${ag.view?.model ? `, model <code>${esc(ag.view.model)}</code>` : ''}. Nobody answers permission prompts there, so they are declined: allow what the workflow needs (build, tests, <code>openspec</code>, <code>git</code>) in the project's <code>.claude/settings.json</code>.</div>`;
+  }
+  return `
+    <div class="ag-head"><h2>${esc(title(c.name))}</h2><button class="link ag-maxbtn" type="button" data-ag-max aria-pressed="${ag.max}" title="${ag.max ? 'Back to the side panel' : 'Use the whole window'}">${ag.max ? '⤡ Restore' : '⤢ Maximize'}</button><button class="link" type="button" data-ag-close>Close ✕</button></div>
+    <div class="ag-sub"><span class="pill" style="--st:${stVar(c.status)}">${esc(columnLabel(c))}</span><span class="slug">${esc(c.name)}</span><button class="link" type="button" data-chat="">Open chat →</button></div>
+    <div class="ag-form">
+      <div class="ag-modes" role="tablist">${modes.map(([k, l]) => `<button type="button" class="tab" role="tab" data-ag-mode="${k}" aria-selected="${k === ag.mode}">${l}</button>`).join('')}</div>
+      ${form}
+      <div class="ag-note" id="ag-note"></div>
+    </div>
+    <div class="ag-body" id="ag-body"></div>`;
+}
+const columnLabel = (c) => COLS.find(([k]) => k === columnOf(c))?.[1] ?? STATUS[c.status]?.label ?? c.status;
+
+// ---- live parts
+function threadHtml(c) {
+  if (!c) return '';
+  if (c.terminal) {
+    const msgs = (ag.view?.messages ?? []).filter((m) => m.state === 'queued' || String(m.via ?? '').startsWith('hook')).slice().reverse();
+    return msgs.map((m) => `<div class="msg me">${esc(m.text)}<span class="meta">${hhmm(m.t)} · ${m.state === 'queued' ? 'queued' : 'delivered ' + hhmm(m.deliveredAt)}${m.state === 'queued' ? ` · <button class="link" type="button" data-ag-cancel="${esc(m.id)}">cancel</button>` : ''}</span></div>`).join('')
+      || '<div class="ag-empty">Messages you send here reach the Claude Code session running in a terminal (or IDE) at its next step. Its replies appear there.</div>';
+  }
+  const out = [];
+  let steps = [];
+  const flush = () => {
+    if (!steps.length) return;
+    out.push(`<details class="steps"><summary>${steps.length === 1 ? esc(steps[0].text) : `${steps.length} steps · ${esc(steps.at(-1).text)}`}</summary>${steps.map((x) => `<div class="${x.kind}">${esc(x.text)}</div>`).join('')}</details>`);
+    steps = [];
+  };
+  for (const j of c.jobs) {
+    for (const l of j.log) {
+      if (l.kind === 'tool' || l.kind === 'error') { steps.push(l); continue; }
+      flush();
+      if (l.kind === 'user') out.push(`<div class="msg me">${esc(l.text)}<span class="meta">${hhmm(l.t)}</span></div>`);
+      else if (l.kind === 'text') out.push(`<div class="msg them ${l.sub ? 'sub' : ''}"><div class="md">${md(l.text)}</div><span class="meta">${hhmm(l.t)}</span></div>`);
+      else if (l.kind === 'prompt') out.push(`<details class="sys"><summary>Started on the ticket with the workflow prompt</summary><div>${esc(l.text)}</div></details>`);
+      else out.push(`<div class="sys">${esc(l.text)}</div>`);
+    }
+    flush();
+    if (j.error) out.push(`<div class="sys err">✕ ${esc(j.error)}</div>`);
+  }
+  if (['running', 'starting'].includes(c.last?.status)) out.push('<div class="msg them typing"><span class="ag-spin"></span>working…</div>');
+  if (!out.length) out.push(c.session ? '' : `<div class="ag-empty">Chat with an assistant about ${esc(ui.state?.project ?? 'the project')}: the plan, the specs, the code, progress or ideas. It reads the project but never changes it, and it remembers this conversation.<br><br>For a ticket, use <b>Agent…</b> on the ticket: ask about it or start a session that works on it.</div>`);
+  return out.join('');
+}
+function barHtml(c) {
+  if (!c) return '';
+  if (c.terminal) {
+    const ext = recentExternal()[0];
+    if (!ag.view?.hooks) return `<div class="ag-note warn">The hook is not installed, so a session in a terminal cannot receive messages: <code>${esc(ag.view?.hookInstall ?? '')}</code></div>`;
+    return `<div class="ag-note">${ext ? `<span class="dot on"></span>Active · last step ${ago(ext.t)}${ext.tool ? ` (${esc(ext.tool)})` : ''}` : '<span class="dot"></span>No session seen in the last 15 minutes; messages wait until one takes a step.'}</div>`;
+  }
+  if (!c.session) return c.jobs.length ? `<div class="ag-row"><span class="ag-note">Read-only assistant · remembers this conversation</span><button class="link" type="button" data-ag-new style="margin-left:auto">New chat</button></div>` : '';
+  const j = c.last;
+  return `<div class="ag-row"><span class="pill" style="--st:${stVar(JOB_ST[j.status])}">${JOB_LABEL[j.status] ?? j.status}</span>
+      ${j.status === 'running' ? `<button class="btn" type="button" data-ag-control="end" data-job="${esc(j.id)}" title="Finish the current turn, then end">End after this turn</button><button class="btn" type="button" data-ag-control="stop" data-job="${esc(j.id)}">Stop now</button>` : ''}
+      ${j.status === 'idle' ? `<button class="btn" type="button" data-ag-control="end" data-job="${esc(j.id)}">End session</button>` : ''}
+      <button class="link" type="button" data-agent="${esc(j.change)}" style="margin-left:auto">Ticket →</button></div>
+    <div class="ag-note">${alive(j) ? 'Your messages go straight to this session.' : 'Ended. A message continues it.'} Take over in a terminal${alive(j) ? ' once it has ended' : ''}: <code>claude --resume ${esc(j.sessionId)}</code></div>`;
+}
+function ticketItem(j) {
+  const label = j.kind === 'ask' && j.status === 'done' ? 'answered' : JOB_LABEL[j.status] ?? j.status;
+  const head = `<div class="h"><b>${j.kind === 'ask' ? 'Question' : 'Session'}</b><span>${hhmm(j.startedAt)}</span><span class="pill" style="--st:${stVar(JOB_ST[j.status])}">${label}</span></div>`;
+  if (j.kind === 'session') return `<div class="ag-item">${head}<div class="ag-actions"><button class="btn" type="button" data-chat="session:${esc(j.sessionId)}">Open in chat</button>${j.turns ? `<span class="ag-note">${j.turns} turns</span>` : ''}</div></div>`;
+  const last = j.log.filter((l) => l.kind === 'tool').at(-1);
+  const body = j.answer != null ? `<div class="md ag-answer">${md(j.answer)}</div>`
+    : alive(j) ? `<div class="ag-note"><span class="ag-spin"></span>${last ? esc(last.text) : 'thinking…'}</div>` : '';
+  return `<div class="ag-item">${head}<div class="ag-q">${esc(j.text)}</div>${body}${j.error ? `<div class="ag-err">✕ ${esc(j.error)}</div>` : ''}</div>`;
+}
+function renderAgentLive() {
+  updateAgentBtn();
+  if (!ag.open || !ag.view) return;
+  if (ag.panel === 'chat') {
+    if (!$('ag-thread')) return;
+    const list = conversations();
+    const c = list.find((x) => x.id === ag.convo) ?? list[0];
+    $('ag-chips').innerHTML = list.map((x) => `<button type="button" class="chip" role="tab" data-ag-convo="${esc(x.id)}" aria-selected="${x.id === c?.id}">${x.live ? '<span class="dot on"></span>' : ''}${x.session ? 'Session · ' : ''}${esc(x.label)}</button>`).join('');
+    $('ag-bar').innerHTML = barHtml(c);
+    const th = $('ag-thread');
+    const atEnd = th.scrollHeight - th.scrollTop - th.clientHeight < 60;
+    th.innerHTML = threadHtml(c);
+    if (atEnd || ag.stick) { th.scrollTop = th.scrollHeight; ag.stick = false; }
+    $('ag-route').innerHTML = c?.terminal ? '' : 'Enter sends · Shift+Enter for a new line';
+  } else {
+    if (!$('ag-body')) return;
+    $('ag-note').textContent = ag.note;
+    $('ag-note').className = 'ag-note' + (ag.note.startsWith('✕') ? ' warn' : '');
+    const jobs = ag.view.jobs.filter((j) => j.change === ag.target && (j.kind === 'ask' || j.kind === 'session'));
+    const sessions = groupBySession(jobs.filter((j) => j.kind === 'session')).map((g) => g.last);
+    const items = [...jobs.filter((j) => j.kind === 'ask'), ...sessions].sort((a, b) => b.startedAt - a.startedAt);
+    const body = $('ag-body');
+    const sc = body.scrollTop;
+    body.innerHTML = items.map(ticketItem).join('') || '<div class="ag-empty">Questions about this ticket and sessions on it show up here.</div>';
+    body.scrollTop = sc;
+  }
+}
+function updateAgentBtn() {
+  if (!AGENT_TOKEN) return;
+  const live = ag.view?.jobs.some((j) => j.kind === 'session' && alive(j)) || recentExternal().some((x) => Date.now() - x.t < 3 * 60e3);
+  const queued = ag.view?.messages.filter((m) => m.state === 'queued').length ?? 0;
+  const html = `${live ? '<span class="dot on"></span>' : ''}Chat${queued ? ` · ${queued} queued` : ''}`;
+  for (const b of document.querySelectorAll('[data-chat-btn]')) { b.hidden = false; if (b.innerHTML !== html) b.innerHTML = html; b.setAttribute('aria-expanded', String(ag.open && ag.panel === 'chat')); }
+}
+
+// ---- actions
+async function agentSend(force = false) {
+  if (ag.busy) return;
+  const ta = $('ag-text');
+  const text = ta?.value.trim() ?? '';
+  ag.busy = true;
+  try {
+    if (ag.panel === 'chat') {
+      if (!text) return;
+      const c = conversations().find((x) => x.id === ag.convo);
+      if (c?.terminal) await agentPost('message', { text, to: 'inbox' });
+      else if (c?.session) await agentPost('message', { change: c.last.change, text, job: c.last.id });
+      else await agentPost('chat', { text });
+      ag.drafts['chat-' + ag.convo] = '';
+      ta.value = '';
+      ag.stick = true;
+      ag.note = '';
+    } else if (ag.mode === 'ask') {
+      if (!text) return;
+      await agentPost('ask', { change: ag.target, question: text });
+      ag.drafts['ticket-ask'] = ''; ta.value = ''; ag.note = '';
+    } else {
+      const r = await agentPost('start', { change: ag.target, force });
+      ag.force = null; ag.note = '';
+      const sid = await waitForSession(r.id);
+      if (sid) return openChat('session:' + sid);
+    }
+  } catch (e) {
+    ag.note = '✕ ' + e.message;
+    if (e.needsForce) { ag.force = true; return buildAgent(); }
+    if (ag.panel === 'chat') $('ag-route').innerHTML = `<span style="color:var(--st-blocked)">${esc(ag.note)}</span>`;
+  } finally {
+    ag.busy = false;
+  }
+  renderAgentLive();
+}
+// the new session's id comes with the next agent update
+async function waitForSession(jobId) {
+  for (let i = 0; i < 40; i++) {
+    const j = ag.view?.jobs.find((x) => x.id === jobId);
+    if (j?.sessionId) return j.sessionId;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return null;
+}
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  const chatBtn = t.closest('[data-chat-btn]');
+  if (chatBtn) { e.stopPropagation(); return ag.open && ag.panel === 'chat' ? closeAgent() : openChat(); }
+  const chat = t.closest('[data-chat]');
+  if (chat) { e.stopPropagation(); return openChat(chat.dataset.chat || undefined); }
+  const ticket = t.closest('[data-agent]');
+  if (ticket) { e.stopPropagation(); return openTicket(ticket.dataset.agent, ticket.dataset.agentMode, ticket.dataset.agentDraft); }
+  if (!t.closest('#agent')) return;
+  if (t.closest('[data-ag-close]')) return closeAgent();
+  if (t.closest('[data-ag-max]')) {
+    if ($('ag-text')) ag.drafts[ag.panel === 'chat' ? 'chat-' + ag.convo : 'ticket-' + ag.mode] = $('ag-text').value;
+    ag.max = !ag.max;
+    try { localStorage.setItem('osd-chat-max', ag.max ? '1' : '0'); } catch {}
+    ag.stick = true;
+    buildAgent();
+    return $('ag-text')?.focus();
+  }
+  const convo = t.closest('[data-ag-convo]');
+  if (convo) { if ($('ag-text')) ag.drafts['chat-' + ag.convo] = $('ag-text').value; ag.convo = convo.dataset.agConvo; ag.stick = true; buildAgent(); return $('ag-text')?.focus(); }
+  const mode = t.closest('[data-ag-mode]');
+  if (mode) { ag.mode = mode.dataset.agMode; ag.note = ''; ag.force = null; return buildAgent(); }
+  if (t.closest('[data-ag-send]')) return agentSend(false);
+  if (t.closest('[data-ag-force]')) return agentSend(true);
+  if (t.closest('[data-ag-new]')) {
+    const text = $('ag-text')?.value.trim();
+    if (!text) { $('ag-route').textContent = 'Write the first message of the new chat, then press New chat.'; return $('ag-text')?.focus(); }
+    return agentPost('chat', { text, fresh: true }).then(() => { $('ag-text').value = ''; ag.drafts['chat-assistant'] = ''; ag.stick = true; }).catch((err) => { $('ag-route').textContent = '✕ ' + err.message; });
+  }
+  const ctl = t.closest('[data-ag-control]');
+  if (ctl) return agentPost('control', { job: ctl.dataset.job, action: ctl.dataset.agControl }).catch((err) => { ag.note = '✕ ' + err.message; renderAgentLive(); });
+  const cancel = t.closest('[data-ag-cancel]');
+  if (cancel) return agentPost('cancel', { id: cancel.dataset.agCancel }).catch(() => {});
+}, true);
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'ag-text') return;
+  ag.drafts[ag.panel === 'chat' ? 'chat-' + ag.convo : 'ticket-' + ag.mode] = e.target.value;
+});
+document.addEventListener('keydown', (e) => {
+  if (e.target.id !== 'ag-text' || e.key !== 'Enter' || e.isComposing) return;
+  const chatSend = ag.panel === 'chat' && !e.shiftKey;          // messenger: Enter sends, Shift+Enter new line
+  if (chatSend || e.metaKey || e.ctrlKey) { e.preventDefault(); agentSend(false); }
+});
+setInterval(() => ag.open && renderAgentLive(), 15000);
 
 // ------------------------------------------------------------ several projects
 // ?project=<id> shows one project; with several projects and no ?project= the overview is the start page.
@@ -1667,7 +2065,7 @@ function renderOverview(o) {
       ${cur}
       <div class="ov-stack" title="${order.filter((k) => p.counts[k]).map((k) => `${STATUS[k].label}: ${p.counts[k]}`).join(' · ')}">${order.filter((k) => p.counts[k]).map((k) => `<span style="width:${(p.counts[k] / n) * 100}%;background:${stVar(k)}"></span>`).join('')}</div>
       <div class="ov-row"><span class="num">${p.done}/${p.changes} changes done</span><span class="num">${p.totals.done}/${p.totals.total} tasks</span>${p.milestone ? `<span>${esc(p.milestone.id)} ${esc(p.milestone.title)} · <span class="num">${p.milestone.done}/${p.milestone.total}</span></span>` : ''}</div>
-      <div class="ov-row"><span>last activity ${ago(p.lastActivity)}</span>${p.filesLast15m ? `<span class="num">${p.filesLast15m} files written in 15 min</span>` : ''}${p.invalid ? `<span class="warn">✕ ${p.invalid} failing validation</span>` : ''}${p.cli?.error ? '<span class="warn">CLI error</span>' : ''}</div>
+      <div class="ov-row"><span>last activity ${ago(p.lastActivity)}</span>${p.filesLast15m ? `<span class="num">${p.filesLast15m} files written in 15 min</span>` : ''}${p.invalid ? `<span class="warn">✕ ${p.invalid} failing validation</span>` : ''}${p.agent?.session ? `<span><span class="dot on"></span>session on ${esc(title(p.agent.session))}</span>` : p.agent?.external ? '<span><span class="dot on"></span>Claude Code active</span>' : ''}${p.agent?.queued ? `<span>${p.agent.queued} message${p.agent.queued > 1 ? 's' : ''} queued</span>` : ''}${p.cli?.error ? '<span class="warn">CLI error</span>' : ''}</div>
     </a>`;
   };
   $('overview').innerHTML = `
@@ -1676,6 +2074,11 @@ function renderOverview(o) {
 }
 
 function startProject() {
+  if (AGENT_TOKEN && PARAMS.get('panel')?.startsWith('ticket:')) { // ?panel=ticket:<change> opens a ticket's panel
+    Object.assign(ag, { open: true, panel: 'ticket', target: PARAMS.get('panel').slice(7), max: ag.max || PARAMS.has('max') }); $('agent').hidden = false; document.body.classList.add('ag-open');
+  }
+  if (AGENT_TOKEN && PARAMS.get('panel') === 'chat') { ag.open = true; ag.panel = 'chat'; ag.stick = true; ag.max = ag.max || PARAMS.has('max'); $('agent').hidden = false; document.body.classList.add('ag-open'); } // ?panel=chat opens the chat, &max maximized
+  if (SNAPSHOT && AGENT_TOKEN) fetch(withProject('/api/agent')).then((r) => r.json()).then((v) => { ag.view = v; renderAgentLive(); });
   if (SNAPSHOT) fetch(withProject('/api/state')).then((r) => r.json()).then((d) => { $('conn').innerHTML = `<span class="dot"></span>snapshot ${hhmm(d.scannedAt)}`; accept(d); });
   else connect();
 }
