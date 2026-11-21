@@ -2762,6 +2762,77 @@ for (const root of startRoots) {
 const byId = new Map(projects.map((p) => [p.id, p]));
 const projectFor = (url) => byId.get(url.searchParams.get('project')) ?? projects[0];
 const parkedList = (m) => [...m.entries()].map(([root, x]) => ({ root, ...x, label: labelOf(root), exists: fs.existsSync(path.join(root, 'openspec')) })).sort((a, b) => b.at - a.at);
+// ---------------------------------------------------------------- the daily digest (overview, below the projects)
+// Per followed project, since the start of the previous working day (Monday: since Friday) or over the last 7 days:
+// the tasks checked, the changes started, completed and archived, new tickets, the commits; what is stuck (in
+// progress without a step for 2 days, done but not archived for a day, failing validation) and what comes next.
+// From the timeline the charts use (git log of openspec/ and the recorded history), nothing is asked of Claude;
+// "Write it up" (with --agent) has Claude turn it into a few sentences.
+function digestSince(days) {
+  if (days > 1) return Date.now() - days * 86400e3;
+  const d = new Date(); d.setHours(0, 0, 0, 0);
+  do d.setDate(d.getDate() - 1); while (d.getDay() === 0 || d.getDay() === 6);
+  return d.getTime();
+}
+async function projectDigest(p, since) {
+  const s = p.state;
+  if (!s) return null;
+  const tl = await p.timeline().catch(() => ({ checks: [], transitions: [] }));
+  const now = Date.now(), last = new Map();
+  for (const x of [...tl.checks, ...tl.transitions]) last.set(x.change, Math.max(last.get(x.change) ?? 0, x.t));
+  const checks = tl.checks.filter((x) => x.t >= since), moved = tl.transitions.filter((x) => x.t >= since);
+  const per = new Map(); for (const x of checks) per.set(x.change, (per.get(x.change) ?? 0) + 1);
+  const named = (to) => [...new Set(moved.filter((x) => x.to === to).map((x) => x.change))];
+  const known = new Set(s.changes.map((c) => c.name));
+  const commits = Number((await gitRead(p.root, ['rev-list', '--count', `--since=${Math.floor(since / 1000)}`, 'HEAD', '--'], 1000))?.out.trim() || 0);
+  const idle = (c) => now - Math.max(last.get(c.name) ?? 0, c.lastModified ?? 0);
+  const sum = p.summary();
+  return {
+    id: p.id, label: labelOf(p.root),
+    checked: checks.length, byChange: [...per].map(([change, n]) => ({ change, n })).sort((a, b) => b.n - a.n),
+    archived: named('archived'), completed: named('complete').filter((n) => !named('archived').includes(n)),
+    started: named('in-progress'), added: named('proposed').filter((n) => known.has(n)), commits,
+    stuck: s.changes.filter((c) => c.status === 'in-progress' && idle(c) > 2 * 86400e3).map((c) => ({ change: c.name, days: Math.floor(idle(c) / 86400e3) })),
+    waiting: s.changes.filter((c) => c.status === 'complete' && idle(c) > 86400e3).map((c) => ({ change: c.name, days: Math.floor(idle(c) / 86400e3) })),
+    invalid: s.changes.filter((c) => c.validation && !c.validation.valid && c.status !== 'proposed').map((c) => c.name),
+    next: sum.current ? { change: sum.current.name, status: sum.current.status, task: sum.current.task } : null,
+    totals: s.totals,
+  };
+}
+const DIGEST_FILE = path.join(STATE_DIR, 'digest.json');
+let digestWriteup = (() => { try { return JSON.parse(fs.readFileSync(DIGEST_FILE, 'utf8')); } catch { return null; } })();
+async function digest(days) {
+  days = Number(days) === 7 ? 7 : 1;
+  const since = digestSince(days);
+  const list = (await Promise.all(projects.filter((p) => !p.stopped).map((p) => projectDigest(p, since).catch(() => null)))).filter(Boolean);
+  const w = digestWriteup?.since === since && digestWriteup?.days === days ? digestWriteup : null;
+  return { days, since, projects: list, writeup: w ? { text: w.text, at: w.at } : null, writing: !!digestBusy };
+}
+let digestBusy = null;
+// Claude writes the digest up in a few sentences: the numbers above as its only input, no tools
+async function writeDigest(days) {
+  if (!AGENT) throw httpError(404, 'Start the dashboard with --agent for this.');
+  if (digestBusy) return digestBusy;
+  const d = await digest(days);
+  const prompt = `Here is a digest of the work on ${d.projects.length} software project(s) that use OpenSpec, ${d.days === 7 ? 'over the last 7 days' : `since ${new Date(d.since).toDateString()}`}, as JSON. Write it up for the developer as a short morning briefing: at most 6 sentences of plain prose (no headings, no lists), first what moved forward, then what looks stuck or needs a decision, then what comes next. Write the change names as they are (e.g. add-tags), without backticks or other formatting. Do not invent anything that is not in the data.\n\n${JSON.stringify(d.projects)}`;
+  digestBusy = new Promise((resolve, reject) => {
+    const child = spawn(CLAUDE, ['-p', '--output-format', 'text', '--tools', '', '--permission-prompts', 'none', ...modelArgs()], { cwd: os.homedir(), stdio: ['pipe', 'pipe', 'pipe'] });
+    let out = '', err = '';
+    child.stdout.on('data', (x) => { out += x; });
+    child.stderr.on('data', (x) => { err = (err + x).slice(-500); });
+    const timer = setTimeout(() => child.kill('SIGTERM'), 180e3);
+    child.on('error', (e) => { clearTimeout(timer); reject(httpError(502, e.code === 'ENOENT' ? `${CLAUDE} was not found.` : e.message)); });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (code || !out.trim()) return reject(httpError(502, `Claude did not answer${err.trim() ? `: ${err.trim().slice(0, 200)}` : '.'}`));
+      digestWriteup = { since: d.since, days: d.days, text: out.trim().slice(0, 4000), at: Date.now() };
+      try { fs.mkdirSync(STATE_DIR, { recursive: true }); fs.writeFileSync(DIGEST_FILE, JSON.stringify(digestWriteup)); } catch { /* shown anyway */ }
+      resolve({ writeup: { text: digestWriteup.text, at: digestWriteup.at } });
+    });
+    child.stdin.end(prompt);
+  }).finally(() => { digestBusy = null; });
+  return digestBusy;
+}
 const overview = () => ({ scannedAt: Date.now(), projects: projects.map((p) => p.summary()), archived: parkedList(parkedState.archived), unfollowed: parkedList(parkedState.unfollowed), discovery: AGENT ? discoveryView() : null });
 async function bootProject(p) { await p.scanWorkspace(); await p.publish(); p.start(); p.agent?.startWatching(); p.cliDebounced(); }
 // Follow one more project while the dashboard runs (after onboarding, or a folder that has openspec/ already).
@@ -3175,6 +3246,14 @@ const server = http.createServer(async (req, res) => {
       }
     }
     if (url.pathname === '/api/projects') return json(res, overview());
+    if (url.pathname === '/api/digest') {
+      if (req.method === 'POST') {
+        if (!AGENT || req.headers['x-osd-token'] !== TOKEN) { res.writeHead(403); return res.end('forbidden'); }
+        try { return json(res, await writeDigest(url.searchParams.get('days'))); }
+        catch (e) { if (!e.status) throw e; res.writeHead(e.status, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: e.message })); }
+      }
+      return json(res, await digest(url.searchParams.get('days')));
+    }
     if (url.pathname === '/api/sessions/status') { // the background list (with --agent)
       if (!AGENT || req.headers['x-osd-token'] !== TOKEN) { res.writeHead(403); return res.end('forbidden'); }
       return json(res, await sessionsStatus(String(url.searchParams.get('ids') ?? '').split(',').filter(Boolean)));

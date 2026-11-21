@@ -475,6 +475,22 @@ dashboard; **All projects** in the picker returns to the overview. Projects with
 by the end of their path, e.g. `examples/todo-app` and `acme/todo-app`, on the cards, in the picker and in the title,
 and so are the folders in the list of projects to onboard below.
 
+### Daily digest
+
+Below the cards, the **Daily digest** sums up every followed project since the start of the previous working day
+(on a Monday: since Friday), or over **Last 7 days**:
+
+- what moved: the tasks checked (and in which changes), the changes started, done and archived, new tickets, the
+  number of commits;
+- what needs a look (⚠): a change in progress without a step for two days, one that is done but not archived for a
+  day, failing validation;
+- what comes next: the current change and its next task, or the next change to plan.
+
+It comes from the same history as the charts (the git log of `openspec/` and what the dashboard recorded while it
+ran), so it costs nothing and is there at once; the project names lead to their pages. With `--agent`, **✨ Write it
+up** has Claude turn it into a short briefing of a few sentences, which stays until the next day (or the next
+period). Only the digest's numbers and change names go to Claude; it reads nothing else and uses no tools.
+
 ### Archive and unfollow
 
 Every project the dashboard follows costs a little all the time: it watches `openspec/`, looks at the files of the

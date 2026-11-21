@@ -45,6 +45,15 @@ are labelled with the shortest end of their path that tells them apart (`example
 cards, in the picker, the title and the history panel; candidates to onboard likewise (also against followed
 projects), in the list, the chat and the progress dialog.
 
+**Daily digest** (overview, below the cards): `GET /api/digest?days=1|7` computes per followed project, from the
+charts' timeline (`git log` of `openspec/` merged with the recorded history), the window since the start of the
+previous working day (Monday: Friday) or the last 7 days: tasks checked (per change), changes that reached
+in-progress, complete or archived, new ones, `git rev-list --count --since` commits; stuck ones (in progress with no
+check, status change or file write for 2 days; complete but not archived for a day; failing validation) and the next
+change and task. `POST /api/digest?days=` (with `--agent`, token) runs `claude -p --tools ''` with that JSON as the
+only input for a briefing of at most six sentences, kept in `digest.json` in the state folder until the window
+changes. The page asks for the digest at most once a minute and remembers the period (`osd-digest-days`).
+
 **What a followed project costs.** A watcher on `openspec/` plus a re-read every 5 s; the workspace scan (the
 modification time of every file, up to 40,000, without `node_modules`, `.git` and the like, for "files written
 lately") every 10 s while the project is open in a browser, every 2 minutes otherwise, and never more often than 20
