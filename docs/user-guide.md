@@ -219,6 +219,21 @@ coloured bar), the current milestone, validation problems and when something las
 active project comes first and the cards update live. Click a card, or pick the project in the header, to open its
 dashboard; **All projects** in the picker returns to the overview.
 
+### Onboard more projects
+
+With `--agent`, the overview also finds projects to onboard. Enter a folder under **Onboard more projects** and press
+**Discover**: it lists the folders below it with a `CLAUDE.md` or `AGENTS.md` that the dashboard does not follow
+yet, with the first line of their README and their last commit.
+
+![Projects to onboard](images/dashboard-discover.png)
+
+**Onboard** lets Claude set up OpenSpec and the ticket workflow in that project in the background (nothing is
+committed; check the result in git), and adds the project to the dashboard when it is done. Not sure? **Chat about
+it** first: Claude looks at the project read-only and recommends onboarding it or not. Then press **Onboard it**,
+or **Skip → next candidate** to move on to the next one.
+
+![Chatting about a candidate before deciding](images/dashboard-discover-chat.png)
+
 ## Styles
 
 The dashboard has ten styles:

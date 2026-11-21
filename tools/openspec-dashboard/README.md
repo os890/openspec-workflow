@@ -25,6 +25,30 @@ most recently active first and updated live. A card (or the project picker in th
 dashboard; `?project=<id>` in the address links to it directly. Each project keeps its own history, and OpenSpec
 CLI calls for all projects run one at a time.
 
+## Onboarding more projects (with `--agent`)
+
+Below the project cards, the overview has **Onboard more projects**: enter a folder (e.g. `~/workspace`) and
+**Discover** lists every folder below it, up to four levels deep, with a `CLAUDE.md`, `AGENTS.md`, `AGENT.md` or
+`.claude/CLAUDE.md`: projects an agent already works in, which the dashboard does not follow yet. Each one shows its
+markers, the first line of its README, and when it was last committed; the most recently active come first.
+
+- **Onboard** starts Claude Code in that folder in the background. It reads the project and the
+  `openspec-ticket-workflow` skill, sets up `openspec/` (config with the quality gate, specs for what clearly
+  exists, a roadmap with a first milestone and backlog drafts) and commits nothing. It may write files and run the
+  OpenSpec CLI, `git status`/`git log`, `ls` and `mkdir`, nothing else. When it is done, the project is followed:
+  it appears in the overview and in the project picker.
+- **Chat about it** opens a read-only conversation about the project: what it is, whether it is still developed,
+  whether it has a build and tests, and whether the ticket workflow pays off. Claude ends with a recommendation;
+  you decide with **Onboard it** (the onboarding continues that conversation, so it knows what you agreed) or
+  **Skip → next candidate**.
+- **Skip** hides a candidate; **show skipped** brings them back. A folder that has `openspec/` already gets
+  **Follow** instead.
+
+The folder, the skipped candidates and the projects added this way are remembered
+(`$XDG_STATE_HOME/openspec-dashboard/discovery.json`), so added projects are followed again after a restart. With
+`--agent` the overview is reachable from the project picker (**All projects**) also when only one project is
+followed (`?overview` in the address).
+
 ## What it shows
 
 - **Current change**: the change being worked on (tasks in progress), otherwise the one waiting to be archived,

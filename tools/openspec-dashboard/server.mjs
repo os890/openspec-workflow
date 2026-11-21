@@ -20,6 +20,8 @@
 // The charts view asks /api/timeline, which merges that history with `git log` of openspec/ (read-only).
 // With --agent the backlog can also be reordered and take new tickets and ideas (roadmap.md, backlog/), and the
 // chat has a brainstorming mode that shapes an idea into a ticket; only the user's click saves it.
+// The overview can also discover folders with CLAUDE.md / AGENTS.md below a path and onboard them (a background
+// Claude Code run that sets up openspec/ without committing), after a read-only chat about whether it is worth it.
 //
 // --agent adds an agent panel: ask read-only questions, send messages to a working Claude Code session and start a
 // session on a ticket. It runs the local `claude` command (Claude Code, with its own login), only on 127.0.0.1, and
@@ -882,6 +884,7 @@ function createAgent(project) {
         job.status = job.stopRequested ? 'stopped' : code === 0 ? 'done' : 'failed';
         if (job.status === 'failed' && !job.error) job.error = err.trim().split('\n').slice(-4).join('\n') || `claude exited with code ${code}`;
       }
+      try { job.onExit?.(job); } catch (e) { console.error('onExit:', e); }
       changed(0);
     });
     child.stdin.write(firstInput);
@@ -1007,10 +1010,52 @@ function createAgent(project) {
       'Answer like in a chat: short, in Markdown, with file references where they help.',
     ].filter(Boolean).join('\n');
   }
+  // ---- a project that is not followed yet: a chat to decide whether to onboard it, and the onboarding itself
+  function scoutSystem() {
+    return [
+      `You help the user decide whether to onboard the project in this folder ("${project.name}") to OpenSpec and the OpenSpec ticket workflow, so that the OpenSpec dashboard can follow it.`,
+      'Onboarding means: an openspec/ folder with config.yaml (project context, the quality gate), specs for what clearly exists, roadmap.md with milestones and backlog drafts for the next tickets; after that, agents build ticket by ticket (specify, implement against the specs, review, archive). It pays off for a project that is still developed further, has a build and tests (or will get them), and has more than a handful of tickets ahead; it is overhead for a finished, tiny or throwaway project.',
+      'Work read-only: read CLAUDE.md or AGENTS.md, the README, the build files, recent git history (when you can read it) and the structure; never change a file.',
+      'Answer like in a chat: short, in Markdown, in the language the user writes in. When you have enough, give a clear recommendation, "Onboard" or "Skip", with the two or three reasons that decide it and what the first milestone would be. The user then decides with the buttons in the dashboard.',
+    ].join('\n');
+  }
+  const SKILL_MD = path.resolve(HERE, '..', '..', 'skills', 'openspec-ticket-workflow', 'SKILL.md');
+  function onboardPrompt() {
+    const skill = fs.existsSync(SKILL_MD) ? `read ${SKILL_MD} and follow its setup part (and the references it points to)` : 'use the openspec-ticket-workflow skill if it is available';
+    return [
+      'Onboard this project to OpenSpec and the OpenSpec ticket workflow now' + (jobs.some((j) => j.kind === 'chat' && j.mode === 'scout') ? ', taking into account what we discussed.' : '.'),
+      `To set it up, ${skill}.`,
+      USE_CLI ? `The OpenSpec CLI is available as \`${CLI}\`; use non-interactive options.` : 'Use the OpenSpec CLI if it is installed; otherwise write the files by hand.',
+      'Read CLAUDE.md or AGENTS.md, the README, the build and the structure first. Create openspec/ with config.yaml (project context, conventions, the quality gate), roadmap.md with a first milestone and backlog drafts in openspec/backlog/ for the next tickets you can derive from the docs, TODOs and the code, and specs only for behaviour that clearly exists.',
+      'Do not change application code. Do not commit: leave every change uncommitted for the user to review.',
+      'Nobody can answer permission prompts: if a step needs a permission you do not have, skip it and say so at the end.',
+      'End with a short summary: what you created, what the user should check first, and the first ticket to start.',
+    ].join('\n');
+  }
+  async function onboard({ onDone } = {}) {
+    if (jobs.some((j) => j.kind === 'onboard' && j.child)) throw httpError(409, 'Onboarding is running already.');
+    if (fs.existsSync(path.join(root, 'openspec'))) throw httpError(409, 'This folder has an openspec/ folder already; follow it instead.');
+    const scout = [...jobs].reverse().find((j) => j.kind === 'chat' && j.mode === 'scout' && j.sessionId);
+    if (scout?.child) { // end the chat process first; the onboarding continues its conversation
+      const closed = new Promise((r) => scout.child.once('close', r));
+      scout.child.stdin.end();
+      await Promise.race([closed, new Promise((r) => setTimeout(r, 15000))]);
+    }
+    const job = newJob('onboard', null, null);
+    job.prompt = onboardPrompt();
+    job.onExit = (j) => { if (j.status === 'done' && fs.existsSync(path.join(root, 'openspec'))) onDone?.(); };
+    push(job, 'prompt', job.prompt);
+    const tools = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash(git status:*)', 'Bash(git log:*)', 'Bash(ls:*)', 'Bash(mkdir:*)', ...(USE_CLI ? [`Bash(${CLI}:*)`] : [])];
+    const base = ['-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits', '--permission-prompts', 'none', ...modelArgs()];
+    if (scout) { job.sessionId = scout.sessionId; launch(job, [...base, '--resume', scout.sessionId, '--allowedTools', ...tools], job.prompt, false); }
+    else { job.sessionId = randomUUID(); launch(job, [...base, '--session-id', job.sessionId, '-n', `onboard ${project.name}`, '--allowedTools', ...tools], job.prompt, false); }
+    return job;
+  }
+
   function chat({ text, fresh, mode = 'assistant', idea }) {
     text = String(text ?? '').trim();
     if (!text) throw httpError(400, 'The message is empty.');
-    if (!['assistant', 'brainstorm'].includes(mode)) throw httpError(400, 'Unknown chat mode.');
+    if (!['assistant', 'brainstorm', 'scout'].includes(mode)) throw httpError(400, 'Unknown chat mode.');
     if (idea && !changeOf(idea)) throw httpError(404, `No idea "${idea}".`);
     let job = liveChat(mode);
     if (job && fresh) { job.child.stdin.end(); job = null; }
@@ -1034,8 +1079,8 @@ function createAgent(project) {
       launch(job, [...base, '--resume', prev.sessionId], userLine(text), true);
     } else {
       job.sessionId = randomUUID();
-      const sys = mode === 'brainstorm' ? brainstormSystem(job.idea) : chatSystem();
-      launch(job, [...base, '--session-id', job.sessionId, '-n', `dashboard ${mode === 'brainstorm' ? 'brainstorm' : 'chat'} ${project.name}`, '--append-system-prompt', sys], userLine(text), true);
+      const sys = mode === 'brainstorm' ? brainstormSystem(job.idea) : mode === 'scout' ? scoutSystem() : chatSystem();
+      launch(job, [...base, '--session-id', job.sessionId, '-n', `dashboard ${mode === 'assistant' ? 'chat' : mode} ${project.name}`, '--append-system-prompt', sys], userLine(text), true);
     }
     return { job: job.id };
   }
@@ -1113,7 +1158,7 @@ function createAgent(project) {
   }
   sttListeners.add(() => changed(0));
   rpListeners.add(() => changed(0));
-  return { view, ask, chat, start, message, control, cancel, brief, startWatching };
+  return { view, ask, chat, start, message, control, cancel, brief, startWatching, onboard };
 }
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => { for (const c of children) { try { c.kill('SIGTERM'); } catch { /* gone */ } } process.exit(0); });
@@ -1641,7 +1686,119 @@ for (const root of uniqueRoots) {
 }
 const byId = new Map(projects.map((p) => [p.id, p]));
 const projectFor = (url) => byId.get(url.searchParams.get('project')) ?? projects[0];
-const overview = () => ({ scannedAt: Date.now(), projects: projects.map((p) => p.summary()) });
+const overview = () => ({ scannedAt: Date.now(), projects: projects.map((p) => p.summary()), discovery: AGENT ? discoveryView() : null });
+async function bootProject(p) { await p.scanWorkspace(); await p.publish(); p.start(); p.agent?.startWatching(); p.cliDebounced(); }
+// Follow one more project while the dashboard runs (after onboarding, or a folder that has openspec/ already).
+function addProject(dir) {
+  const r = fs.realpathSync(dir);
+  const have = projects.find((p) => p.root === r || p.root === dir);
+  if (have) return have;
+  const base = path.basename(r).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'project';
+  let pid = base;
+  for (let n = 2; usedIds.has(pid); n++) pid = `${base}-${n}`;
+  usedIds.add(pid);
+  const p = createProject(r, pid, historyArg ? path.join(historyArg.endsWith('.json') ? path.dirname(historyArg) : historyArg, `${path.basename(r)}-${createHash('sha256').update(r).digest('hex').slice(0, 8)}.json`) : historyFor(r), overviewChanged);
+  p.agent = AGENT ? createAgent(p) : null;
+  projects.push(p);
+  byId.set(p.id, p);
+  bootProject(p).then(overviewChanged).catch((e) => console.error(`[${pid}] start failed:`, e));
+  console.log(`  + ${pid.padEnd(22)} ${r}`);
+  return p;
+}
+
+// ---------------------------------------------------------------- discovering projects to onboard (with --agent)
+// Folders below a given path with CLAUDE.md, AGENTS.md or AGENT.md (or .claude/CLAUDE.md) are candidates: projects
+// an agent already works in, which OpenSpec could follow. Each candidate gets its own agent (rooted at its folder)
+// for a read-only chat about whether to onboard it, and for the onboarding run; skipped candidates are remembered.
+const DISC_FILE = path.join(STATE_DIR, 'discovery.json');
+const AGENT_MARKERS = ['CLAUDE.md', 'AGENTS.md', 'AGENT.md'];
+const DISC_SKIP = new Set(['node_modules', 'target', 'build', 'dist', 'out', 'vendor', 'Library', 'venv', '__pycache__', 'Pods', 'DerivedData', 'coverage', 'tmp', 'Applications', 'Movies', 'Music', 'Pictures']);
+// Projects added from here (onboarded or followed) are remembered and followed again after a restart.
+const disc = { path: null, scanning: false, scannedAt: null, error: null, candidates: [], skipped: new Set(), added: new Set() };
+try { const d = JSON.parse(fs.readFileSync(DISC_FILE, 'utf8')); disc.path = d.path ?? null; disc.skipped = new Set(d.skipped ?? []); disc.added = new Set(d.added ?? []); } catch { /* first use */ }
+const saveDisc = () => { try { fs.mkdirSync(STATE_DIR, { recursive: true }); fs.writeFileSync(DISC_FILE, JSON.stringify({ path: disc.path, skipped: [...disc.skipped], added: [...disc.added] })); } catch { /* not essential */ } };
+function adopt(dir) { const p = addProject(dir); disc.added.add(dir); saveDisc(); overviewChanged(); return p; }
+const scouts = new Map();
+function scoutFor(dir) {
+  let p = scouts.get(dir);
+  if (!p) { p = { id: 'candidate', root: dir, name: path.basename(dir), clients: new Set(), state: null }; p.agent = createAgent(p); scouts.set(dir, p); }
+  return p;
+}
+const isFollowed = (dir) => projects.some((p) => p.root === dir || (() => { try { return p.root === fs.realpathSync(dir); } catch { return false; } })());
+function discoveryView() {
+  return {
+    path: disc.path, display: disc.path ? (disc.path.startsWith(os.homedir() + path.sep) ? '~' + disc.path.slice(os.homedir().length) : disc.path) : null, scanning: disc.scanning, scannedAt: disc.scannedAt, error: disc.error,
+    candidates: disc.candidates.map((c) => {
+      const p = isFollowed(c.path) ? projects.find((x) => x.root === c.path || x.root === c.real) : null;
+      return { ...c, followed: !!p, projectId: p?.id ?? null, openspec: fs.existsSync(path.join(c.path, 'openspec')), skipped: disc.skipped.has(c.path),
+        jobs: scouts.get(c.path)?.agent.view().jobs.filter((j) => j.kind === 'chat' || j.kind === 'onboard') ?? [] };
+    }),
+  };
+}
+function aboutOf(text) {
+  for (const raw of (text ?? '').split('\n')) {
+    const l = raw.trim();
+    if (!l || /^(#|<!--|!\[|\[!\[|```|---|\||>)/.test(l)) continue;
+    const plain = l.replace(/\*\*|__|`/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+    return plain.length > 220 ? plain.slice(0, 217) + '…' : plain;
+  }
+  return null;
+}
+async function discover(start) {
+  const found = [];
+  let visited = 0;
+  async function go(dir, depth) {
+    if (visited++ > 6000 || found.length >= 150) return;
+    let entries;
+    try { entries = await fsp.readdir(dir, { withFileTypes: true }); } catch { return; }
+    const names = new Set(entries.map((e) => e.name));
+    const markers = AGENT_MARKERS.filter((m) => names.has(m));
+    if (names.has('.claude') && fs.existsSync(path.join(dir, '.claude', 'CLAUDE.md'))) markers.push('.claude/CLAUDE.md');
+    if (markers.length && dir !== os.homedir()) { found.push({ dir, markers }); return; } // a project's subfolders belong to it
+    if (depth >= 4) return;
+    for (const e of entries) if (e.isDirectory() && !e.name.startsWith('.') && !DISC_SKIP.has(e.name)) await go(path.join(dir, e.name), depth + 1);
+  }
+  await go(start, 0);
+  const out = [];
+  for (let i = 0; i < found.length; i += 6) {
+    out.push(...await Promise.all(found.slice(i, i + 6).map(async ({ dir, markers }) => {
+      const first = markers[0] === '.claude/CLAUDE.md' ? path.join(dir, '.claude', 'CLAUDE.md') : path.join(dir, markers[0]);
+      const about = aboutOf(await readText(path.join(dir, 'README.md'))) ?? aboutOf(await readText(first));
+      const ct = await git(dir, ['log', '-1', '--format=%ct']);
+      let real = dir; try { real = fs.realpathSync(dir); } catch { /* keep */ }
+      return { path: dir, real, name: path.basename(dir), display: displayPath(dir), markers, about, lastCommit: ct?.trim() ? Number(ct.trim()) * 1000 : null };
+    })));
+  }
+  return out.sort((a, b) => (b.lastCommit ?? 0) - (a.lastCommit ?? 0) || a.name.localeCompare(b.name));
+}
+async function discoveryAction({ action, path: p, text, fresh }) {
+  if (action === 'scan') {
+    let dir = String(p ?? '').trim().replace(/^~(?=$|\/)/, os.homedir());
+    if (!dir || !path.isAbsolute(dir)) throw httpError(400, 'Enter an absolute folder path, e.g. ~/workspace.');
+    dir = path.resolve(dir);
+    if (!fs.statSync(dir, { throwIfNoEntry: false })?.isDirectory()) throw httpError(404, `${displayPath(dir)} is not a folder.`);
+    if (disc.scanning) throw httpError(409, 'A scan is running already.');
+    Object.assign(disc, { path: dir, scanning: true, error: null });
+    saveDisc(); overviewChanged();
+    try { disc.candidates = await discover(dir); disc.scannedAt = Date.now(); }
+    catch (e) { disc.error = e.message; }
+    finally { disc.scanning = false; overviewChanged(); }
+    return { found: disc.candidates.length };
+  }
+  const c = disc.candidates.find((x) => x.path === p);
+  if (!c) throw httpError(404, 'Not a candidate of the last scan.');
+  if (action === 'skip' || action === 'unskip') { action === 'skip' ? disc.skipped.add(c.path) : disc.skipped.delete(c.path); saveDisc(); overviewChanged(); return { ok: true }; }
+  if (action === 'follow') {
+    if (!fs.existsSync(path.join(c.path, 'openspec'))) throw httpError(409, 'It has no openspec/ folder yet; onboard it first.');
+    return { project: adopt(c.path).id };
+  }
+  if (action === 'chat') return scoutFor(c.path).agent.chat({ text, fresh, mode: 'scout' });
+  if (action === 'onboard') {
+    const job = await scoutFor(c.path).agent.onboard({ onDone: () => adopt(c.path) });
+    return { job: job.id };
+  }
+  throw httpError(400, 'Unknown action.');
+}
 
 // ---------------------------------------------------------------- timers
 setInterval(() => projects.forEach((p) => p.schedule(0)), 5000);                 // safety net for missed events
@@ -1676,7 +1833,7 @@ const server = http.createServer(async (req, res) => {
       const html = await fsp.readFile(INDEX, 'utf8');
       return res.end(AGENT ? html.replace('<meta name="osd-agent" content="">', `<meta name="osd-agent" content="${TOKEN}">`) : html);
     }
-    const WRITES = { '/api/roadmap/move': moveInRoadmap, '/api/backlog/add': addToBacklog, '/api/backlog/remove': removeIdea };
+    const WRITES = { '/api/roadmap/move': moveInRoadmap, '/api/backlog/add': addToBacklog, '/api/backlog/remove': removeIdea, '/api/discover': (_, body) => discoveryAction(body) };
     if (WRITES[url.pathname] && req.method === 'POST') {
       if (!AGENT) { res.writeHead(404); return res.end('start the dashboard with --agent'); }
       const origin = req.headers.origin;
@@ -1781,6 +1938,8 @@ const server = http.createServer(async (req, res) => {
 });
 
 for (const p of projects) { await p.scanWorkspace(); await p.publish(); p.start(); p.agent?.startWatching(); }
+if (AGENT) for (const dir of disc.added) if (fs.existsSync(path.join(dir, 'openspec'))) addProject(dir); // onboarded or followed earlier
+if (AGENT && disc.path && fs.existsSync(disc.path)) discoveryAction({ action: 'scan', path: disc.path }).catch(() => {}); // the last discovery again
 if (USE_RP) { detectRephrase().then(() => console.log(`  Rephrasing: ${rp.available ? (rp.kind === 'url' ? RP_URL : `${rp.engine} image ${rp.image}, model ${rp.model}`) : `off (${rp.error})`}`)); setInterval(detectRephrase, 60000); }
 if (USE_STT) { detectStt().then(() => console.log(`  Voice input: ${stt.available ? `${stt.engine} image ${stt.image}` : `off (${stt.error})`}`)); setInterval(detectStt, 60000); }
 server.listen(PORT, HOST, () => {

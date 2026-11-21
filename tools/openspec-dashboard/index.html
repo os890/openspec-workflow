@@ -1183,6 +1183,28 @@ body.board-max { overflow: hidden; }
 [hidden] { display: none !important; }
 .live > span:empty { display: none; }
 
+/* discovering projects to onboard */
+.disc { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+.disc-form { display: flex; gap: 8px 10px; align-items: center; flex-wrap: wrap; }
+.disc-form input[type="text"], .disc-form #disc-path { flex: 1 1 320px; max-width: 560px; font: inherit; font-size: 13.5px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 11px; }
+.disc .btn.primary, .agent-panel .sc-decide .btn.primary { background: var(--accent) !important; color: var(--bg) !important; border-color: var(--accent) !important; font-weight: 700; }
+.disc-toggle { font-size: 12.5px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+.disc-note { font-size: 12.5px; color: var(--muted); } .disc-note.warn { color: var(--st-blocked); font-weight: 600; }
+.disc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.disc-row { display: flex; gap: 14px; align-items: center; justify-content: space-between; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px; }
+.disc-row.skipped { opacity: .55; } .disc-row.picked { box-shadow: inset 4px 0 0 var(--accent); }
+.disc-main { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.disc-name { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 15px; }
+.disc-chip { font-family: var(--font-mono); font-size: 11px; color: var(--muted); background: var(--surface-2); border-radius: 6px; padding: 1px 6px; }
+.disc-chip.os { color: var(--st-complete); }
+.disc-about { font-size: 13px; color: var(--muted); }
+.disc-path { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#sc-title { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sc-path { font-family: var(--font-mono); font-size: 11.5px; font-weight: 400; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; letter-spacing: 0; }
+.disc-state { font-size: 12.5px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+.disc-ok { color: var(--st-complete); font-weight: 700; } .disc-err { color: var(--st-blocked); font-weight: 700; } .disc-run { color: var(--st-progress); display: inline-flex; gap: 6px; align-items: center; }
+.disc-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; flex: none; }
+@media (max-width: 760px) { .disc-row { flex-direction: column; align-items: stretch; } .disc-actions { justify-content: flex-start; } }
 /* projects overview (several projects) */
 .overview { padding-block: 16px 36px; display: flex; flex-direction: column; gap: 16px; }
 .ov-head { display: flex; align-items: baseline; gap: 6px 14px; flex-wrap: wrap; }
@@ -2842,13 +2864,14 @@ function threadHtml(c) {
       flush();
       if (l.kind === 'user') out.push(`<div class="msg me">${esc(l.text)}<span class="meta">${hhmm(l.t)}</span></div>`);
       else if (l.kind === 'text') out.push(`<div class="msg them ${l.sub ? 'sub' : ''}"><div class="md">${c.brainstorm ? brainstormMd(l.text, `${j.id}:${l.t}`, j.idea ?? c.jobs.find((x) => x.idea)?.idea) : md(l.text)}</div><span class="meta">${hhmm(l.t)}</span></div>`);
-      else if (l.kind === 'prompt') out.push(`<details class="sys"><summary>Started on the ticket with the workflow prompt</summary><div>${esc(l.text)}</div></details>`);
+      else if (l.kind === 'prompt') out.push(`<details class="sys"><summary>${j.kind === 'onboard' ? 'Onboarding started with the setup prompt' : 'Started on the ticket with the workflow prompt'}</summary><div>${esc(l.text)}</div></details>`);
       else out.push(`<div class="sys">${esc(l.text)}</div>`);
     }
     flush();
     if (j.error) out.push(`<div class="sys err">✕ ${esc(j.error)}</div>`);
   }
   if (['running', 'starting'].includes(c.last?.status)) out.push('<div class="msg them typing"><span class="ag-spin"></span>working…</div>');
+  if (!out.length && c.scout) out.push(`<div class="ag-empty">Ask Claude about this project: what it is, whether it is still developed, whether it has a build and tests, and whether onboarding it to OpenSpec and the ticket workflow pays off. It reads the project but never changes it.<br><br>Then decide with <b>Onboard it</b> or <b>Skip</b>.</div>`);
   if (!out.length && c.brainstorm) out.push(`<div class="ag-empty">Brainstorm an idea for a new ticket. Claude asks questions, challenges assumptions, checks the roadmap and the specs for overlaps and prerequisites, and, once you agree, writes the ticket. Nothing is saved unless you press <b>Review and save…</b> on it; then you plan it in the roadmap or keep it as an idea.<br><br>Ideas in the backlog have <b>💡 Refine</b> to brainstorm them here.</div>`);
   if (!out.length) out.push(c.session ? '' : `<div class="ag-empty">Chat with an assistant about ${esc(ui.state?.project ?? 'the project')}: the plan, the specs, the code, progress or ideas. It reads the project but never changes it, and it remembers this conversation.<br><br>For a ticket, use <b>Agent…</b> on the ticket: ask about it or start a session that works on it.</div>`);
   return out.join('');
@@ -3252,7 +3275,7 @@ let PROJECT = PARAMS.get('project');
 function withProject(u) { return PROJECT ? `${u}${u.includes('?') ? '&' : '?'}project=${encodeURIComponent(PROJECT)}` : u; }
 function hrefFor(id) {
   const u = new URL(location.href);
-  if (id) u.searchParams.set('project', id); else u.searchParams.delete('project');
+  if (id) { u.searchParams.set('project', id); u.searchParams.delete('overview'); } else { u.searchParams.delete('project'); u.searchParams.set('overview', ''); }
   u.hash = '';
   return u.pathname + u.search;
 }
@@ -3263,8 +3286,9 @@ function renderOverview(o) {
   ui.overview = o;
   const list = [...o.projects].sort((a, b) => (b.lastActivity ?? 0) - (a.lastActivity ?? 0));
   const working = list.filter((p) => p.current?.status === 'in-progress').length;
-  $('title').innerHTML = `OpenSpec <span>· ${list.length} projects</span>`;
-  document.title = `OpenSpec · ${list.length} projects`;
+  const nP = `${list.length} project${list.length === 1 ? '' : 's'}`;
+  $('title').innerHTML = `OpenSpec <span>· ${nP}</span>`;
+  document.title = `OpenSpec · ${nP}`;
   $('cli').textContent = '';
   const order = ['archived', 'complete', 'in-progress', 'specified', 'proposed', 'missing'];
   const card = (p) => {
@@ -3287,10 +3311,152 @@ function renderOverview(o) {
       <div class="ov-row"><span>last activity ${ago(p.lastActivity)}</span>${p.filesLast15m ? `<span class="num">${p.filesLast15m} files written in 15 min</span>` : ''}${p.invalid ? `<span class="warn">✕ ${p.invalid} failing validation</span>` : ''}${p.agent?.session ? `<span><span class="dot on"></span>session on ${esc(title(p.agent.session))}</span>` : p.agent?.external ? '<span><span class="dot on"></span>Claude Code active</span>' : ''}${p.agent?.queued ? `<span>${p.agent.queued} message${p.agent.queued > 1 ? 's' : ''} queued</span>` : ''}${p.cli?.error ? '<span class="warn">CLI error</span>' : ''}</div>
     </a>`;
   };
-  $('overview').innerHTML = `
+  morphHtml($('overview'), `
     <div class="ov-head"><span class="label">Projects</span><span class="muted">${list.length} followed · ${working} with a change in progress</span></div>
-    <div class="ov-grid">${list.map(card).join('')}</div>`;
+    <div class="ov-grid">${list.map(card).join('')}</div>
+    ${o.discovery ? discoveryHtml(o.discovery) : ''}`);
+  // the project picker follows projects added while the dashboard runs
+  const sel = $('project');
+  if (sel && sel.options.length !== list.length + 1) {
+    sel.innerHTML = `<option value="">All projects (${list.length})</option>` + o.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+    sel.value = '';
+  }
+  if (sc.open) renderScout();
 }
+
+// ---- discovering projects to onboard: folders with CLAUDE.md / AGENTS.md below a path (with --agent)
+const sc = { open: false, path: null, showSkipped: false, busy: false, note: '' };
+const discJobs = (c) => ({ chat: c.jobs.filter((j) => j.kind === 'chat'), onboard: c.jobs.filter((j) => j.kind === 'onboard').at(-1) });
+function discoveryHtml(d) {
+  const shown = d.candidates.filter((c) => sc.showSkipped || !c.skipped);
+  const skippedN = d.candidates.filter((c) => c.skipped).length;
+  const row = (c) => {
+    const { chat, onboard } = discJobs(c);
+    const chatting = chat.some((j) => alive(j));
+    const lastStep = onboard?.log.filter((l) => l.kind === 'tool').at(-1);
+    const state = c.followed ? `<span class="disc-ok">✓ followed</span> <a class="btn" href="${esc(hrefFor(c.projectId))}">Open</a>`
+      : onboard && alive(onboard) ? `<span class="disc-run"><span class="ag-spin"></span>Onboarding… ${lastStep ? `<span class="muted">${esc(lastStep.text.slice(0, 70))}</span>` : ''}</span><button class="link" type="button" data-sc-open="${esc(c.path)}">Follow it</button>`
+      : onboard?.status === 'failed' ? `<span class="disc-err" title="${esc(onboard.error ?? '')}">✕ Onboarding failed</span><button class="link" type="button" data-sc-open="${esc(c.path)}">See why</button>`
+      : '';
+    const actions = c.followed ? '' : c.openspec
+      ? `<button class="btn primary" type="button" data-disc="follow" data-path="${esc(c.path)}" title="It has an openspec/ folder already">Follow</button>`
+      : onboard && alive(onboard) ? ''
+      : `<button class="btn primary" type="button" data-disc="onboard" data-path="${esc(c.path)}" title="Claude sets up OpenSpec and the ticket workflow in the background; nothing is committed">Onboard</button>
+         <button class="btn" type="button" data-sc-open="${esc(c.path)}" title="Chat with Claude about whether to onboard it">${chat.length ? `${chatting ? '<span class="dot on"></span>' : ''}Chat (${chat.reduce((a, j) => a + j.log.filter((l) => l.kind === 'user').length, 0)})` : 'Chat about it'}</button>
+         <button class="link" type="button" data-disc="${c.skipped ? 'unskip' : 'skip'}" data-path="${esc(c.path)}">${c.skipped ? 'Unskip' : 'Skip'}</button>`;
+    return `<li class="disc-row ${c.skipped ? 'skipped' : ''} ${sc.open && sc.path === c.path ? 'picked' : ''}">
+      <div class="disc-main"><div class="disc-name"><b>${esc(c.name)}</b>${c.markers.map((m) => `<span class="disc-chip">${esc(m)}</span>`).join('')}${c.openspec ? '<span class="disc-chip os">openspec/</span>' : ''}</div>
+        <div class="ov-path disc-path" title="${esc(c.path)}">${c.lastCommit ? `last commit ${ago(c.lastCommit)} · ` : ''}<bdi>${esc(c.display)}</bdi></div>
+        ${c.about ? `<div class="disc-about">${esc(c.about)}</div>` : ''}${state ? `<div class="disc-state">${state}</div>` : ''}</div>
+      <div class="disc-actions">${actions}</div>
+    </li>`;
+  };
+  return `<section class="disc" aria-label="Projects to onboard">
+    <div class="ov-head"><span class="label">Onboard more projects</span><span class="muted">Folders with a CLAUDE.md or AGENTS.md that the dashboard does not follow yet</span></div>
+    <form class="disc-form" data-disc-form>
+      <input id="disc-path" name="path" value="${esc(d.display ?? '')}" placeholder="Folder to search, e.g. ~/workspace" autocomplete="off" spellcheck="false">
+      <button class="btn primary" type="submit" ${d.scanning ? 'disabled' : ''}>${d.scanning ? 'Searching…' : 'Discover'}</button>
+      ${skippedN ? `<label class="disc-toggle"><input type="checkbox" data-disc-skipped ${sc.showSkipped ? 'checked' : ''}> show ${skippedN} skipped</label>` : ''}
+      <span class="disc-note ${d.error || sc.note.startsWith('✕') ? 'warn' : ''}">${esc(d.error ? '✕ ' + d.error : sc.note)}</span>
+    </form>
+    ${d.scannedAt ? (shown.length ? `<ol class="disc-list">${shown.map(row).join('')}</ol>` : `<div class="empty">No ${d.candidates.length ? 'more ' : ''}folders with a CLAUDE.md or AGENTS.md below ${esc(d.path)}.</div>`) : ''}
+  </section>`;
+}
+async function discPost(body) {
+  const r = await fetch('/api/discover', { method: 'POST', headers: { 'content-type': 'application/json', 'x-osd-token': AGENT_TOKEN }, body: JSON.stringify(body) });
+  const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+  if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+  return d;
+}
+const candidate = (p) => ui.overview?.discovery?.candidates.find((c) => c.path === p);
+// the chat about one candidate, in the side panel; it ends with a decision: onboard it, or skip to the next one
+function openScout(p) {
+  Object.assign(sc, { open: true, path: p, note: '' });
+  $('agent').hidden = false;
+  $('agent').classList.remove('max');
+  document.body.classList.add('ag-open');
+  $('agent').innerHTML = `<div class="ag-head"><h2 id="sc-title"></h2><button class="link" type="button" data-sc-close>Close ✕</button></div>
+    <div class="ag-bar" id="sc-bar"></div>
+    <div class="ag-thread" id="ag-thread" aria-live="polite"></div>
+    <div class="ag-compose">
+      <textarea id="sc-text" rows="2" placeholder="Ask about this project"></textarea>
+      <div class="ag-tools"><button class="btn primary" type="button" data-sc-send style="margin-left:auto">Send</button></div>
+    </div>
+    <div class="ag-note ag-route" id="sc-route">Enter sends · Shift+Enter for a new line</div>`;
+  const c = candidate(p);
+  if (c && !discJobs(c).chat.length) $('sc-text').value = 'What is this project, and should we onboard it to OpenSpec and the ticket workflow?';
+  sc.stick = true;
+  renderScout();
+  $('sc-text').focus();
+  if (ui.overview) renderOverview(ui.overview);
+}
+function closeScout() { sc.open = false; $('agent').hidden = true; document.body.classList.remove('ag-open'); if (ui.overview) renderOverview(ui.overview); }
+function renderScout() {
+  const c = candidate(sc.path);
+  if (!c || !$('sc-bar')) return;
+  const { chat, onboard } = discJobs(c);
+  $('sc-title').innerHTML = `${esc(c.name)}<span class="sc-path" title="${esc(c.path)}">${esc(c.display)}</span>`;
+  const running = onboard && alive(onboard);
+  morphHtml($('sc-bar'), c.followed
+    ? `<div class="ag-row"><span class="disc-ok">✓ Onboarded and followed.</span><a class="btn primary" href="${esc(hrefFor(c.projectId))}">Open it</a><button class="btn" type="button" data-sc-next>Next candidate →</button></div>`
+    : running ? `<div class="ag-row"><span class="ag-note"><span class="ag-spin"></span>Onboarding in the background; the project appears in the list once <code>openspec/</code> is set up. Nothing is committed.</span></div>`
+    : `<div class="ag-row sc-decide"><span class="ag-note">Decision:</span>
+        <button class="btn primary" type="button" data-sc-onboard ${c.openspec ? 'disabled' : ''}>Onboard it</button>
+        <button class="btn" type="button" data-sc-skip>Skip → next candidate</button>
+        ${onboard?.status === 'failed' ? `<span class="ag-note warn">✕ ${esc(onboard.error ?? 'Onboarding failed')}</span>` : ''}</div>
+       ${sc.note ? `<div class="ag-note ${sc.note.startsWith('✕') ? 'warn' : ''}">${esc(sc.note)}</div>` : ''}`);
+  const jobs = [...chat, ...(onboard ? [onboard] : [])].sort((a, b) => a.startedAt - b.startedAt);
+  const th = $('ag-thread');
+  const atEnd = th.scrollHeight - th.scrollTop - th.clientHeight < 60;
+  th.innerHTML = threadHtml({ jobs, last: jobs.at(-1), scout: true });
+  if (atEnd || sc.stick) { th.scrollTop = th.scrollHeight; sc.stick = false; }
+}
+function nextCandidate(after) {
+  const list = (ui.overview?.discovery?.candidates ?? []).filter((c) => !c.skipped && !c.followed && !c.openspec);
+  const i = list.findIndex((c) => c.path === after);
+  return list[i + 1] ?? list.find((c) => c.path !== after) ?? null;
+}
+async function scoutSend() {
+  const ta = $('sc-text');
+  const text = ta?.value.trim();
+  if (!text || sc.busy) return;
+  sc.busy = true;
+  try { await discPost({ action: 'chat', path: sc.path, text }); ta.value = ''; sc.stick = true; sc.note = ''; }
+  catch (e) { $('sc-route').innerHTML = `<span style="color:var(--st-blocked)">✕ ${esc(e.message)}</span>`; }
+  finally { sc.busy = false; }
+}
+document.addEventListener('submit', (e) => {
+  if (!e.target.matches?.('[data-disc-form]')) return;
+  e.preventDefault();
+  const path = $('disc-path').value.trim();
+  sc.note = 'Searching…';
+  discPost({ action: 'scan', path }).then((d) => { sc.note = `${d.found} found`; }).catch((err) => { sc.note = '✕ ' + err.message; }).finally(() => ui.overview && renderOverview(ui.overview));
+  if (ui.overview) renderOverview(ui.overview);
+});
+document.addEventListener('change', (e) => {
+  if (e.target.matches?.('[data-disc-skipped]')) { sc.showSkipped = e.target.checked; renderOverview(ui.overview); }
+});
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  const hit = t.closest?.('[data-disc], [data-sc-open], [data-sc-close], [data-sc-send], [data-sc-onboard], [data-sc-skip], [data-sc-next]');
+  if (!hit) return;
+  e.stopPropagation();
+  if (hit.matches('[data-sc-open]')) return openScout(hit.dataset.scOpen);
+  if (hit.matches('[data-sc-close]')) return closeScout();
+  if (hit.matches('[data-sc-send]')) return scoutSend();
+  const act = (body, okNote = '') => discPost(body).then(() => { sc.note = okNote; }).catch((err) => { sc.note = '✕ ' + err.message; }).finally(() => { if (ui.overview) renderOverview(ui.overview); if (sc.open) renderScout(); });
+  if (hit.matches('[data-disc]')) return act({ action: hit.dataset.disc, path: hit.dataset.path });
+  if (hit.matches('[data-sc-onboard]')) return act({ action: 'onboard', path: sc.path });
+  if (hit.matches('[data-sc-skip], [data-sc-next]')) {
+    const next = nextCandidate(sc.path);
+    const done = () => (next ? openScout(next.path) : closeScout());
+    return hit.matches('[data-sc-skip]') ? discPost({ action: 'skip', path: sc.path }).then(done).catch((err) => { sc.note = '✕ ' + err.message; renderScout(); }) : done();
+  }
+}, true);
+document.addEventListener('keydown', (e) => {
+  if (e.target.id !== 'sc-text' || e.key !== 'Enter' || e.isComposing || e.shiftKey) return;
+  e.preventDefault(); scoutSend();
+});
 
 function startProject() {
   if (PARAMS.has('focus')) ui.boardFocus = PARAMS.get('focus') !== '0'; // ?focus: the board in focus mode
@@ -3304,6 +3470,7 @@ function startProject() {
   else connect();
 }
 function startOverview() {
+  document.querySelectorAll('[data-chat-btn]').forEach((b) => b.remove()); // the chat belongs to a project; candidates have their own
   document.querySelector('.main').hidden = true;
   $('board').hidden = true;
   $('overview').hidden = false;
@@ -3320,8 +3487,9 @@ function startOverview() {
 (async () => {
   let list = [];
   try { list = (await (await fetch('/api/projects')).json()).projects ?? []; } catch { /* older server: one project */ }
-  if (list.length > 1) {
+  if (list.length > 1 || AGENT_TOKEN) { // with --agent the overview (and its discovery) is reachable with one project too
     if (PROJECT && !list.some((p) => p.id === PROJECT)) PROJECT = null;
+    if (!PROJECT && list.length === 1 && !PARAMS.has('overview')) PROJECT = list[0].id;
     const sel = $('project');
     sel.innerHTML = `<option value="">All projects (${list.length})</option>` + list.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
     sel.value = PROJECT ?? '';

@@ -198,8 +198,10 @@ What makes it more than a status page:
 - **Voice and rephrasing, locally.** Dictate into any text box with a local speech-to-text container, and let a
   local model turn a rough draft into a clear prompt. Nothing of it goes to the cloud, and nothing is sent until
   you send it.
-- **Several projects** at once with a live overview, and **ten styles** from Flat and Glass to Clay, Paper,
-  Blackboard or a green-screen Terminal.
+- **Several projects** at once with a live overview, and **onboarding** right from it: it finds folders with a
+  `CLAUDE.md` or `AGENTS.md`, lets you chat with Claude about whether one is worth it, and sets up OpenSpec there
+  in the background (nothing committed).
+- **Ten styles**, from Flat and Glass to Clay, Paper, Blackboard or a green-screen Terminal.
 
 | Charts | Brainstorming an idea next to the backlog |
 |---|---|
