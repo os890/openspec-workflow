@@ -77,8 +77,8 @@ if (AGENT && !['127.0.0.1', 'localhost', '::1'].includes(HOST)) {
 const STATE_DIR = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state'), 'openspec-dashboard');
 // Local models chosen in the dashboard's settings dialog (⚙); they win over the command-line defaults once saved.
 const SETTINGS_FILE = path.join(STATE_DIR, 'settings.json');
-const settings = { rephrase: { provider: 'auto' }, stt: { provider: 'auto' }, podman: { autostart: [] } };
-try { const f = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); Object.assign(settings.rephrase, f.rephrase); Object.assign(settings.stt, f.stt); Object.assign(settings.podman, f.podman); } catch { /* defaults */ }
+const settings = { rephrase: { provider: 'auto' }, stt: { provider: 'auto' }, podman: { autostart: [] }, files: { open: '' } };
+try { const f = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); Object.assign(settings.rephrase, f.rephrase); Object.assign(settings.stt, f.stt); Object.assign(settings.podman, f.podman); Object.assign(settings.files, f.files); } catch { /* defaults */ }
 const writeSettings = () => { fs.mkdirSync(STATE_DIR, { recursive: true }); fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2) + '\n'); };
 const WORKSPACE_EXCLUDES = new Set(['.git', 'target', 'node_modules', 'node', '.angular', 'dist', 'coverage',
   '.idea', '.vscode', 'test-results', 'playwright-report', '.mvn', '.gradle', 'build', '.venv', '__pycache__']);
@@ -2061,7 +2061,31 @@ async function settingsView(fresh) {
   const { at, ...options } = optionsCache;
   return { settings, rephrase: rephraseState(), stt: { available: stt.available, image: stt.image, error: stt.error }, options, flags: { url: RP_URL, image: RP_IMAGE_ARG, model: RP_MODEL_ARG, sttImage: STT_IMAGE_ARG } };
 }
+// "Open folders with" (settings › General): empty for the system's file manager; on macOS an app name
+// (open -a <app> <folder>); or a command with {dir}. It runs without a shell, so a folder name cannot inject anything.
+const splitCmd = (c) => (c.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map((t) => t.replace(/^(["'])(.*)\1$/, '$2'));
+function folderCommand(dir) {
+  const c = String(settings.files?.open ?? '').trim();
+  if (!c) return process.platform === 'darwin' ? ['open', [dir]] : process.platform === 'win32' ? ['explorer', [dir]] : ['xdg-open', [dir]];
+  if (c.includes('{dir}')) { const [cmd, ...args] = splitCmd(c); return [cmd, args.map((a) => a.split('{dir}').join(dir))]; }
+  return process.platform === 'darwin' ? ['open', ['-a', c, dir]] : [c, [dir]];
+}
+async function openFolder(project) {
+  const [cmd, args] = folderCommand(project.root);
+  await new Promise((resolve, reject) => {
+    let child;
+    try { child = spawn(cmd, args, { detached: true, stdio: ['ignore', 'ignore', 'pipe'] }); } catch (e) { return reject(httpError(502, `${cmd}: ${e.message}`)); }
+    let err = '';
+    child.stderr.on('data', (d) => { err = (err + d).slice(-400); });
+    child.on('error', (e) => reject(httpError(502, e.code === 'ENOENT' ? `${cmd} was not found.` : `${cmd}: ${e.message}`)));
+    // "open" returns at once (and says when the app does not exist); a file manager itself keeps running
+    if (cmd === 'open') child.on('close', (code) => (code ? reject(httpError(502, err.trim() || `open failed (${code}).`)) : resolve()));
+    else child.on('spawn', () => { child.stderr.destroy(); child.unref(); resolve(); });
+  });
+  return { ok: true };
+}
 async function saveSettings(body) {
+  if (body.files) { settings.files = { open: typeof body.files.open === 'string' ? body.files.open.trim().slice(0, 500) : '' }; writeSettings(); return settingsView(false); }
   const r = body.rephrase ?? {}, t = body.stt ?? {};
   if (r.provider && !['auto', 'container', 'url', 'apple', 'off'].includes(r.provider)) throw httpError(400, 'Unknown provider.');
   if (r.url && !/^https?:\/\/[^\s]+$/.test(r.url)) throw httpError(400, 'The URL must start with http:// or https://.');
@@ -2821,7 +2845,7 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ error: e.message }));
       }
     }
-    const WRITES = { '/api/file/write': writeOpenspecFile, '/api/roadmap/move': moveInRoadmap, '/api/backlog/add': addToBacklog, '/api/backlog/remove': removeIdea, '/api/discover': (_, body) => discoveryAction(body), '/api/project': (_, body) => projectAction(body) };
+    const WRITES = { '/api/file/write': writeOpenspecFile, '/api/roadmap/move': moveInRoadmap, '/api/backlog/add': addToBacklog, '/api/backlog/remove': removeIdea, '/api/discover': (_, body) => discoveryAction(body), '/api/project': (_, body) => projectAction(body), '/api/open-folder': (p) => openFolder(p) };
     if (WRITES[url.pathname] && req.method === 'POST') {
       if (!AGENT) { res.writeHead(404); return res.end('start the dashboard with --agent'); }
       const origin = req.headers.origin;

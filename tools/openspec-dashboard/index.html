@@ -1437,6 +1437,9 @@ body.board-max { overflow: hidden; }
 /* "Your messages" in the write mode: the style's color or an own color (in both color modes) */
 .agent-panel.term-writing.me-theme #ag-thread .msg.me:not(.rx-sent), .agent-panel.term-writing.me-custom #ag-thread .msg.me:not(.rx-sent) { background: var(--me-bg); color: var(--me-fg); box-shadow: none; }
 .agent-panel.term-writing.me-theme #ag-thread .msg.me .ic-chip, .agent-panel.term-writing.me-custom #ag-thread .msg.me .ic-chip { background: color-mix(in srgb, var(--me-fg) 18%, transparent); color: inherit; }
+.set-gen label { display: flex; flex-direction: column; gap: 6px; margin: 10px 8px 4px; font-size: 13px; }
+.set-gen input { font: inherit; font-size: 13px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; }
+.set-gen .ag-row { margin: 6px 8px; gap: 10px; }
 .wm-head { margin: 14px 8px 2px; font-size: 13px; }
 .cli-step { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: calc(var(--term-fs, 13.5px) - 1px); line-height: 1.45; align-self: stretch; }
 .cli-step.sub { margin-left: 16px; opacity: .8; }
@@ -1732,6 +1735,7 @@ body.ag-max { overflow: hidden; }
       <button class="btn" id="agent-btn" type="button" data-chat-btn aria-controls="agent" hidden>Chat</button>
       <button class="btn" id="theme" type="button" aria-label="Toggle light or dark theme">◐</button>
       <button class="btn" id="term-btn" type="button" aria-label="Terminal sessions" aria-controls="agent" title="Sessions running in a terminal or an IDE: join one, follow it live, write to it" hidden>⌨</button>
+      <button class="btn" id="folder-btn" type="button" aria-label="Open the project folder" title="Open the project folder in the file manager (which one: ⚙ Settings › General)" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg></button>
       <button class="btn" id="git-btn" type="button" aria-label="Git history" aria-controls="githist" title="Git history: the commits, branches and tags, and what each commit changed" hidden>⎇</button>
       <button class="btn" id="settings-btn" type="button" aria-label="Settings" title="Settings: local models and Podman" hidden>⚙</button>
     </div>
@@ -3149,6 +3153,7 @@ function render() {
 // ------------------------------------------------------------ live data
 function accept(next) {
   $('git-btn').hidden = false; ghOnState();
+  if (AGENT_TOKEN) $('folder-btn').hidden = false;
   const prev = ui.state;
   if (prev) {
     const before = new Map(prev.changes.map((c) => [c.name, c]));
@@ -4253,7 +4258,16 @@ document.addEventListener('click', (e) => {
 // Which model rephrases drafts (a container, a local OpenAI-compatible server such as Ollama or LM Studio, Apple's
 // on-device model on macOS 26, or none) and which image transcribes speech. Saved by the server; applies at once.
 const st = { view: null, busy: false, note: '', test: null, tab: 'models', pm: null, pmNote: '', pmTimer: null, pmAll: false };
-const setTabs = () => `<div class="set-tabs" role="tablist"><button type="button" class="tab" role="tab" data-set-tab="models" aria-selected="${st.tab === 'models'}">Local models</button><button type="button" class="tab" role="tab" data-set-tab="podman" aria-selected="${st.tab === 'podman'}">Podman</button><button type="button" class="tab" role="tab" data-set-tab="write" aria-selected="${st.tab === 'write'}">Write mode</button></div>`;
+const setTabs = () => `<div class="set-tabs" role="tablist"><button type="button" class="tab" role="tab" data-set-tab="models" aria-selected="${st.tab === 'models'}">Local models</button><button type="button" class="tab" role="tab" data-set-tab="podman" aria-selected="${st.tab === 'podman'}">Podman</button><button type="button" class="tab" role="tab" data-set-tab="write" aria-selected="${st.tab === 'write'}">Write mode</button><button type="button" class="tab" role="tab" data-set-tab="general" aria-selected="${st.tab === 'general'}">General</button></div>`;
+// settings › General: the file manager for the folder button in the header (kept in the dashboard's settings file)
+async function renderGeneralSettings() {
+  if (!st.view) { try { st.view = await settingsFetch('GET'); } catch (e) { st.note = '✕ ' + e.message; } }
+  const cur = st.view?.settings?.files?.open ?? '';
+  $('settings').innerHTML = `<div class="set-head"><h2 id="set-title">Settings</h2><button class="link" type="button" data-set-close>Close ✕</button></div>${setTabs()}
+    <div class="set-gen"><label><b>Open project folders with</b><input id="set-fm" value="${esc(cur)}" placeholder="the system's file manager" spellcheck="false" autocomplete="off"></label>
+    <p class="ag-note">For the folder button in the header. Empty: the system's file manager (Finder, Explorer, xdg-open). On macOS the name of an app, e.g. <code>Finder</code> or another file manager, opens the folder with <code>open -a &lt;app&gt;</code>. Anything else: a command with <code>{dir}</code> for the folder, e.g. <code>my-file-manager --path {dir}</code>. Kept in the dashboard's settings file.</p>
+    <div class="ag-row set-actions"><button class="btn primary" type="button" data-set-fm-save>Save</button><span class="ag-note" id="set-fm-note">${esc(st.fmNote ?? '')}</span></div></div>`;
+}
 // settings of the write mode of a joined session (kept in this browser, like the text size and the colors)
 function renderWriteSettings() {
   const on = termView.matrix !== false, me = termView.me ?? 'highlight';
@@ -4288,6 +4302,7 @@ async function openSettings(fresh) {
   if (!dlg.open) dlg.showModal();
   if (st.tab === 'podman') return openPodman();
   if (st.tab === 'write') return renderWriteSettings();
+  if (st.tab === 'general') return renderGeneralSettings();
   st.note = 'Looking for local models…'; renderSettings();
   try { st.view = await settingsFetch('GET', null, fresh); st.form = null; st.note = ''; } catch (e) { st.note = '✕ ' + e.message; }
   renderSettings();
@@ -4312,6 +4327,8 @@ function renderSettings() {
   const v = st.view;
   const dlg = $('settings');
   if (st.tab === 'podman') return renderPodman();
+  if (st.tab === 'write') return renderWriteSettings();
+  if (st.tab === 'general') return renderGeneralSettings();
   if (!v) { dlg.innerHTML = `<div class="set-head"><h2 id="set-title">Settings</h2><button class="link" type="button" data-set-close>Close ✕</button></div>${setTabs()}<div class="ag-note">${esc(st.note)}</div>`; return; }
   if (!st.form) initSettingsForm(v);
   const f = st.form, o = v.options, now = v.rephrase;
@@ -4452,7 +4469,11 @@ $('settings').addEventListener('click', async (e) => {
   const t = e.target;
   if (t === $('settings') || t.closest('[data-set-close]')) return $('settings').close();
   const tab = t.closest('[data-set-tab]');
-  if (tab) { clearTimeout(st.pmTimer); st.tab = tab.dataset.setTab; return st.tab === 'podman' ? openPodman() : st.tab === 'write' ? renderWriteSettings() : st.view ? renderSettings() : openSettings(false); }
+  if (tab) { clearTimeout(st.pmTimer); st.tab = tab.dataset.setTab; return st.tab === 'podman' ? openPodman() : st.tab === 'write' ? renderWriteSettings() : st.tab === 'general' ? renderGeneralSettings() : st.view ? renderSettings() : openSettings(false); }
+  if (t.closest('[data-set-fm-save]')) {
+    try { st.view = await settingsFetch('POST', { files: { open: $('set-fm').value } }); st.fmNote = '✓ Saved'; } catch (err) { st.fmNote = '✕ ' + err.message; }
+    return renderGeneralSettings();
+  }
   if (t.closest('[data-pm-restart]')) {
     if (!confirm('Restart the Podman VM? Every container in it stops; the checked ones are started again. Sessions that use containers (builds, tests, other tools) are interrupted.')) return;
     try { await pmFetch('POST', { action: 'restart' }); st.pmNote = ''; } catch (err) { st.pmNote = '✕ ' + err.message; }
@@ -4623,6 +4644,15 @@ function ghDetailHtml(d) {
     ${d.cut ? '<div class="ag-note">The diff is too large; the rest is not shown.</div>' : ''}`;
 }
 $('git-btn').addEventListener('click', () => (gh.open ? ghClose() : ghOpen()));
+// the project folder in the file manager (settings › General says which one)
+$('folder-btn').addEventListener('click', async () => {
+  const b = $('folder-btn'); b.disabled = true;
+  try {
+    const r = await fetch(withProject('/api/open-folder'), { method: 'POST', headers: { 'content-type': 'application/json', 'x-osd-token': AGENT_TOKEN }, body: '{}' });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) alert(`The folder could not be opened: ${d.error || `HTTP ${r.status}`}\n\nWhich file manager opens it: ⚙ Settings › General.`);
+  } finally { setTimeout(() => { b.disabled = false; }, 800); }
+});
 $('githist').addEventListener('click', (e) => {
   const t = e.target;
   if (t.closest('[data-gh-close]')) return ghClose();
@@ -4706,6 +4736,7 @@ document.addEventListener('click', async (e) => {
   if (ui.overview) renderOverview(ui.overview);
 }, true);
 function renderOverview(o) {
+  $('folder-btn').hidden = true;
   if (AGENT_TOKEN && !ag.ovProject && o.projects?.length) setTimeout(ovTermFetch, 0); // ⌨ with its badge right away
   $('git-btn').hidden = true;
   const prev = new Map((ui.overview?.projects ?? []).map((p) => [p.id, p.lastEvent?.t ?? 0]));

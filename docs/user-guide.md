@@ -189,6 +189,15 @@ its own. It only reads: nothing in the repository changes.
 
 ![The git history with a merge commit selected](images/dashboard-git-history.png)
 
+### Open the project folder
+
+The folder button in the header (with `--agent`, on a project's page) opens the project's folder in a file manager.
+Which one is set in **⚙ Settings › General** under **Open project folders with**: empty for the system's file manager
+(Finder, Explorer, `xdg-open`); on macOS the name of an app, which opens the folder with `open -a <app>`; or a command
+with `{dir}` for the folder, e.g. `my-file-manager --path {dir}`. The command runs without a shell, and the setting is
+kept in the dashboard's settings file, not in the project. The file manager has to accept a folder to open, as a
+start argument or (on macOS) as a document to open; one that ignores it only starts.
+
 ## Talk to the agent (optional)
 
 Start the dashboard with `--agent` to chat with Claude about the project, start a session on a ticket and talk to
@@ -348,7 +357,8 @@ Apple's on-device model on macOS 26 with Apple Intelligence, or off; for speech-
 
 ![Settings: the local models in use](images/dashboard-settings-models.png)
 
-The **Write mode** tab holds the settings for writing to a session (see above). The **Podman** tab of the same dialog shows how the Podman VM is doing (memory, CPU load, disk) and its containers:
+The **Write mode** tab holds the settings for writing to a session, **General** the file manager for the folder
+button (see above). The **Podman** tab of the same dialog shows how the Podman VM is doing (memory, CPU load, disk) and its containers:
 the 15 used last at the top (running ones first), then all others by name, each with a **Start** or **Stop**
 button. When the VM is stuck or full, **Restart the VM** stops and starts it; the containers you checked (↻) come
 back, the others stay stopped. The dashboard's own model container cannot be checked: it is removed when it stops

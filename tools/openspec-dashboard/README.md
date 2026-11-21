@@ -242,6 +242,12 @@ fsmonitor, prompts, optional locks or any transport (a partial clone does not fe
 timeout of 20 s and output limits (a diff is cut at 2 MB, a file's diff at 3000 lines, a line at 2000 characters);
 commit ids are checked before they reach git.
 
+**The folder button** (with `--agent`, on a project's page) opens the project's folder: `POST /api/open-folder` runs
+the command from `settings.json` (`files.open`, set in **⚙ Settings › General**). Empty: `open` (macOS), `explorer`
+(Windows) or `xdg-open`; an app name on macOS: `open -a <app> <folder>`; a command with `{dir}`: split into words
+(quotes keep spaces), `{dir}` replaced by the folder, run without a shell and detached. `open` reports a missing app,
+which the page shows.
+
 ## Agent panel (optional)
 
 Started with `--agent`, the dashboard talks to Claude Code in two places:
