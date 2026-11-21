@@ -224,8 +224,11 @@ runs locally, never through Claude. Two ways to provide a model:
 **Local models (⚙).** The ⚙ button in the header (and next to Rephrase) opens a dialog that shows which local models
 are in use and lets you choose:
 
-- **Rephrase**: *Automatic* (the server from `--rephrase-url`, otherwise the first LLM container found, otherwise
-  Apple's on-device model), a *Container* (pick the image and the GGUF model), a *Local server* with an
+- **Rephrase**: the dialog always shows the setup in use (**In use**, and the matching option with its image and
+  model filled in). With **Choose automatically** (the default) the dashboard picks: the server from
+  `--rephrase-url`, otherwise the first LLM container found with the largest chat model, otherwise Apple's on-device
+  model. Untick it to keep the current setup as a fixed choice or change it: a *Container* (pick the image and the
+  GGUF model), a *Local server* with an
   OpenAI-compatible API (e.g. Ollama at `http://127.0.0.1:11434/v1` with a model name, LM Studio or `llama-server`;
   the dashboard checks that it answers), *Apple's on-device model* (macOS 26 with Apple Intelligence; the dashboard
   builds a small Swift helper once with the Xcode command line tools; not tested yet, as no macOS 26 machine was at

@@ -201,8 +201,9 @@ with an LLM adapter), **✨ Rephrase** turns a rough draft into a clear prompt: 
 dropped, in the language you wrote. It shows a suggestion; **Accept** replaces your text, **Reject** keeps it. On a
 CPU the first request waits until the model has loaded.
 
-**⚙ Local models** (in the header, and next to Rephrase) shows which models are in use and lets you choose: for
-Rephrase a container with its image and model, a local server such as Ollama or LM Studio (URL and model name),
+**⚙ Settings** (in the header, and next to Rephrase) shows the models in use, with the matching option and its image
+and model filled in. With **Choose automatically** the dashboard picks them; untick it to keep that setup fixed or to
+choose: for Rephrase a container with its image and model, a local server such as Ollama or LM Studio (URL and model name),
 Apple's on-device model on macOS 26 with Apple Intelligence, or off; for speech-to-text the whisper image, or off.
 **Test** tries the setting with a sample sentence, **Load now** starts a container model before you need it.
 

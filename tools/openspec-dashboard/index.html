@@ -324,8 +324,16 @@ span.ch-warn { color: var(--st-progress); }
 .set-sec { border-top: 1px solid var(--line); padding: 12px 0 6px; display: flex; flex-direction: column; gap: 6px; }
 .set-sec h3 { margin: 0; font-size: 14px; }
 .set-status { font-size: 12.5px; } .set-status.ok { color: var(--st-complete); } .set-status.bad { color: var(--st-blocked); }
+.set-sub select:disabled, .set-sub input:disabled, .set-row select:disabled { opacity: .75; }
 .set-opt { display: flex; gap: 10px; align-items: flex-start; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
 .set-opt:hover { background: var(--surface-2); } .set-opt.off { opacity: .55; cursor: default; }
+.set-opt.sel { background: var(--accent-soft); }
+.set-opts.auto .set-opt { cursor: default; } .set-opts.auto .set-opt:not(.sel) { opacity: .5; }
+.set-inuse { font-size: 13.5px; background: var(--surface-2); border-radius: 8px; padding: 8px 10px; display: flex; gap: 6px 10px; flex-wrap: wrap; align-items: baseline; }
+.set-inuse .k { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.set-inuse.ok b { color: var(--st-complete); } .set-inuse.bad { color: var(--st-blocked); }
+.set-auto { display: flex; gap: 10px; align-items: flex-start; padding: 6px 8px; cursor: pointer; }
+.set-auto b { display: block; font-size: 13.5px; }
 .set-opt b { display: block; font-size: 13.5px; } .set-desc { font-size: 12px; color: var(--muted); }
 .set-sub, .set-row { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 2px 8px 8px 34px; }
 .set-row { padding-left: 0; align-items: flex-end; }
@@ -3331,47 +3339,67 @@ async function openSettings(fresh) {
   if (!dlg.open) dlg.showModal();
   if (st.tab === 'podman') return openPodman();
   st.note = 'Looking for local models…'; renderSettings();
-  try { st.view = await settingsFetch('GET', null, fresh); st.note = ''; } catch (e) { st.note = '✕ ' + e.message; }
+  try { st.view = await settingsFetch('GET', null, fresh); st.form = null; st.note = ''; } catch (e) { st.note = '✕ ' + e.message; }
   renderSettings();
+}
+// The form always shows the setup in use: with "Choose automatically" on it shows what was chosen (greyed out);
+// turning it off keeps exactly that setup as a fixed choice, ready to be changed.
+function initSettingsForm(v, forceAuto = false) {
+  const r = v.settings.rephrase, now = v.rephrase, o = v.options;
+  const pathOf = (file) => o.models.find((m) => m.file === file)?.path ?? '';
+  const rpAuto = forceAuto || r.provider === 'auto';
+  st.form = {
+    rpAuto,
+    rp: rpAuto ? (now.kind ?? 'container') : r.provider,
+    image: (rpAuto ? now.image : r.image) || now.image || o.images[0] || '',
+    model: (rpAuto ? pathOf(now.model) : r.model) || pathOf(now.model) || o.models[0]?.path || '',
+    url: r.url ?? v.flags.url ?? '', urlModel: r.urlModel ?? (now.kind === 'url' ? now.model ?? '' : ''),
+    sttOff: v.settings.stt.provider === 'off', sttAuto: !v.settings.stt.image,
+    sttImage: v.settings.stt.image ?? v.stt.image ?? o.sttImages[0] ?? '',
+  };
 }
 function renderSettings() {
   const v = st.view;
   const dlg = $('settings');
   if (st.tab === 'podman') return renderPodman();
   if (!v) { dlg.innerHTML = `<div class="set-head"><h2 id="set-title">Settings</h2><button class="link" type="button" data-set-close>Close ✕</button></div>${setTabs()}<div class="ag-note">${esc(st.note)}</div>`; return; }
-  const r = v.settings.rephrase, o = v.options;
-  const radio = (val, label, desc, disabled = false) => `<label class="set-opt ${disabled ? 'off' : ''}"><input type="radio" name="rp" value="${val}" ${r.provider === val ? 'checked' : ''} ${disabled ? 'disabled' : ''}><span><b>${label}</b><span class="set-desc">${desc}</span></span></label>`;
-  const opt = (val, label, cur) => `<option value="${esc(val)}" ${val === (cur ?? '') ? 'selected' : ''}>${esc(label)}</option>`;
-  const now = v.rephrase;
-  const status = now.available
-    ? `✓ ${now.kind === 'container' ? `Container <code>${esc(now.image)}</code> with <code>${esc(now.model)}</code> · ${esc(now.state)}` : now.kind === 'url' ? `Server <code>${esc(now.url)}</code>${now.model ? ` · model <code>${esc(now.model)}</code>` : ''}` : 'Apple on-device model'}`
+  if (!st.form) initSettingsForm(v);
+  const f = st.form, o = v.options, now = v.rephrase;
+  const radio = (val, label, desc, unavailable = false) => `<label class="set-opt ${unavailable ? 'off' : ''} ${f.rp === val ? 'sel' : ''}"><input type="radio" name="rp" data-sf="rp" value="${val}" ${f.rp === val ? 'checked' : ''} ${unavailable || f.rpAuto ? 'disabled' : ''}><span><b>${label}</b><span class="set-desc">${desc}</span></span></label>`;
+  const opts = (list, cur, label = (x) => x, val = (x) => x) => list.length ? list.map((x) => `<option value="${esc(val(x))}" ${val(x) === cur ? 'selected' : ''}>${esc(label(x))}</option>`).join('') : '<option value="">none found</option>';
+  const inUse = now.available
+    ? `<b>${now.kind === 'container' ? 'Container' : now.kind === 'url' ? 'Local server' : 'Apple on-device model'}</b>${now.kind === 'container' ? ` <code>${esc(now.image)}</code> with <code>${esc(now.model)}</code> · ${esc(now.state)}` : now.kind === 'url' ? ` <code>${esc(now.url)}</code>${now.model ? `, model <code>${esc(now.model)}</code>` : ''}` : ''}`
     : `✕ ${esc(now.error ?? 'Not available.')}`;
+  const dis = f.rpAuto ? 'disabled' : '';
   dlg.innerHTML = `
     <div class="set-head"><h2 id="set-title">Settings</h2><button class="link" type="button" data-set-refresh title="Look for images and models again">Look again</button><button class="link" type="button" data-set-close>Close ✕</button></div>
     ${setTabs()}
     <section class="set-sec">
       <h3>Rephrase</h3>
-      <div class="set-status ${now.available ? 'ok' : 'bad'}">${status}</div>
-      ${radio('auto', 'Automatic', `${v.flags.url ? 'the server given with --rephrase-url' : 'the first LLM container found'}, otherwise Apple's on-device model`)}
-      ${radio('container', 'Container (Podman or Docker)', 'an image with an LLM adapter runs a GGUF model; started on the first request, stopped after 10 idle minutes')}
-      <div class="set-sub" data-for="container">
-        <label>Image <select data-set="image">${opt('', o.images.length ? `automatic (${o.images[0]})` : 'automatic (none found)', r.image)}${o.images.map((i) => opt(i, i, r.image)).join('')}</select></label>
-        <label>Model <select data-set="model">${opt('', o.models.length ? `automatic: the largest (${o.models[0].file})` : 'automatic (none found)', r.model)}${o.models.map((m) => opt(m.path, `${m.file} · ${(m.sizeMb / 1024).toFixed(1)} GB`, r.model)).join('')}</select></label>
+      <div class="set-inuse ${now.available ? 'ok' : 'bad'}"><span class="k">In use</span>${inUse}</div>
+      <label class="set-auto"><input type="checkbox" data-sf="rpAuto" ${f.rpAuto ? 'checked' : ''}><span><b>Choose automatically</b><span class="set-desc">${v.flags.url ? 'the server given with --rephrase-url' : 'the first LLM container found, with the largest chat model'}, otherwise Apple's on-device model. Turn it off to fix the setup below or change it.</span></span></label>
+      <div class="set-opts ${f.rpAuto ? 'auto' : ''}">
+        ${radio('container', 'Container (Podman or Docker)', 'an image with an LLM adapter runs a GGUF model; started on the first request, stopped after 10 idle minutes')}
+        <div class="set-sub" data-for="container">
+          <label>Image <select data-sf="image" ${dis}>${opts(o.images, f.image)}</select></label>
+          <label>Model <select data-sf="model" ${dis}>${opts(o.models, f.model, (m) => `${m.file} · ${(m.sizeMb / 1024).toFixed(1)} GB`, (m) => m.path)}</select></label>
+        </div>
+        ${radio('url', 'Local server (OpenAI-compatible)', 'e.g. Ollama, LM Studio or llama.cpp’s llama-server on this machine')}
+        <div class="set-sub" data-for="url">
+          <label>API base URL <input data-sf="url" value="${esc(f.url)}" placeholder="http://127.0.0.1:11434/v1" spellcheck="false" ${dis}></label>
+          <label>Model <input data-sf="urlModel" value="${esc(f.urlModel)}" placeholder="e.g. llama3.2 or gemma3" spellcheck="false" ${dis}></label>
+        </div>
+        ${radio('apple', 'Apple on-device model', o.apple.available ? 'Apple Intelligence on this Mac; nothing leaves it' : esc(o.apple.reason ?? 'not available'), !o.apple.available)}
+        ${radio('off', 'Off', 'no Rephrase button')}
       </div>
-      ${radio('url', 'Local server (OpenAI-compatible)', 'e.g. Ollama, LM Studio or llama.cpp’s llama-server on this machine')}
-      <div class="set-sub" data-for="url">
-        <label>API base URL <input data-set="url" value="${esc(r.url ?? v.flags.url ?? '')}" placeholder="http://127.0.0.1:11434/v1" spellcheck="false"></label>
-        <label>Model <input data-set="urlModel" value="${esc(r.urlModel ?? '')}" placeholder="e.g. llama3.2 or gemma3" spellcheck="false"></label>
-      </div>
-      ${radio('apple', 'Apple on-device model', o.apple.available ? 'Apple Intelligence on this Mac; nothing leaves it' : esc(o.apple.reason ?? 'not available'), !o.apple.available)}
-      ${radio('off', 'Off', 'no Rephrase button')}
     </section>
     <section class="set-sec">
       <h3>Speech-to-text</h3>
-      <div class="set-status ${v.stt.available ? 'ok' : 'bad'}">${v.stt.available ? `✓ <code>${esc(v.stt.image)}</code>` : `✕ ${esc(v.stt.error ?? 'Not available.')}`}</div>
+      <div class="set-inuse ${v.stt.available ? 'ok' : 'bad'}"><span class="k">In use</span>${v.stt.available ? `<code>${esc(v.stt.image)}</code>` : `✕ ${esc(v.stt.error ?? 'Not available.')}`}</div>
       <div class="set-row">
-        <label>Image <select data-set="sttImage">${opt('', o.sttImages.length ? `automatic (${o.sttImages[0]})` : 'automatic (none found)', v.settings.stt.provider === 'off' ? '' : v.settings.stt.image)}${o.sttImages.map((i) => opt(i, i, v.settings.stt.image)).join('')}</select></label>
-        <label class="set-check"><input type="checkbox" data-set="sttOff" ${v.settings.stt.provider === 'off' ? 'checked' : ''}> off</label>
+        <label class="set-check"><input type="checkbox" data-sf="sttOff" ${f.sttOff ? 'checked' : ''}> off</label>
+        <label class="set-check"><input type="checkbox" data-sf="sttAuto" ${f.sttAuto ? 'checked' : ''} ${f.sttOff ? 'disabled' : ''}> choose automatically</label>
+        <label>Image <select data-sf="sttImage" ${f.sttOff || f.sttAuto ? 'disabled' : ''}>${opts(o.sttImages, f.sttImage)}</select></label>
       </div>
     </section>
     <div class="set-actions">
@@ -3382,22 +3410,27 @@ function renderSettings() {
     </div>
     ${st.test ? `<div class="set-test"><span class="muted">Test (${st.test.ms ? (st.test.ms / 1000).toFixed(1) + ' s' : '…'}):</span> ${esc(st.test.text)}</div>` : ''}
     <div class="ag-note">Saved in <code>~/.local/state/openspec-dashboard/settings.json</code>; it overrides the command-line options. Everything runs on this machine.</div>`;
-  syncSettingsForm();
-}
-function syncSettingsForm() {
-  const prov = $('settings').querySelector('input[name="rp"]:checked')?.value;
-  for (const el of $('settings').querySelectorAll('.set-sub')) el.hidden = el.dataset.for !== prov;
+  for (const el of dlg.querySelectorAll('.set-sub')) el.hidden = el.dataset.for !== f.rp;
 }
 function settingsBody() {
-  const dlg = $('settings');
-  const val = (k) => dlg.querySelector(`[data-set="${k}"]`)?.value ?? '';
+  const f = st.form;
   return {
-    rephrase: { provider: dlg.querySelector('input[name="rp"]:checked')?.value ?? 'auto', image: val('image'), model: val('model'), url: val('url'), urlModel: val('urlModel') },
-    stt: { provider: dlg.querySelector('[data-set="sttOff"]')?.checked ? 'off' : 'auto', image: val('sttImage') },
+    rephrase: f.rpAuto ? { provider: 'auto' } : { provider: f.rp, image: f.rp === 'container' ? f.image : '', model: f.rp === 'container' ? f.model : '', url: f.rp === 'url' ? f.url : '', urlModel: f.rp === 'url' ? f.urlModel : '' },
+    stt: { provider: f.sttOff ? 'off' : 'auto', image: f.sttOff || f.sttAuto ? '' : f.sttImage },
   };
 }
+$('settings').addEventListener('input', (e) => {
+  const k = e.target.dataset?.sf;
+  if (k && e.target.type === 'text' || k && e.target.tagName === 'INPUT' && !['checkbox', 'radio'].includes(e.target.type)) st.form[k] = e.target.value; // typing: no re-render
+});
 $('settings').addEventListener('change', (e) => {
-  if (e.target.name === 'rp') syncSettingsForm();
+  const k = e.target.dataset?.sf;
+  if (!k || !st.form) return;
+  st.form[k] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+  if (k === 'rpAuto' && e.target.checked) { const keep = st.form; initSettingsForm(st.view, true); st.form = { ...st.form, sttOff: keep.sttOff, sttAuto: keep.sttAuto, sttImage: keep.sttImage }; } // back to what automatic picks
+  renderSettings();
+});
+$('settings').addEventListener('change', (e) => {
   if (e.target.matches('[data-pm-auto]')) pmSaveAutostart();
   if (e.target.matches('[data-pm-all]')) { st.pmAll = e.target.checked; renderPodman(); }
 });
@@ -3477,7 +3510,7 @@ $('settings').addEventListener('click', async (e) => {
   if (t.closest('[data-set-refresh]')) return openSettings(true);
   if (t.closest('[data-set-save]')) {
     st.busy = true; st.note = 'Saving…'; st.test = null; renderSettings();
-    try { st.view = await settingsFetch('POST', settingsBody()); st.note = '✓ Saved'; } catch (err) { st.note = '✕ ' + err.message; }
+    try { st.view = await settingsFetch('POST', settingsBody()); st.form = null; st.note = '✓ Saved'; } catch (err) { st.note = '✕ ' + err.message; }
     st.busy = false; return renderSettings();
   }
   if (t.closest('[data-set-warm]')) {
