@@ -12,6 +12,8 @@ The repository contains:
   each rendered to SVG and PNG),
 - an agent skill, [`openspec-ticket-workflow`](skills/openspec-ticket-workflow/SKILL.md), that runs a ticket
   through the workflow and sets it up in a new project.
+- [`openspec-dashboard`](tools/openspec-dashboard/README.md), a live local dashboard to follow the progress of the
+  changes while agents work on them.
 
 ## The workflow
 
@@ -156,6 +158,17 @@ skill's references hold the pieces it uses:
 - [agent-prompts.md](skills/openspec-ticket-workflow/references/agent-prompts.md): prompts for the fresh agents
   (acceptance check, diff review, findings validation, docs, diagrams),
 - [templates.md](skills/openspec-ticket-workflow/references/templates.md): roadmap, backlog draft and parking lot.
+
+## Following the progress
+
+```sh
+cd <your project>
+node <path-to>/tools/openspec-dashboard/server.mjs
+```
+
+Shows the change being worked on with its current task, the milestone, an activity feed and a board of all
+changes, updated live from the files and the `openspec` CLI. No dependencies; see its
+[README](tools/openspec-dashboard/README.md).
 
 ## Rendering the diagrams
 

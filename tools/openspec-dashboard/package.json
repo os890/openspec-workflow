@@ -1,0 +1,11 @@
+{
+  "name": "openspec-dashboard",
+  "version": "0.1.0",
+  "description": "Live local dashboard for the progress of OpenSpec changes: current ticket, board, roadmap milestones, validation.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": { "openspec-dashboard": "server.mjs" },
+  "files": ["server.mjs", "index.html", "README.md"],
+  "engines": { "node": ">=20" },
+  "scripts": { "start": "node server.mjs" }
+}
