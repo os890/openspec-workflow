@@ -190,10 +190,11 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     step through the hook below; its replies appear there.
   - **⤢ Maximize** gives the chat the whole window (`Esc` restores it, a second `Esc` closes it).
   - **Reactions and quotes**: under each of Claude's answers, 👍 ✅ 🙏 🎉 💡 send a short answer at once ("I agree
-    with this.", "Yes, go ahead with this.", …), and **↩ Quote** replies to that answer (select a part of it first
+    with this.", "Yes, go ahead with this.", …), 🔁 asks Claude to say it again in simpler words and 📝 to summarize
+    it in a few bullet points, and **↩ Quote** replies to that answer (select a part of it first
     to quote just that part). Claude sees no timestamps of the dashboard, so the reference it gets is the answer's
     first sentence, or the selected part, in a fixed form (`[Reaction 👍 to your message: "…"]`,
-    `[Replying to your message: "…"]`), which it finds in its own conversation; the whole answer is not sent again.
+    `[Request 📝 about your message: "…"]`, `[Replying to your message: "…"]`), which it finds in its own conversation; the whole answer is not sent again.
     Reactions show as small badges on the answer they belong to.
 - **Agent…** on a ticket, with the ticket's context added automatically:
   - **Ask**: a read-only question about the ticket; "Ask about this task" next to the current task prefills one.

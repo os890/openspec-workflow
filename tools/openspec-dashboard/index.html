@@ -1363,6 +1363,7 @@ body.board-max { overflow: hidden; }
 .rx { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 1px 7px; font-size: 13px; line-height: 1.5; cursor: pointer; color: var(--muted); }
 .rx:hover { border-color: var(--accent); background: var(--accent-soft); } .rx:disabled { opacity: .45; cursor: default; }
 .rx-q { font-size: 11.5px; font-weight: 600; }
+.rx-sep { width: 1px; align-self: stretch; background: var(--line); margin: 2px 3px; }
 .rx-got { margin-right: 6px; letter-spacing: 1px; }
 .msg.me.rx-sent { padding: 4px 10px; font-size: 13px; background: var(--accent-soft); color: var(--ink); }
 .rx-on { color: var(--muted); font-size: 12px; }
@@ -2917,24 +2918,26 @@ const columnLabel = (c) => COLS.find(([k]) => k === columnOf(c))?.[1] ?? STATUS[
 // so the reference is the message's first sentence (or the selected part), which Claude finds in its own context.
 // Only positive reactions; each one sends a short sentence with the reference.
 const REACTIONS = [['👍', 'I agree with this.'], ['✅', 'Yes, go ahead with this.'], ['🙏', 'Thanks, that helps.'], ['🎉', 'Great, that is exactly right.'], ['💡', 'Good idea, let us keep that.']];
+// requests about an answer: sent the same way, but asking Claude to do something with it
+const REQUESTS = [['🔁', 'Please say this again in other words, simpler and clearer.', 'Rephrase'], ['📝', 'Please summarize this in three to five short bullet points.', 'Summarize']];
 const rx = { msgs: new Map(), quote: null };
 const plainOf = (md) => String(md).replace(/```[\s\S]*?```/g, ' ').replace(/`([^`]*)`/g, '$1').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[#>*_|]+/g, ' ').replace(/\s+/g, ' ').trim();
 const clip = (t, n) => (t.length > n ? t.slice(0, n - 1).replace(/\s+\S*$/, '') + '…' : t).replace(/"/g, '”');
 // the first sentence, at most 120 characters: short, and the same every time for the same message
 const excerptOf = (md) => { const p = plainOf(md); return clip(p.match(/^.{12,}?[.!?:](\s|$)/)?.[0].trim() ?? p, 120); };
-const REACT_RE = /^\[Reaction (\S+) to your message: "([^"]*)"\] ([\s\S]*)$/;
+const REACT_RE = /^\[(?:Reaction (\S+) to|Request (\S+) about) your message: "([^"]*)"\] ([\s\S]*)$/;
 const QUOTE_RE = /^\[Replying to (this part of )?your message: "([^"]*)"\]\n([\s\S]*)$/;
 function reactionsIn(jobs) {
   const m = new Map();
   for (const j of jobs) for (const l of j.log) {
     const r = l.kind === 'user' && l.text.match(REACT_RE);
-    if (r) (m.get(r[2]) ?? m.set(r[2], []).get(r[2])).push(r[1]);
+    if (r) (m.get(r[3]) ?? m.set(r[3], []).get(r[3])).push(r[1] ?? r[2]);
   }
   return m;
 }
 function userMsgHtml(l) {
   const r = l.text.match(REACT_RE);
-  if (r) return `<div class="msg me rx-sent"><span>${esc(r[1])} <span class="rx-on">on “${esc(r[2])}”</span></span><span class="meta">${hhmm(l.t)}</span></div>`;
+  if (r) return `<div class="msg me rx-sent"><span>${esc(r[1] ?? r[2])} ${r[2] ? `${esc(REQUESTS.find(([e]) => e === r[2])?.[2] ?? '')}: ` : ''}<span class="rx-on">${r[2] ? '' : 'on '}“${esc(r[3])}”</span></span><span class="meta">${hhmm(l.t)}</span></div>`;
   const q = l.text.match(QUOTE_RE);
   if (q) return `<div class="msg me"><blockquote class="rx-quote">${esc(q[2])}</blockquote>${esc(q[3])}<span class="meta">${hhmm(l.t)}</span></div>`;
   return `<div class="msg me">${esc(l.text)}<span class="meta">${hhmm(l.t)}</span></div>`;
@@ -2953,8 +2956,10 @@ document.addEventListener('click', (e) => {
   const id = (react ?? quote).dataset.msg ?? quote.dataset.quote;
   const msg = rx.msgs.get(id) ?? '';
   if (react) {
-    const say = REACTIONS.find(([em]) => em === react.dataset.react)?.[1] ?? '';
-    const text = `[Reaction ${react.dataset.react} to your message: "${excerptOf(msg)}"] ${say}`;
+    const em = react.dataset.react;
+    const req = REQUESTS.find(([x]) => x === em);
+    const say = req?.[1] ?? REACTIONS.find(([x]) => x === em)?.[1] ?? '';
+    const text = req ? `[Request ${em} about your message: "${excerptOf(msg)}"] ${say}` : `[Reaction ${em} to your message: "${excerptOf(msg)}"] ${say}`;
     react.disabled = true;
     return (sc.open ? scoutSend(text) : agentSend(false, text));
   }
@@ -2994,7 +2999,7 @@ function threadHtml(c) {
         rx.msgs.set(id, l.text);
         const got = reacted.get(excerptOf(l.text)) ?? [];
         out.push(`<div class="msg them ${l.sub ? 'sub' : ''}" data-msg="${esc(id)}"><div class="md">${c.newproject ? projectMd(l.text, id) : c.brainstorm ? brainstormMd(l.text, id, j.idea ?? c.jobs.find((x) => x.idea)?.idea) : md(l.text)}</div>
-          <div class="msg-foot">${l.sub ? '' : `<span class="rx-bar">${REACTIONS.map(([e, say]) => `<button type="button" class="rx" data-react="${e}" data-msg="${esc(id)}" title="${esc(`Sends: ${say}`)}">${e}</button>`).join('')}<button type="button" class="rx rx-q" data-quote="${esc(id)}" title="Reply to this message (select a part of it first to quote just that)">↩ Quote</button></span>`}
+          <div class="msg-foot">${l.sub ? '' : `<span class="rx-bar">${REACTIONS.map(([e, say]) => `<button type="button" class="rx" data-react="${e}" data-msg="${esc(id)}" title="${esc(`Sends: ${say}`)}">${e}</button>`).join('')}<span class="rx-sep"></span>${REQUESTS.map(([e, say, label]) => `<button type="button" class="rx" data-react="${e}" data-msg="${esc(id)}" title="${esc(`${label}: sends "${say}"`)}" aria-label="${label}">${e}</button>`).join('')}<button type="button" class="rx rx-q" data-quote="${esc(id)}" title="Reply to this message (select a part of it first to quote just that)">↩ Quote</button></span>`}
             <span class="meta">${got.length ? `<span class="rx-got" title="Your reactions">${[...new Set(got)].join('')}</span>` : ''}${hhmm(l.t)}</span></div>
         </div>`);
       }
