@@ -1360,6 +1360,7 @@ function screenAsk(screen) {
   if (!question) return null;
   return { question, multi, tabs, options: options.map(({ label, description }) => ({ label, description: description === label || description === label.replace(/\s*\(recommended\)/i, '') ? '' : description })), chat };
 }
+const agentCache = new Map(); // agent transcript -> what was read of it (by modification time)
 const askIdOf = (a) => createHash('sha1').update(`${a.question}|${a.options.map((o) => o.label).join('|')}`).digest('hex').slice(0, 12);
 const screenAskCache = new Map(); // pid -> { t, ask }
 async function screenAskOf(pid, fresh) {
@@ -2030,8 +2031,69 @@ function createAgent(project) {
       });
     }
     if (m.type === 'assistant') return (Array.isArray(c) ? c : []).flatMap((b) => b.type === 'text' && b.text?.trim() ? [{ t, kind: 'text', text: b.text.slice(0, 20000), sub }] : b.type === 'tool_use' && b.name === 'AskUserQuestion' && !sub ? [{ t, kind: 'ask', id: b.id, questions: askQuestions(b.input) }]
+      : b.type === 'tool_use' && (b.name === 'Agent' || b.name === 'Task') && !sub ? [{ t, kind: 'agent', id: b.id, text: String(b.input?.description ?? 'Agent').slice(0, 200), type: String(b.input?.subagent_type ?? ''), bg: String(b.input?.run_in_background) === 'true' }]
       : b.type === 'tool_use' ? [{ t, kind: 'tool', text: toolLine(b), cli: cliLine(b), id: b.id, sub }] : []);
     return [];
+  }
+  // ---- the agents a session started (subagents, also in the background): Claude Code keeps each in
+  // <transcript>/subagents/agent-<id>.jsonl with a .meta.json (task, type, the call's tool id). Done: its last answer
+  // ended the turn; working: it wrote in the last 10 minutes; else stopped.
+  function agentInfo(file) {
+    const st = fs.statSync(file, { throwIfNoEntry: false });
+    if (!st) return null;
+    const c = agentCache.get(file);
+    if (c && c.mtime === st.mtimeMs) return c;
+    const read = (pos, len) => { const b = Buffer.alloc(len); const fd = fs.openSync(file, 'r'); try { fs.readSync(fd, b, 0, len, pos); } finally { fs.closeSync(fd); } return b.toString('utf8'); };
+    const info = { mtime: st.mtimeMs, start: null, steps: 0, last: null, done: false, result: null };
+    try {
+      info.start = Date.parse(read(0, Math.min(st.size, 4096)).match(/"timestamp":"([^"]+)"/)?.[1] ?? '') || st.birthtimeMs;
+      const tail = read(Math.max(0, st.size - 262144), Math.min(st.size, 262144));
+      for (const l of tail.split('\n')) {
+        if (!l.includes('"type":"assistant"')) continue;
+        let m; try { m = JSON.parse(l); } catch { continue; }
+        let handback = false;
+        for (const b of m.message?.content ?? []) {
+          // SubagentHandback: how an agent hands its report to the session (its last call)
+          if (b.type === 'tool_use' && b.name === 'SubagentHandback') { info.result = String(b.input?.message ?? '').trim().slice(0, 4000); handback = true; }
+          else if (b.type === 'tool_use') { info.last = toolLine(b); info.done = false; }
+          if (b.type === 'text' && b.text?.trim()) info.result = b.text.trim().slice(0, 4000);
+        }
+        info.done = handback || m.message?.stop_reason === 'end_turn';
+      }
+      // the steps over the whole file: counted by pattern, not parsed
+      const all = read(0, Math.min(st.size, 16 << 20));
+      // its tool calls: unique ids (a message can be written more than once), without the handback
+      const ids = new Set();
+      for (const m of all.matchAll(/"type":"tool_use","id":"([^"]+)","name":"([^"]+)"/g)) if (m[2] !== 'SubagentHandback') ids.add(m[1]);
+      info.steps = ids.size;
+    } catch { /* unreadable */ }
+    agentCache.set(file, info);
+    return info;
+  }
+  function agentsOf(transcriptFile) {
+    const dir = path.join(transcriptFile.replace(/\.jsonl$/, ''), 'subagents');
+    let names = []; try { names = fs.readdirSync(dir).filter((n) => n.endsWith('.meta.json')); } catch { return []; }
+    const now = Date.now();
+    return names.map((n) => {
+      const meta = jsonOf(readSync(path.join(dir, n)), {}), id = n.slice(6, -10), info = agentInfo(path.join(dir, `agent-${id}.jsonl`));
+      if (!info) return null;
+      const done = info.done || meta.finished === true; // "finished": Claude Code marks it once the agent is through
+      return { agent: id, toolUseId: meta.toolUseId ?? null, description: String(meta.description ?? '').slice(0, 200), type: meta.agentType ?? '', background: meta.requestShape === 'background',
+        state: done ? 'done' : now - info.mtime < 10 * 60e3 ? 'working' : 'stopped', start: info.start, end: done || now - info.mtime >= 10 * 60e3 ? info.mtime : null,
+        steps: info.steps, last: info.last, result: done ? info.result : null };
+    }).filter(Boolean).sort((a, b) => (b.start ?? 0) - (a.start ?? 0)).slice(0, 40);
+  }
+  // one agent's steps and answers, for the card in the thread (its last 1 MB)
+  function agentSteps({ session, agent }) {
+    const x = sessionOf(session);
+    if (!x?.transcript || !/^[a-z0-9]{6,40}$/i.test(String(agent ?? ''))) throw httpError(404, 'No such agent.');
+    const file = path.join(realOf(x.transcript).replace(/\.jsonl$/, ''), 'subagents', `agent-${agent}.jsonl`);
+    const st = fs.statSync(file, { throwIfNoEntry: false });
+    if (!st) throw httpError(404, 'No such agent.');
+    const len = Math.min(st.size, 1 << 20), buf = Buffer.alloc(len), fd = fs.openSync(file, 'r');
+    try { fs.readSync(fd, buf, 0, len, st.size - len); } finally { fs.closeSync(fd); }
+    const text = buf.toString('utf8'), lines = text.slice(st.size > len ? text.indexOf('\n') + 1 : 0).split('\n').filter(Boolean);
+    return { entries: lines.flatMap(transcriptEntries).filter((e) => e.kind !== 'result').slice(-300).map((e) => ({ ...e, sub: false })), cut: st.size > len };
   }
   // the transcript grows; the page asks for what came after `from` (a byte offset). Only files in Claude Code's own
   // folder are read; a long one starts with its last 2 MB.
@@ -2060,7 +2122,7 @@ function createAgent(project) {
     const state = x.listening ? 'listening' : r ? (r.asking ? 'asking' : r.waiting ? 'waiting' : 'working') : x.ended || x.elsewhere || x.hookless ? 'ended' : x.waiting ? 'waiting' : 'working';
     // a question of Claude's that waits in its terminal (a menu): read from the screen
     const ask = r?.asking && r.typeable ? await screenAskOf(r.pid) : null;
-    return { entries, next: start + Math.max(end, from0), cut, size, state, shell: !!r?.shell, ask: ask && { id: ask.id, question: ask.question, multi: ask.multi, tabs: ask.tabs, options: ask.options }, context: transcriptInfo(file)?.ctx ?? null };
+    return { entries, next: start + Math.max(end, from0), cut, size, state, shell: !!r?.shell, agents: agentsOf(file), ask: ask && { id: ask.id, question: ask.question, multi: ask.multi, tabs: ask.tabs, options: ask.options }, context: transcriptInfo(file)?.ctx ?? null };
   }
 
   function control({ job: jobId, action }) {
@@ -2116,7 +2178,7 @@ function createAgent(project) {
   const busy = () => jobs.some((j) => j.child && ['starting', 'running'].includes(j.status) && j.kind !== 'chat');
   sttListeners.add(() => changed(0));
   rpListeners.add(() => changed(0));
-  return { view, ask, chat, start, message, control, cancel, brief, jobState, startWatching, stopWatching, busy, onboard, listen, transcript, hook, type, newSession, answer };
+  return { view, ask, chat, start, message, control, cancel, brief, jobState, startWatching, stopWatching, busy, onboard, listen, transcript, hook, type, newSession, answer, agentSteps };
 }
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => { for (const c of children) { try { c.kill('SIGTERM'); } catch { /* gone */ } } process.exit(0); });
@@ -3393,7 +3455,7 @@ async function readBody(req, max = 100_000) {
   for await (const chunk of req) { raw += chunk; if (raw.length > max) throw httpError(413, 'Too large.'); }
   try { return JSON.parse(raw || '{}'); } catch { throw httpError(400, 'Expected JSON.'); }
 }
-const AGENT_ACTIONS = { ask: 'ask', chat: 'chat', start: 'start', message: 'message', control: 'control', cancel: 'cancel', listen: 'listen', transcript: 'transcript', hook: 'hook', type: 'type', 'new-session': 'newSession', answer: 'answer' };
+const AGENT_ACTIONS = { ask: 'ask', chat: 'chat', start: 'start', message: 'message', control: 'control', cancel: 'cancel', listen: 'listen', transcript: 'transcript', hook: 'hook', type: 'type', 'new-session': 'newSession', answer: 'answer', 'agent-steps': 'agentSteps' };
 
 // ---------------------------------------------------------------- phones and tablets (Settings › Phone and tablet)
 // Off by default. On, the dashboard also listens on this computer's addresses in the local network (same port), and

@@ -330,6 +330,21 @@ span.ch-warn { color: var(--st-progress); }
 .agent-panel.term-look .ask-opt, .agent-panel.term-look .ask-text { background: #0d1117; color: #d6dde6; border-color: #30363d; }
 .agent-panel.term-look .ask-opt[aria-pressed="true"] { border-color: #58a6ff; background: #13233b; box-shadow: inset 0 0 0 1px #58a6ff; }
 .agent-panel.term-look .ask-h { color: #f5a35c; } .agent-panel.term-look .ask-card.done .ask-h, .agent-panel.term-look .ask-opt span { color: #8b949e; }
+.agent-card { border: 1px solid var(--line); border-left: 3px solid var(--cf-specified); border-radius: 12px; padding: 10px 12px; background: var(--surface); display: flex; flex-direction: column; gap: 4px; max-width: 92%; font-size: 13px; }
+.agent-card.ac-done { border-left-color: var(--st-complete); } .agent-card.ac-stopped { border-left-color: var(--faint); }
+.ac-h { display: flex; gap: 8px; align-items: center; } .ac-h b { flex: 1; min-width: 0; }
+.ac-st { font-size: 12px; color: var(--muted); display: inline-flex; gap: 5px; align-items: center; white-space: nowrap; }
+.ac-done .ac-st { color: var(--st-complete); font-weight: 600; }
+.ac-meta { font-size: 12px; color: var(--muted); }
+.ac-now { font-family: var(--font-mono); font-size: 12px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-res summary { cursor: pointer; color: var(--ink); } .ac-res .md { margin-top: 6px; }
+.ac-toggle { align-self: flex-start; font-size: 12.5px; }
+.ac-steps { margin: 4px 0 0; padding-left: 4px; list-style: none; display: flex; flex-direction: column; gap: 3px; max-height: 320px; overflow: auto; font-size: 12px; }
+.ac-steps .t { font-family: var(--font-mono); } .ac-steps .e { color: var(--st-blocked); } .ac-steps .u summary { cursor: pointer; color: var(--muted); }
+.ac-chip { white-space: nowrap; }
+.agent-panel.term-look .agent-card { background: #161b22; color: #d6dde6; border-color: #30363d; border-left-color: #58a6ff; }
+.agent-panel.term-look .agent-card.ac-done { border-left-color: #3fb950; } .agent-panel.term-look .ac-meta, .agent-panel.term-look .ac-st { color: #8b949e; }
+.agent-panel.term-look .ac-now, .agent-panel.term-look .ac-res summary { color: #d6dde6; }
 .ask-card { border: 1.5px solid #f08c2e; border-radius: 14px; padding: 12px 14px; background: color-mix(in srgb, #f08c2e 7%, var(--surface)); display: flex; flex-direction: column; gap: 8px; max-width: 92%; }
 .ask-card.done { border-color: var(--line); background: var(--surface); opacity: .9; }
 .ask-h { font-weight: 700; font-size: 13px; color: #c2410c; } .ask-card.done .ask-h { color: var(--muted); }
@@ -3649,6 +3664,7 @@ function termThreadHtml(sid) {
   for (const e of items) {
     if (e.kind === 'result' || (e.kind === 'error' && e.id && cli)) continue;
     if (e.kind === 'user' || e.kind === 'mine') lastAsk = e.kind === 'mine' ? e.m.text : e.text;
+    if (e.kind === 'agent') { flush(); out.push(agentCardHtml(e, (T.agents ?? []).find((a) => a.toolUseId === e.id))); continue; }
     if (e.kind === 'ask') { flush(); const after = items.slice(items.indexOf(e) + 1, items.indexOf(e) + 8); out.push(askDoneHtml(e, results.get(e.id), after.some((x) => x.kind === 'user' && /^\[Answers to your question/.test(x.text)))); continue; }
     if (e.kind === 'note') { flush(); out.push(`<div class="term-note"><span>${esc(e.text)}</span>${e.t ? `<span class="meta">${hhmm(e.t)}</span>` : ''}</div>`); continue; }
     if (cli && e.kind === 'tool') {
@@ -3679,6 +3695,34 @@ function termThreadHtml(sid) {
 // ---- Claude's question (AskUserQuestion). While it waits, the server reads it from the terminal screen (T.ask):
 // a card with its options (one or several), an own answer, the answers to further questions, Send. Answered ones
 // come from the transcript (the question with its answer).
+// ---- the agents a joined session started (also in the background): a card where it started them, with the task,
+// the state (working with its current step, done with its result, stopped), steps and time; its steps on demand
+const agentOpen = new Set(), agentStepsCache = new Map(); // agent id -> { entries, at }
+async function agentStepsLoad(id) {
+  try { const r = await agentPost('agent-steps', { session: ag.term, agent: id }); agentStepsCache.set(id, { entries: r.entries, cut: r.cut, at: Date.now() }); }
+  catch (e) { agentStepsCache.set(id, { err: e.message, entries: [], at: Date.now() }); }
+  renderAgentLive();
+}
+function agentStepsRefresh() { for (const id of agentOpen) { const a = termLog.get(ag.term)?.agents?.find((x) => x.agent === id); if (a?.state === 'working' && Date.now() - (agentStepsCache.get(id)?.at ?? 0) > 3000) agentStepsLoad(id); } }
+const AG_STATE = { working: ['ac-working', 'working'], done: ['ac-done', '✓ done'], stopped: ['ac-stopped', 'stopped'] };
+function agentCardHtml(e, a) {
+  const st = a ? AG_STATE[a.state] : ['ac-working', 'starting'], open = a && agentOpen.has(a.agent), steps = a && agentStepsCache.get(a.agent);
+  const span = a?.start ? dur((a.end ?? Date.now()) - a.start) : '';
+  const list = open ? (steps ? (steps.err ? `<div class="ag-note warn">✕ ${esc(steps.err)}</div>` : `<ol class="ac-steps">${steps.cut ? '<li class="muted">… earlier steps not shown</li>' : ''}${steps.entries.filter((x) => !(x.kind === 'tool' && /^SubagentHandback/.test(x.text))).map((x, i) => x.kind === 'tool' ? `<li class="t">⏺ ${esc(x.text)}</li>`
+      : x.kind === 'text' ? `<li class="x">${esc(x.text.replace(/\s+/g, ' ').slice(0, 400))}</li>` : x.kind === 'error' ? `<li class="e">✕ ${esc(x.text.slice(0, 200))}</li>`
+      : x.kind === 'user' && i === 0 ? `<li class="u"><details><summary>Its task</summary>${esc(x.text.slice(0, 3000))}</details></li>` : '').join('')}</ol>`) : '<div class="ag-note"><span class="ag-spin"></span>Loading its steps…</div>') : '';
+  return `<div class="agent-card ${st[0]}"><div class="ac-h"><span aria-hidden="true">🤖</span><b>${esc(e.text)}</b><span class="ac-st">${a?.state === 'working' || !a ? '<span class="ag-spin"></span>' : ''}${st[1]}</span></div>
+    <div class="ac-meta">${[e.type || a?.type, e.bg || a?.background ? 'in the background' : '', a ? `${a.steps} step${a.steps === 1 ? '' : 's'}` : '', span].filter(Boolean).map(esc).join(' · ')}</div>
+    ${a?.state === 'working' && a.last ? `<div class="ac-now">${esc(a.last)}</div>` : ''}
+    ${a?.result ? `<details class="ac-res"><summary>${esc(a.result.replace(/[#*`>]+/g, '').replace(/\s+/g, ' ').slice(0, 140))}${a.result.length > 140 ? '…' : ''}</summary><div class="md">${md(a.result)}</div></details>` : ''}
+    ${a ? `<button class="link ac-toggle" type="button" data-sa-steps="${esc(a.agent)}" aria-expanded="${open}">${open ? 'Hide its steps ▴' : 'Its steps ▾'}</button>` : ''}${list}</div>`;
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest?.('[data-sa-steps]'); if (!b) return;
+  const id = b.dataset.saSteps;
+  if (agentOpen.has(id)) agentOpen.delete(id); else { agentOpen.add(id); agentStepsLoad(id); }
+  renderAgentLive();
+});
 const askSel = new Map(); // id -> { picks: Set, text, rest }
 const askState = new Map(); // id -> { busy, err, sent }
 const askOf = (id) => askSel.get(id) ?? askSel.set(id, { picks: new Set(), text: '', rest: '' }).get(id);
@@ -3754,11 +3798,11 @@ async function termPoll(force) {
     const fresh = !termLog.has(sid) || r.entries.length || T.err;
     T.entries.push(...r.entries); if (T.entries.length > 4000) T.entries.splice(0, T.entries.length - 4000);
     const stateChanged = T.state !== r.state || T.ctx?.used !== r.context?.used;
-    T.next = r.next; T.cut ||= r.cut; T.err = ''; T.state = r.state; T.shell = !!r.shell; const askChanged = (T.ask?.id ?? null) !== (r.ask?.id ?? null); T.ask = r.ask ?? null; if (askChanged && r.ask) { askState.delete(r.ask.id); askSel.delete(r.ask.id); } // asked anew (the same question again): a fresh card if (r.context) T.ctx = r.context;
+    T.next = r.next; T.cut ||= r.cut; T.err = ''; T.state = r.state; T.shell = !!r.shell; const askChanged = (T.ask?.id ?? null) !== (r.ask?.id ?? null); T.ask = r.ask ?? null; const agSig = JSON.stringify((r.agents ?? []).map((a) => [a.agent, a.state, a.steps, a.last])), agentsChanged = agSig !== T.agSig; T.agSig = agSig; T.agents = r.agents ?? []; if (agentsChanged) agentStepsRefresh(); if (askChanged && r.ask) { askState.delete(r.ask.id); askSel.delete(r.ask.id); } // asked anew (the same question again): a fresh card if (r.context) T.ctx = r.context;
     if (r.state === 'working') { T.waitStart ||= T.sentAt || Date.now(); T.sentAt = 0; }
     else if (!T.sentAt) T.waitStart = 0; // done (or not started yet): the wait is over
     termLog.set(sid, T);
-    if (fresh || force || stateChanged || askChanged || T.sentAt) renderAgentLive();
+    if (fresh || force || stateChanged || askChanged || agentsChanged || T.sentAt) renderAgentLive();
   } catch (e) { T.err = e.message; termLog.set(sid, T); renderAgentLive(); }
   finally { termPolling = false; }
 }
@@ -4357,7 +4401,8 @@ function barHtml(c) {
     const state = x2.listening ? '<span class="dot on"></span>Listening: waiting for your message' : x2.asking ? '<span class="dot ask"></span>Needs you: it asks something in its terminal' : x2.waiting ? '<span class="dot"></span>Waiting for input in the terminal' : '<span class="dot on"></span>Working';
     // the context gauge; nearly full and waiting at its prompt: "Compact now" types /compact into its terminal
     const cx = termLog.get(x2.sessionId)?.ctx ?? x2.ctx;
-    const gauge = cx ? ` · ${ctxHtml(cx)}${ag.termWrite && x2.typeable && x2.waiting && !x2.asking && ctxPct(cx) >= 70 ? ` <button class="link" type="button" data-ctx-compact title="Types /compact into its terminal: Claude Code summarizes the conversation so far and continues with that, which frees the context">Compact now</button>` : ''}` : '';
+    const runningAgents = (termLog.get(x2.sessionId)?.agents ?? []).filter((a) => a.state === 'working').length;
+    const gauge = (runningAgents ? ` · <span class="ac-chip" title="Agents this session started that are still working">🤖 ${runningAgents} working</span>` : '') + (cx ? ` · ${ctxHtml(cx)}${ag.termWrite && x2.typeable && x2.waiting && !x2.asking && ctxPct(cx) >= 70 ? ` <button class="link" type="button" data-ctx-compact title="Types /compact into its terminal: Claude Code summarizes the conversation so far and continues with that, which frees the context">Compact now</button>` : ''}` : '');
     // a session in a folder that is not followed: the quick path to make it a project, next to "Read only"
     const quickAdopt = xo && ag.termWrite ? `<button class="btn" type="button" data-ag-adopt="${xo.openspec ? 'follow' : 'onboard'}" data-quick title="${xo.openspec ? 'It has an openspec/ folder: follow it as a project and continue this session there' : 'Set up OpenSpec in this folder (in the background, nothing committed) and follow it'}">${xo.openspec ? 'Follow now' : 'Onboard as project'}</button>` : '';
     // writing: the details fold into one line, so the conversation gets the panel ("Details" brings them back)

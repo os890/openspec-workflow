@@ -372,6 +372,12 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     panel, filling the frame; no header, no close or maximize) and `term=<session>&write=1` on the session's project
     page (or the overview); each half polls, joins and writes on its own. The left one is the joined session, the
     right one the most recent other running session.
+  - **Agents of a session** (subagents): an `Agent`/`Task` call in the transcript becomes a card; its state comes
+    from `<transcript>/subagents/agent-<id>.jsonl` and `.meta.json` (task, agent type, `requestShape`
+    background, `toolUseId` to match the call, `finished`): done when `finished` is set, the agent called
+    `SubagentHandback` (its report, shown as the result) or its last answer ended the turn; working while it wrote in
+    the last 10 minutes; else stopped. Steps are its unique tool call ids; the transcript response carries `agents`,
+    `POST /api/agent/agent-steps` returns one agent's steps (its last 1 MB).
   - **Claude's questions** (AskUserQuestion): while the menu is open, Claude Code has not written the question to the
     transcript yet, so the server reads it from the session's Terminal tab (the question above the numbered options,
     their descriptions, `[ ]` for several choices, the tabs of further questions, the number of "Chat about this")
