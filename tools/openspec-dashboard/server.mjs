@@ -1545,6 +1545,11 @@ function createAgent(project) {
   }
   function transcriptEntries(line) {
     let m; try { m = JSON.parse(line); } catch { return []; }
+    // a message typed while the session works: Claude Code takes it in mid-turn and keeps it as an attachment
+    if (m.type === 'attachment' && m.attachment?.type === 'queued_command' && m.attachment.prompt) {
+      const x = cleanUser(m.attachment.prompt);
+      return x ? [{ t: Date.parse(m.timestamp) || null, kind: 'user', text: x, sub: !!m.isSidechain }] : [];
+    }
     if (m.isMeta || !m.message) return [];
     const t = Date.parse(m.timestamp) || null, sub = !!m.isSidechain;
     const c = m.message.content;

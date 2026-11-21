@@ -201,7 +201,7 @@ What makes it more than a status page:
 - **Quick replies in the chat.** React to an answer with one click (👍 ✅ 🙏 🎉 💡; 🌿 accepts a proposal but on a
   new branch), ask for it again in simpler
   words (🔁), as a summary (📝) or as a table (📊), have it tried again (🔄), or quote it (↩, also just a selected
-  part). Claude gets a short
+  part); 👀 under the input box asks a working session for its current status. Claude gets a short
   reference to the answer, so it knows what you mean without the answer being sent again; the chat stays quiet
   with just a faint ⋯ until you hover an answer.
 - **Voice and rephrasing, locally.** Dictate into any text box with a local speech-to-text container, and let a

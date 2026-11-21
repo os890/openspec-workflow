@@ -1550,6 +1550,10 @@ body.board-max { overflow: hidden; }
 .ag-route { padding: 0 var(--agp) 12px; }
 .ag-tools { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .ag-tools [data-ag-send] { margin-left: auto; }
+.qk { display: inline-flex; align-items: center; gap: 4px; }
+.qk-bar { display: inline-flex; gap: 3px; }
+.qk-bar[hidden] { display: none; }
+.qk-more { opacity: .9; font-size: 17px; }
 .ag-voice { display: inline-flex; align-items: center; gap: 4px; flex: none; }
 .ag-voice[hidden] { display: none !important; }
 .ag-mic { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; }
@@ -3340,7 +3344,7 @@ function termThreadHtml(sid) {
     if (e.kind === 'tool' || e.kind === 'error') { steps.push(e); continue; }
     flush();
     if (e.kind === 'mine') out.push(`<div class="msg me"><span class="ic-chip">from the dashboard</span>${esc(e.m.text)}<span class="meta">${hhmm(e.m.t)} · ${e.m.state === 'queued' ? `${waitingNow ? 'queued: arrives with the next prompt typed in its terminal' : 'queued: arrives with its next step'}${e.m.state === 'queued' ? ` · <button class="link" type="button" data-ag-cancel="${esc(e.m.id)}" ${e.folder ? `data-folder="${esc(e.folder)}"` : ''}>cancel</button>` : ''}` : 'delivered ' + hhmm(e.m.deliveredAt)}</span></div>`);
-    else if (e.kind === 'user' && (REACT_RE.test(e.text) || QUOTE_RE.test(e.text))) out.push(userMsgHtml(e).replace('<div class="msg me', '<div class="msg me term-user'));
+    else if (e.kind === 'user' && (REACT_RE.test(e.text) || QUOTE_RE.test(e.text) || quickOf(e.text))) out.push(userMsgHtml(e).replace('<div class="msg me', '<div class="msg me term-user'));
     else if (e.kind === 'user') out.push(`<div class="msg me term-user">${typedHere.has(e.text.trim()) ? '<span class="ic-chip">typed from the dashboard</span>' : ''}${esc(e.text)}<span class="meta">${e.t ? hhmm(e.t) : ''} · in the terminal</span></div>`);
     else {
       const id = `term:${sid}:${e.t}:${n++}`;
@@ -3482,7 +3486,7 @@ function buildChatHtml(s, c, ph) {
     <div class="ag-compose">
       <div data-quote-slot>${quoteChipHtml()}</div>
       <textarea id="ag-text" rows="2" placeholder="${esc(ph)}">${esc(ag.drafts['chat-' + ag.convo] ?? '')}</textarea>
-      <div class="ag-tools">${micHtml()}${rephraseBtnHtml()}<button class="btn primary" type="button" data-ag-send>Send</button></div>
+      <div class="ag-tools">${micHtml()}${rephraseBtnHtml()}${quickHtml()}<button class="btn primary" type="button" data-ag-send>Send</button></div>
     </div>
     <div class="ag-note ag-route" id="ag-route"></div>`;
 }
@@ -3525,6 +3529,18 @@ const REQUESTS = [['🔁', 'Please say this again in other words, simpler and cl
   ['📊', 'Please turn this into an overview table (Markdown): one row per item or point, with the columns that fit the content, and nothing important left out.', 'Table'],
   ['🔄', 'Please try this again: run it once more, I changed something in the meantime. If it fails again, tell me what is different this time.', 'Try again']];
 const rx = { msgs: new Map(), quote: null, openId: null };
+// quick messages under the input box (⋯): a whole message with one click, about no answer in particular
+const QUICK = [['👀', 'What is the current status of your work? Briefly: what is done, what you are doing right now, and what comes next.', 'Status']];
+const quick = { open: false };
+const quickHtml = () => `<span class="qk"><button type="button" class="rx-more qk-more" data-qk-more aria-expanded="${quick.open}" title="Quick messages" aria-label="Quick messages">⋯</button><span class="qk-bar" ${quick.open ? '' : 'hidden'}>${QUICK.map(([e, say, label]) => `<button type="button" class="rx" data-qk="${e}" title="${esc(`${label}: sends "${e} ${say}"`)}" aria-label="${esc(label)}">${e}</button>`).join('')}</span></span>`;
+document.addEventListener('click', (e) => {
+  const more = e.target.closest?.('[data-qk-more]'), qk = e.target.closest?.('[data-qk]');
+  if (!more && !qk) return;
+  e.stopPropagation();
+  if (more) { quick.open = !quick.open; for (const el of document.querySelectorAll('.qk')) el.outerHTML = quickHtml(); return; }
+  const q = QUICK.find(([x]) => x === qk.dataset.qk);
+  if (q) agentSend(false, `${q[0]} ${q[1]}`);
+}, true);
 const plainOf = (md) => String(md).replace(/```[\s\S]*?```/g, ' ').replace(/`([^`]*)`/g, '$1').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[#>*_|]+/g, ' ').replace(/\s+/g, ' ').trim();
 const clip = (t, n) => (t.length > n ? t.slice(0, n - 1).replace(/\s+\S*$/, '') + '…' : t).replace(/"/g, '”');
 // the first sentence, at most 120 characters: short, and the same every time for the same message
@@ -3542,7 +3558,10 @@ function reactionsIn(jobs) {
   }
   return m;
 }
+const quickOf = (text) => QUICK.find(([e, say]) => String(text).trim() === `${e} ${say}`);
 function userMsgHtml(l) {
+  const qk = quickOf(l.text); // a quick message (⋯ under the input box): short, the whole text as its tooltip
+  if (qk) return `<div class="msg me rx-sent" title="${esc(l.text)}"><span>${qk[0]} ${esc(qk[2])}</span><span class="meta">${hhmm(l.t)}</span></div>`;
   // attachments (new-project brainstorm): a chip with the file names; the paths stay out of sight
   const att = l.text.match(/^\[Attached files \([^\n]*\n((?:- [^\n]*\n)*)\]\n([\s\S]*)$/);
   if (att) {
