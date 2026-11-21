@@ -77,8 +77,9 @@ if (AGENT && !['127.0.0.1', 'localhost', '::1'].includes(HOST)) {
 const STATE_DIR = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state'), 'openspec-dashboard');
 // Local models chosen in the dashboard's settings dialog (⚙); they win over the command-line defaults once saved.
 const SETTINGS_FILE = path.join(STATE_DIR, 'settings.json');
-const settings = { rephrase: { provider: 'auto' }, stt: { provider: 'auto' } };
-try { const f = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); Object.assign(settings.rephrase, f.rephrase); Object.assign(settings.stt, f.stt); } catch { /* defaults */ }
+const settings = { rephrase: { provider: 'auto' }, stt: { provider: 'auto' }, podman: { autostart: [] } };
+try { const f = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); Object.assign(settings.rephrase, f.rephrase); Object.assign(settings.stt, f.stt); Object.assign(settings.podman, f.podman); } catch { /* defaults */ }
+const writeSettings = () => { fs.mkdirSync(STATE_DIR, { recursive: true }); fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2) + '\n'); };
 const WORKSPACE_EXCLUDES = new Set(['.git', 'target', 'node_modules', 'node', '.angular', 'dist', 'coverage',
   '.idea', '.vscode', 'test-results', 'playwright-report', '.mvn', '.gradle', 'build', '.venv', '__pycache__']);
 
@@ -688,6 +689,7 @@ function createProject(root, id, historyFile, onChange) {
     await walk(OPENSPEC, async (p) => { const st = await statOf(p); if (st) { n++; newest = Math.max(newest, st.mtimeMs); size += st.size; } }, { maxFiles: 20000 });
     return `${n}:${newest}:${size}`;
   }
+  function cliRetry() { cli.nextTry = 0; cliSig = null; cliDebounced(); } // after the container engine came back
   function cliDebounced() {
     clearTimeout(cliTimer);
     cliTimer = setTimeout(async () => {
@@ -749,7 +751,7 @@ function createProject(root, id, historyFile, onChange) {
     return mergeTimeline(g, history.events, project.state?.changes ?? []);
   }
 
-  return Object.assign(project, { timeline, publish, schedule, cliDebounced, refreshCli, scanWorkspace, summary, start, openspecDir: OPENSPEC });
+  return Object.assign(project, { timeline, publish, schedule, cliDebounced, cliRetry, refreshCli, scanWorkspace, summary, start, openspecDir: OPENSPEC });
 }
 
 // ---------------------------------------------------------------- agent (opt-in with --agent)
@@ -1493,7 +1495,7 @@ function startLlm() {
       const line = buf.slice(0, i); buf = buf.slice(i + 1);
       let m; try { m = JSON.parse(line); } catch { continue; }
       if (m.event === 'ready') { me.state = 'ready'; me.onReady(); for (const fn of rpListeners) fn(); }
-      else if (m.event === 'exit' || m.event === 'rejected') err = m.error ?? `the model server ended (${m.code})`;
+      else if (m.event === 'exit' || m.event === 'rejected') me.adapterEnd = m.error ?? `the model server ended${m.code != null ? ` (exit ${m.code})` : ''}${m.signal ? ` (${m.signal})` : ''}`;
       const p = m.id != null && me.pending.get(m.id);
       if (!p) continue;
       if (m.delta) p.text += m.delta;
@@ -1508,12 +1510,16 @@ function startLlm() {
     me.ended = true;
     children.delete(child);
     // say why: killed while loading is almost always memory, often another model container in the same VM
-    let why = err.trim() ? `: ${err.trim().split('\n').at(-1)}` : '.';
-    if (me.state === 'loading' && (code === 137 || code === 143 || /killed|oom|memory/i.test(err))) {
+    const lastErr = err.trim().split('\n').filter((l) => !/^\d+\.\d+\.\d+\.\d+ [IW] /.test(l)).at(-1); // skip llama.cpp's info/warning lines
+    const detail = me.adapterEnd || lastErr || (code != null ? `exit ${code}` : null);
+    let why = detail ? `: ${detail}` : '.';
+    if (me.state === 'loading' && !me.stopping) {
+      // ended while loading: almost always memory; say how much it needs and what else runs in the same VM
       const others = (await run(rp.engine, ['ps', '--format', '{{.Names}}']).catch(() => '')).split('\n').filter((n) => n && n !== `openspec-dashboard-llm-${process.pid}`);
       const llms = others.filter((n) => /llm/i.test(n));
-      why = ` while loading the model (exit ${code}), most likely out of memory: it needs about ${(mem / 1024).toFixed(1)} GB in the ${rp.engine} VM.`
-        + (llms.length ? ` Another model container is running: ${llms.join(', ')}; it stops after 10 idle minutes, or stop it yourself.` : others.length ? ` Other containers running: ${others.slice(0, 4).join(', ')}.` : '');
+      const free = rp.engine === 'podman' && process.platform !== 'linux' ? Number((await run('podman', ['machine', 'ssh', 'free -m | sed -n 2p'], { timeout: 15000 }).catch(() => '')).trim().split(/\s+/)[6]) || null : null;
+      why = ` while loading the model${detail ? ` (${detail})` : ''}. It needs about ${(mem / 1024).toFixed(1)} GB in the ${rp.engine} VM${free ? `, which has ${(free / 1024).toFixed(1)} GB available now` : ''}.`
+        + (llms.length ? ` Another model container is running: ${llms.join(', ')}; it stops after 10 idle minutes, or stop it in ⚙ › Podman.` : others.length ? ` Other containers running: ${others.slice(0, 4).join(', ')}${others.length > 4 ? ' …' : ''}.` : '');
     }
     const e = new Error(`The model container ended${why}`);
     me.onFail(e);
@@ -1529,6 +1535,7 @@ function startLlm() {
 }
 function stopLlm() {
   if (!llm) return Promise.resolve();
+  llm.stopping = true;
   const { child } = llm;
   return new Promise((resolve) => { child.once('close', resolve); child.stdin.end(); setTimeout(() => child.kill('SIGTERM'), 10000); });
 }
@@ -1586,12 +1593,97 @@ async function saveSettings(body) {
   const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
   settings.rephrase = { provider: r.provider ?? 'auto', image: str(r.image), model: str(r.model), url: str(r.url), urlModel: str(r.urlModel) };
   settings.stt = { provider: t.provider ?? 'auto', image: str(t.image) };
-  fs.mkdirSync(STATE_DIR, { recursive: true });
-  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2) + '\n');
+  writeSettings();
   await stopLlm(); // a different image or model starts fresh on the next use
   await Promise.all([detectRephrase(), USE_STT ? detectStt() : null]);
   return settingsView(false);
 }
+// ---------------------------------------------------------------- podman management (with --agent)
+// What the container engine is doing (the VM's CPUs, memory and disk, the containers with their memory), restarting
+// the Podman VM (macOS/Windows) and which containers to start again after that. Everything runs one action at a time;
+// a restart is an operation with a log the dialog polls.
+const pm = { op: null };
+const jsonOf = (s, fallback) => { try { return JSON.parse(s); } catch { return fallback; } };
+async function podmanView() {
+  const engine = await findEngine().catch(() => null);
+  if (engine !== 'podman') return { available: false, reason: engine ? `The container engine is ${engine}; this panel manages Podman.` : 'Podman was not found.', op: pm.op };
+  const vmBased = process.platform !== 'linux';
+  const t = { timeout: 15000 };
+  const [inspect, ps, stats, df, inside] = await Promise.all([
+    vmBased ? run('podman', ['machine', 'inspect'], t).catch(() => null) : null,
+    run('podman', ['ps', '-a', '--format', 'json'], t).catch(() => null),
+    run('podman', ['stats', '--no-stream', '--format', 'json'], t).catch(() => null),
+    run('podman', ['system', 'df', '--format', 'json'], t).catch(() => null),
+    vmBased ? run('podman', ['machine', 'ssh', 'free -m | sed -n 2p; cat /proc/loadavg; df -B1 / | tail -1'], t).catch(() => null) : null,
+  ]);
+  const m = jsonOf(inspect, [])?.[0];
+  const lines = (inside ?? '').trim().split('\n');
+  const mem = lines[0]?.split(/\s+/), load = lines[1]?.split(/\s+/), disk = lines[2]?.split(/\s+/);
+  const usage = Object.fromEntries((jsonOf(stats, []) ?? []).map((x) => [x.name, { mem: x.mem_usage?.split(' / ')[0] ?? null, cpu: x.cpu_percent ?? null }]));
+  const auto = new Set(settings.podman.autostart);
+  const containers = (jsonOf(ps, []) ?? []).map((c) => {
+    const name = c.Names?.[0] ?? c.Id?.slice(0, 12);
+    return { name, image: c.Image, state: c.State, status: c.Status, autoRemove: !!c.AutoRemove, created: (c.Created ?? 0) * 1000, autostart: auto.has(name), ...(usage[name] ?? {}) };
+  }).sort((a, b) => (a.state === 'running' ? 0 : 1) - (b.state === 'running' ? 0 : 1) || b.created - a.created);
+  const dfOf = (type) => (jsonOf(df, []) ?? []).find((x) => x.Type === type);
+  return {
+    available: true, vmBased,
+    vm: m ? { name: m.Name, state: m.State, cpus: m.Resources?.CPUs, memoryMb: m.Resources?.Memory, diskGb: m.Resources?.DiskSize, lastUp: m.LastUp } : null,
+    inside: mem ? { totalMb: +mem[1], usedMb: +mem[2], availableMb: +mem[6], load1: +load?.[0], diskUsed: +disk?.[2], diskSize: +disk?.[1] } : null,
+    images: dfOf('Images') ? { count: dfOf('Images').TotalCount, size: dfOf('Images').Size, reclaimable: dfOf('Images').Reclaimable } : null,
+    containers, autostart: [...auto], op: pm.op,
+  };
+}
+function podmanOp(kind, steps) {
+  if (pm.op?.state === 'running') throw httpError(409, `${pm.op.kind} is running already.`);
+  const op = { kind, state: 'running', startedAt: Date.now(), log: [] };
+  pm.op = op;
+  const say = (text) => op.log.push({ t: Date.now(), text });
+  (async () => {
+    try { await steps(say); op.state = 'done'; }
+    catch (e) { op.state = 'failed'; say(`✕ ${e.message.split('\n')[0]}`); }
+    op.endedAt = Date.now();
+  })();
+  return op;
+}
+async function podmanAction(body) {
+  const { action, name } = body;
+  const engine = await findEngine().catch(() => null);
+  if (engine !== 'podman') throw httpError(409, 'Podman was not found.');
+  const exists = async (n) => (jsonOf(await run('podman', ['ps', '-a', '--format', 'json']), []) ?? []).some((c) => c.Names?.includes(n));
+  if (action === 'autostart') {
+    const names = Array.isArray(body.names) ? body.names.filter((n) => typeof n === 'string' && /^[\w.-]+$/.test(n)) : [];
+    settings.podman.autostart = [...new Set(names)];
+    writeSettings();
+    return { autostart: settings.podman.autostart };
+  }
+  if (action === 'start' || action === 'stop') {
+    if (!/^[\w.-]+$/.test(name ?? '') || !(await exists(name))) throw httpError(404, `No container ${name}.`);
+    await run('podman', [action, name], { timeout: 120000 });
+    return { ok: true };
+  }
+  if (action === 'restart') {
+    if (process.platform === 'linux') throw httpError(409, 'On Linux Podman runs without a VM; there is nothing to restart.');
+    return { op: podmanOp('Restart of the Podman VM', async (say) => {
+      say('Stopping the model container of this dashboard…');
+      await stopLlm();
+      say('Stopping the VM (every container in it stops)…');
+      await run('podman', ['machine', 'stop'], { timeout: 240000 });
+      say('Starting the VM…');
+      await run('podman', ['machine', 'start'], { timeout: 240000 });
+      for (const n of settings.podman.autostart) {
+        if (!(await exists(n))) { say(`${n}: not there any more (removed when it stopped), skipped`); continue; }
+        await run('podman', ['start', n], { timeout: 120000 }).then(() => say(`${n}: started`), (e) => say(`${n}: could not be started: ${e.message.split('\n')[0]}`));
+      }
+      say('Checking the local models and the OpenSpec CLI again…');
+      await Promise.all([USE_STT ? detectStt() : null, USE_RP ? detectRephrase() : null]);
+      for (const p of projects) p.cliRetry();
+      say('✓ Done.');
+    }) };
+  }
+  throw httpError(400, 'Unknown action.');
+}
+
 // warm-up: start the model container now, so the first suggestion does not wait for the model to load
 function warmRephrase() {
   if (!rp.available || rp.kind !== 'container') throw httpError(409, 'Only a container model needs loading.');
@@ -2034,6 +2126,17 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
       const html = await fsp.readFile(INDEX, 'utf8');
       return res.end(AGENT ? html.replace('<meta name="osd-agent" content="">', `<meta name="osd-agent" content="${TOKEN}">`) : html);
+    }
+    if (url.pathname === '/api/podman') {
+      if (!AGENT) { res.writeHead(404); return res.end('start the dashboard with --agent'); }
+      const origin = req.headers.origin;
+      if (req.headers['x-osd-token'] !== TOKEN || (origin && !OWN_HOSTS.has(new URL(origin).host))) { res.writeHead(403); return res.end('forbidden'); }
+      try {
+        return json(res, req.method === 'GET' ? await podmanView() : await podmanAction(await readBody(req)));
+      } catch (e) {
+        res.writeHead(e.status ?? 500, { 'content-type': 'application/json' });
+        return res.end(JSON.stringify({ error: e.message }));
+      }
     }
     if (url.pathname === '/api/settings') {
       if (!AGENT) { res.writeHead(404); return res.end('start the dashboard with --agent'); }

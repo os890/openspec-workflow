@@ -206,6 +206,10 @@ Rephrase a container with its image and model, a local server such as Ollama or 
 Apple's on-device model on macOS 26 with Apple Intelligence, or off; for speech-to-text the whisper image, or off.
 **Test** tries the setting with a sample sentence, **Load now** starts a container model before you need it.
 
+The **Podman** tab of the same dialog shows how the Podman VM is doing (memory, CPU load, disk) and its containers.
+When it is stuck or full, **Restart the VM** stops and starts it; the containers you checked as "start after restart"
+come back, the others stay stopped.
+
 Every question, chat message and session is a normal Claude Code run and counts towards your plan. Details:
 [dashboard README](../tools/openspec-dashboard/README.md#agent-panel-optional).
 

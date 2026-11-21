@@ -234,8 +234,16 @@ are in use and lets you choose:
 - **Speech-to-text**: the whisper image, or off.
 
 The choice is saved in `$XDG_STATE_HOME/openspec-dashboard/settings.json`, applies at once and overrides the
-command-line options. If a model container ends while loading, the panel says why, e.g. that it ran out of memory
-because another model container is running in the same VM.
+command-line options. If a model container ends while loading, the panel says why: how much memory the model needs,
+how much the VM has available, and which other model container is running.
+
+**Podman (⚙ › Podman).** Local models, speech-to-text and a containerised OpenSpec CLI all share one Podman VM on
+macOS and Windows, so the second tab shows how it is doing: the VM's memory, CPU load and disk (with images and how
+much of it is reclaimable), and its containers with their state and memory, the running ones first. Containers can
+be started and stopped there. **Restart the VM** stops it (every container in it stops) and starts it again, then
+starts the containers checked as "start after restart" and checks the local models and the OpenSpec CLI again; the
+dialog shows each step. Containers started with `--rm` (like the dashboard's model container) disappear when they
+stop and cannot be checked. The checked containers are saved in the same `settings.json`.
 
 It runs the `claude` command (Claude Code) in the project folder, so it uses Claude Code's own login and counts
 towards the same plan or account as your other sessions; there is no separate key. Each question and session is

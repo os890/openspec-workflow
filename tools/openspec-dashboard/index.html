@@ -317,7 +317,7 @@ span.ch-warn { color: var(--st-progress); }
 .ch-tip .h { font-weight: 700; }
 .board.max .charts { padding-bottom: 8px; }
 /* settings dialog: local models */
-.set-dialog { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); padding: 18px 22px; box-shadow: var(--shadow-hover); }
+.set-dialog { width: min(780px, calc(100vw - 32px)); max-height: calc(100vh - 48px); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); padding: 18px 22px; box-shadow: var(--shadow-hover); }
 .set-dialog::backdrop { background: rgba(0, 0, 0, .35); }
 .set-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
 .set-head h2 { margin: 0; font-size: 19px; margin-right: auto; }
@@ -338,6 +338,23 @@ span.ch-warn { color: var(--st-progress); }
 .set-test { margin: 10px 0 4px; font-size: 13px; background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
 .set-dialog .ag-note { margin-top: 10px; }
 .ag-gear { font-size: 16px; text-decoration: none; padding: 0 4px; color: var(--muted); } .ag-gear:hover { color: var(--accent); }
+.set-tabs { display: flex; gap: 4px; margin: 4px 0 8px; }
+.pm-grid { display: grid; grid-template-columns: 96px 1fr; gap: 6px 12px; font-size: 13px; align-items: center; }
+.pm-grid > span:nth-child(odd) { color: var(--muted); font-size: 12px; }
+.pm-bar { display: inline-block; width: 120px; height: 7px; border-radius: 999px; background: var(--surface-2); overflow: hidden; vertical-align: middle; margin-right: 6px; }
+.pm-bar > span { display: block; height: 100%; }
+.pm-log { font-size: 12.5px; background: var(--surface-2); border-radius: 8px; padding: 8px 10px; margin-top: 8px; display: flex; flex-direction: column; gap: 2px; }
+.pm-log.failed { color: var(--st-blocked); }
+.pm-table { max-height: 300px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.pm-table table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.pm-table th { position: sticky; top: 0; background: var(--surface); text-align: left; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.pm-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.pm-table tr.on td { background: color-mix(in srgb, var(--st-complete) 6%, transparent); }
+.pm-table .btn { padding: 2px 10px; font-size: 12px; }
+.pm-img { font-size: 11px; color: var(--faint); font-family: var(--font-mono); overflow-wrap: anywhere; }
+.pm-state.running { color: var(--st-complete); font-weight: 700; } .pm-state.exited { color: var(--muted); }
+.pm-all { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--muted); }
+.set-sec h3 { display: flex; align-items: center; gap: 8px; }
 /* backlog: new tickets and ideas */
 .bl-tools { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
 .nt-done { font-size: 13px; display: inline-flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 6px 12px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--st-complete) 12%, var(--surface)); }
@@ -1465,7 +1482,7 @@ body.ag-max { overflow: hidden; }
       </select>
       <button class="btn" id="agent-btn" type="button" data-chat-btn aria-controls="agent" hidden>Chat</button>
       <button class="btn" id="theme" type="button" aria-label="Toggle light or dark theme">◐</button>
-      <button class="btn" id="settings-btn" type="button" aria-label="Local models" title="Local models: rephrasing and speech-to-text" hidden>⚙</button>
+      <button class="btn" id="settings-btn" type="button" aria-label="Settings" title="Settings: local models and Podman" hidden>⚙</button>
     </div>
   </div>
 </header>
@@ -3301,7 +3318,8 @@ document.addEventListener('click', (e) => {
 // ------------------------------------------------------------ settings: the local models (with --agent)
 // Which model rephrases drafts (a container, a local OpenAI-compatible server such as Ollama or LM Studio, Apple's
 // on-device model on macOS 26, or none) and which image transcribes speech. Saved by the server; applies at once.
-const st = { view: null, busy: false, note: '', test: null };
+const st = { view: null, busy: false, note: '', test: null, tab: 'models', pm: null, pmNote: '', pmTimer: null, pmAll: false };
+const setTabs = () => `<div class="set-tabs" role="tablist"><button type="button" class="tab" role="tab" data-set-tab="models" aria-selected="${st.tab === 'models'}">Local models</button><button type="button" class="tab" role="tab" data-set-tab="podman" aria-selected="${st.tab === 'podman'}">Podman</button></div>`;
 async function settingsFetch(method, body, fresh) {
   const r = await fetch('/api/settings' + (fresh ? '?fresh' : ''), { method, headers: { 'content-type': 'application/json', 'x-osd-token': AGENT_TOKEN }, body: body ? JSON.stringify(body) : undefined });
   const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
@@ -3311,6 +3329,7 @@ async function settingsFetch(method, body, fresh) {
 async function openSettings(fresh) {
   const dlg = $('settings');
   if (!dlg.open) dlg.showModal();
+  if (st.tab === 'podman') return openPodman();
   st.note = 'Looking for local models…'; renderSettings();
   try { st.view = await settingsFetch('GET', null, fresh); st.note = ''; } catch (e) { st.note = '✕ ' + e.message; }
   renderSettings();
@@ -3318,7 +3337,8 @@ async function openSettings(fresh) {
 function renderSettings() {
   const v = st.view;
   const dlg = $('settings');
-  if (!v) { dlg.innerHTML = `<div class="set-head"><h2 id="set-title">Local models</h2><button class="link" type="button" data-set-close>Close ✕</button></div><div class="ag-note">${esc(st.note)}</div>`; return; }
+  if (st.tab === 'podman') return renderPodman();
+  if (!v) { dlg.innerHTML = `<div class="set-head"><h2 id="set-title">Settings</h2><button class="link" type="button" data-set-close>Close ✕</button></div>${setTabs()}<div class="ag-note">${esc(st.note)}</div>`; return; }
   const r = v.settings.rephrase, o = v.options;
   const radio = (val, label, desc, disabled = false) => `<label class="set-opt ${disabled ? 'off' : ''}"><input type="radio" name="rp" value="${val}" ${r.provider === val ? 'checked' : ''} ${disabled ? 'disabled' : ''}><span><b>${label}</b><span class="set-desc">${desc}</span></span></label>`;
   const opt = (val, label, cur) => `<option value="${esc(val)}" ${val === (cur ?? '') ? 'selected' : ''}>${esc(label)}</option>`;
@@ -3327,7 +3347,8 @@ function renderSettings() {
     ? `✓ ${now.kind === 'container' ? `Container <code>${esc(now.image)}</code> with <code>${esc(now.model)}</code> · ${esc(now.state)}` : now.kind === 'url' ? `Server <code>${esc(now.url)}</code>${now.model ? ` · model <code>${esc(now.model)}</code>` : ''}` : 'Apple on-device model'}`
     : `✕ ${esc(now.error ?? 'Not available.')}`;
   dlg.innerHTML = `
-    <div class="set-head"><h2 id="set-title">Local models</h2><button class="link" type="button" data-set-refresh title="Look for images and models again">Look again</button><button class="link" type="button" data-set-close>Close ✕</button></div>
+    <div class="set-head"><h2 id="set-title">Settings</h2><button class="link" type="button" data-set-refresh title="Look for images and models again">Look again</button><button class="link" type="button" data-set-close>Close ✕</button></div>
+    ${setTabs()}
     <section class="set-sec">
       <h3>Rephrase</h3>
       <div class="set-status ${now.available ? 'ok' : 'bad'}">${status}</div>
@@ -3375,10 +3396,84 @@ function settingsBody() {
     stt: { provider: dlg.querySelector('[data-set="sttOff"]')?.checked ? 'off' : 'auto', image: val('sttImage') },
   };
 }
-$('settings').addEventListener('change', (e) => { if (e.target.name === 'rp') syncSettingsForm(); });
+$('settings').addEventListener('change', (e) => {
+  if (e.target.name === 'rp') syncSettingsForm();
+  if (e.target.matches('[data-pm-auto]')) pmSaveAutostart();
+  if (e.target.matches('[data-pm-all]')) { st.pmAll = e.target.checked; renderPodman(); }
+});
+$('settings').addEventListener('close', () => { clearTimeout(st.pmTimer); });
+
+// ---- the Podman tab: usage of the VM, restart it, which containers start again afterwards
+const pmFetch = (method, body) => fetch('/api/podman', { method, headers: { 'content-type': 'application/json', 'x-osd-token': AGENT_TOKEN }, body: body ? JSON.stringify(body) : undefined })
+  .then(async (r) => { const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` })); if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`); return d; });
+async function openPodman() {
+  clearTimeout(st.pmTimer);
+  if (!st.pm) { st.pmNote = 'Asking Podman…'; renderPodman(); }
+  try { st.pm = await pmFetch('GET'); if (st.pmNote === 'Asking Podman…') st.pmNote = ''; } catch (e) { st.pmNote = '✕ ' + e.message; }
+  renderPodman();
+  if ($('settings').open && st.tab === 'podman') st.pmTimer = setTimeout(openPodman, st.pm?.op?.state === 'running' ? 2000 : 8000);
+}
+const gb = (mb) => `${(mb / 1024).toFixed(1)} GB`;
+function renderPodman() {
+  const dlg = $('settings');
+  const v = st.pm;
+  const head = `<div class="set-head"><h2 id="set-title">Settings</h2><button class="link" type="button" data-set-close>Close ✕</button></div>${setTabs()}`;
+  if (!v) { dlg.innerHTML = head + `<div class="ag-note">${esc(st.pmNote)}</div>`; return; }
+  if (!v.available) { dlg.innerHTML = head + `<div class="set-status bad">✕ ${esc(v.reason)}</div>`; return; }
+  const i = v.inside, op = v.op;
+  const bar = (used, total) => `<span class="pm-bar"><span style="width:${Math.min(100, (used / total) * 100).toFixed(0)}%;background:${used / total > 0.85 ? 'var(--st-blocked)' : used / total > 0.65 ? 'var(--st-progress)' : 'var(--st-complete)'}"></span></span>`;
+  const running = op?.state === 'running';
+  const shown = v.containers.filter((c) => st.pmAll || c.state === 'running' || c.autostart || !c.autoRemove && Date.now() - c.created < 7 * 864e5);
+  const row = (c) => `<tr class="${c.state === 'running' ? 'on' : ''}">
+      <td><input type="checkbox" data-pm-auto="${esc(c.name)}" ${c.autostart ? 'checked' : ''} ${c.autoRemove ? 'disabled title="Removed when it stops (--rm): it cannot be started again"' : 'title="Start it again after a restart of the VM"'}></td>
+      <td><b>${esc(c.name)}</b><div class="pm-img">${esc(c.image)}</div></td>
+      <td><span class="pm-state ${esc(c.state)}">${esc(c.state)}</span><div class="pm-img">${esc(c.status)}</div></td>
+      <td class="num">${c.state === 'running' ? esc(c.mem ?? '') : ''}</td>
+      <td>${running ? '' : c.state === 'running' ? `<button class="btn" type="button" data-pm="stop" data-name="${esc(c.name)}">Stop</button>` : c.autoRemove ? '' : `<button class="btn" type="button" data-pm="start" data-name="${esc(c.name)}">Start</button>`}</td>
+    </tr>`;
+  dlg.innerHTML = head + `
+    <section class="set-sec">
+      <h3>${v.vm ? `VM <code>${esc(v.vm.name)}</code> · ${esc(v.vm.state)}` : 'Podman'}</h3>
+      ${v.vm ? `<div class="pm-grid">
+        <span>Memory</span><span>${i ? `${bar(i.usedMb, i.totalMb)} ${gb(i.usedMb)} used, ${gb(i.availableMb)} available of ${gb(i.totalMb)}` : '—'}</span>
+        <span>CPU</span><span>${v.vm.cpus} CPUs${i ? ` · load ${i.load1.toFixed(2)}` : ''}</span>
+        <span>Disk</span><span>${i ? `${bar(i.diskUsed, i.diskSize)} ${(i.diskUsed / 1e9).toFixed(0)} of ${(i.diskSize / 1e9).toFixed(0)} GB` : `${v.vm.diskGb} GB`}${v.images ? ` · ${v.images.count} images, ${esc(v.images.size)} (${esc(v.images.reclaimable)} reclaimable)` : ''}</span>
+        <span>Containers</span><span>${v.containers.filter((c) => c.state === 'running').length} running of ${v.containers.length}</span>
+      </div>` : ''}
+      ${v.vmBased ? `<div class="set-actions"><button class="btn primary" type="button" data-pm-restart ${running ? 'disabled' : ''}>Restart the VM</button>
+        <span class="set-note">Stops every container in the VM, then starts the ones checked below again.</span></div>` : ''}
+      ${op ? `<div class="pm-log ${op.state}"><b>${esc(op.kind)}</b> · ${op.state === 'running' ? `<span class="ag-spin"></span>running for ${Math.round((Date.now() - op.startedAt) / 1000)} s` : op.state === 'done' ? `done in ${Math.round((op.endedAt - op.startedAt) / 1000)} s` : 'failed'}${op.log.map((l) => `<div>${esc(l.text)}</div>`).join('')}</div>` : ''}
+      <span class="set-note ${st.pmNote.startsWith('✕') ? 'warn' : ''}">${esc(st.pmNote)}</span>
+    </section>
+    <section class="set-sec">
+      <h3>Containers <label class="set-check pm-all"><input type="checkbox" data-pm-all ${st.pmAll ? 'checked' : ''}> show all ${v.containers.length}</label></h3>
+      <div class="ag-note">Checked: started again after a restart of the VM. ${st.pmAll ? '' : 'Shown: running, checked, and stopped ones from the last 7 days.'}</div>
+      <div class="pm-table"><table><thead><tr><th title="Start after restart">↻</th><th>Container</th><th>State</th><th>Memory</th><th></th></tr></thead><tbody>${shown.map(row).join('') || '<tr><td colspan="5" class="muted">No containers.</td></tr>'}</tbody></table></div>
+    </section>`;
+}
+async function pmSaveAutostart() {
+  const names = [...$('settings').querySelectorAll('[data-pm-auto]:checked')].map((x) => x.dataset.pmAuto);
+  const hidden = (st.pm?.autostart ?? []).filter((n) => !$('settings').querySelector(`[data-pm-auto="${CSS.escape(n)}"]`));
+  try { const r = await pmFetch('POST', { action: 'autostart', names: [...names, ...hidden] }); st.pm.autostart = r.autostart; st.pm.containers.forEach((c) => { c.autostart = r.autostart.includes(c.name); }); st.pmNote = '✓ Saved'; }
+  catch (e) { st.pmNote = '✕ ' + e.message; }
+  renderPodman();
+}
 $('settings').addEventListener('click', async (e) => {
   const t = e.target;
   if (t === $('settings') || t.closest('[data-set-close]')) return $('settings').close();
+  const tab = t.closest('[data-set-tab]');
+  if (tab) { st.tab = tab.dataset.setTab; return st.tab === 'podman' ? openPodman() : st.view ? renderSettings() : openSettings(false); }
+  if (t.closest('[data-pm-restart]')) {
+    if (!confirm('Restart the Podman VM? Every container in it stops; the checked ones are started again. Sessions that use containers (builds, tests, other tools) are interrupted.')) return;
+    try { await pmFetch('POST', { action: 'restart' }); st.pmNote = ''; } catch (err) { st.pmNote = '✕ ' + err.message; }
+    return openPodman();
+  }
+  const pmBtn = t.closest('[data-pm]');
+  if (pmBtn) {
+    pmBtn.disabled = true; st.pmNote = `${pmBtn.dataset.pm === 'stop' ? 'Stopping' : 'Starting'} ${pmBtn.dataset.name}…`; 
+    try { await pmFetch('POST', { action: pmBtn.dataset.pm, name: pmBtn.dataset.name }); st.pmNote = ''; } catch (err) { st.pmNote = '✕ ' + err.message; }
+    return openPodman();
+  }
   if (t.closest('[data-set-refresh]')) return openSettings(true);
   if (t.closest('[data-set-save]')) {
     st.busy = true; st.note = 'Saving…'; st.test = null; renderSettings();
