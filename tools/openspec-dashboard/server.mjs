@@ -1198,7 +1198,7 @@ function runningSessions() {
     try { process.kill(d.pid, 0); } catch (e) { if (e.code !== 'EPERM') continue; } // the process is gone
     const tf = [encDir(d.cwd), encDir(realOf(d.cwd))].map((x) => path.join(x, `${d.sessionId}.jsonl`)).find((x) => fs.existsSync(x)) ?? null;
     const ti = tf ? transcriptInfo(tf) : null;
-    out.push({ sessionId: d.sessionId, pid: d.pid, startedAt: d.startedAt ?? null, t: Math.max(d.updatedAt ?? 0, ti?.mtime ?? 0), cwd: d.cwd, transcript: tf, prompt: ti?.prompt ?? null, ctx: ti?.ctx ?? null, waiting: d.status === 'idle', asking: d.status === 'waiting', ended: false, typeable: typeableOf(d.pid) }); // status "waiting": it waits for an answer (a permission, a question)
+    out.push({ sessionId: d.sessionId, pid: d.pid, startedAt: d.startedAt ?? null, t: Math.max(d.updatedAt ?? 0, ti?.mtime ?? 0), cwd: d.cwd, transcript: tf, prompt: ti?.prompt ?? null, ctx: ti?.ctx ?? null, waiting: d.status === 'idle' || d.status === 'shell', shell: d.status === 'shell', asking: d.status === 'waiting', ended: false, typeable: typeableOf(d.pid) }); // status "waiting": it waits for an answer (a permission, a question); "shell": done, while a command it started runs on in the background (e.g. the app)
   }
   runningCache = { t: Date.now(), list: out };
   return out;
@@ -1961,7 +1961,7 @@ function createAgent(project) {
     // the state right now, for "working…" / "done" at the end of the thread (Claude Code's own idle/busy when it runs)
     const r = runningSessions().find((y) => y.sessionId === x.sessionId);
     const state = x.listening ? 'listening' : r ? (r.asking ? 'asking' : r.waiting ? 'waiting' : 'working') : x.ended || x.elsewhere || x.hookless ? 'ended' : x.waiting ? 'waiting' : 'working';
-    return { entries, next: start + Math.max(end, from0), cut, size, state, context: transcriptInfo(file)?.ctx ?? null };
+    return { entries, next: start + Math.max(end, from0), cut, size, state, shell: !!r?.shell, context: transcriptInfo(file)?.ctx ?? null };
   }
 
   function control({ job: jobId, action }) {

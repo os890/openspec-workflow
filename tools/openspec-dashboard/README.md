@@ -321,7 +321,8 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     text arrives in Claude Code as a paste, where the Return becomes part of it; the server then reads the tab and,
     while the text still sits in the input box (between the last two rules) and nothing is being asked, sends Return
     on its own. The end of a joined session's thread shows its state (working with the current step, done and
-    waiting, listening, ended), polled with the transcript every 2 s from Claude Code's own idle/busy. In write mode
+    waiting, listening, ended), polled with the transcript every 2 s from Claude Code's own idle/busy (its status `shell`, a finished turn with
+    a background command still running, counts as done). In write mode
     the bar folds into one line (**Details ▾** unfolds it), and Claude's answers get the reactions, requests and
     quotes of the chat; **⤓ Background** puts the session into the background list (`localStorage` `osd-bg`; the
     Assistant, a brainstorm and a session on a ticket have the button too, as `kind: 'chat'` entries with their

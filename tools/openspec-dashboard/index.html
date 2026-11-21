@@ -3654,7 +3654,7 @@ function termStateHtml(T, items) {
   }
   if (T.state === 'listening') return '<div class="term-done"><span class="dot on"></span>Listening: waiting for your message</div>';
   if (T.state === 'asking') return '<div class="term-done term-ask">? Needs you: it asks something in its terminal (a permission, a choice)</div>';
-  if (T.state === 'waiting') return items.length ? '<div class="term-done">✓ Done · waiting for your next message</div>' : '<div class="term-done">Waiting for its first prompt</div>';
+  if (T.state === 'waiting') return items.length ? `<div class="term-done">✓ Done · waiting for your next message${T.shell ? '<span class="muted"> · something it started still runs in the background (e.g. the app)</span>' : ''}</div>` : '<div class="term-done">Waiting for its first prompt</div>';
   if (T.state === 'ended') return '<div class="term-done muted">Session ended</div>';
   return '';
 }
@@ -3669,7 +3669,7 @@ async function termPoll(force) {
     const fresh = !termLog.has(sid) || r.entries.length || T.err;
     T.entries.push(...r.entries); if (T.entries.length > 4000) T.entries.splice(0, T.entries.length - 4000);
     const stateChanged = T.state !== r.state || T.ctx?.used !== r.context?.used;
-    T.next = r.next; T.cut ||= r.cut; T.err = ''; T.state = r.state; if (r.context) T.ctx = r.context;
+    T.next = r.next; T.cut ||= r.cut; T.err = ''; T.state = r.state; T.shell = !!r.shell; if (r.context) T.ctx = r.context;
     if (r.state === 'working') { T.waitStart ||= T.sentAt || Date.now(); T.sentAt = 0; }
     else if (!T.sentAt) T.waitStart = 0; // done (or not started yet): the wait is over
     termLog.set(sid, T);
