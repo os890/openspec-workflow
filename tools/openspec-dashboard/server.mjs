@@ -1334,6 +1334,13 @@ function transcriptFor(sid) {
   }
   return transcriptIndex.map.get(sid) ?? null;
 }
+// the app an answer reports: its last line "App: <URL or command>" (what ▶️ asks for), else a local URL in it
+function appIn(text) {
+  let m = String(text ?? '').match(/^[ \t>*_]*App:[ \t*_`]*([^\n]+)/m)?.[1]?.replace(/[`*_\s]+$/, '')
+    ?? String(text ?? '').match(/https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::\d+)?[^\s)*`'"<>]*/)?.[0];
+  if (m && /^https?:\/\//.test(m)) m = m.split(/[\s`*]/)[0].replace(/[.,;:)]+$/, '');
+  return m || null;
+}
 function lastReplyOf(file) {
   try {
     const st = fs.statSync(file), len = Math.min(st.size, 262144), buf = Buffer.alloc(len), fd = fs.openSync(file, 'r');
@@ -1342,9 +1349,9 @@ function lastReplyOf(file) {
       if (!/"type":\s*"assistant"/.test(l)) continue;
       let m; try { m = JSON.parse(l); } catch { continue; }
       if (m.isSidechain) continue;
-      const text = (m.message?.content ?? []).filter((b) => b.type === 'text').map((b) => b.text).join(' ').replace(/\s+/g, ' ').trim();
+      const raw = (m.message?.content ?? []).filter((b) => b.type === 'text').map((b) => b.text).join('\n'), text = raw.replace(/\s+/g, ' ').trim();
       if (!text) continue;
-      return { text: text.slice(0, 200), error: !!m.isApiErrorMessage, t: Date.parse(m.timestamp) || st.mtimeMs };
+      return { text: text.slice(0, 200), app: appIn(raw), error: !!m.isApiErrorMessage, t: Date.parse(m.timestamp) || st.mtimeMs };
     }
   } catch { /* unreadable */ }
   return null;
@@ -1370,7 +1377,7 @@ async function sessionsStatus(ids) {
       if (c.asking) state = 'asking';
     }
     if (last?.error && state !== 'working') state = 'error';
-    out.push({ sessionId: sid, state, t: Math.max(r?.t ?? 0, last?.t ?? 0), cwd: r?.cwd ? homeDisplay(r.cwd) : null, last: last?.text ?? null, prompt: file ? transcriptInfo(file)?.prompt ?? null : null, ctx: file ? transcriptInfo(file)?.ctx ?? null : null });
+    out.push({ sessionId: sid, state, t: Math.max(r?.t ?? 0, last?.t ?? 0), cwd: r?.cwd ? homeDisplay(r.cwd) : null, last: last?.text ?? null, app: last?.app ?? null, prompt: file ? transcriptInfo(file)?.prompt ?? null : null, ctx: file ? transcriptInfo(file)?.ctx ?? null : null });
   }
   return out;
 }
@@ -1989,8 +1996,8 @@ function createAgent(project) {
     const j = jobs.filter((x) => x.sessionId === sid).at(-1);
     if (!j) return null;
     const state = ['starting', 'running'].includes(j.status) ? 'working' : j.status === 'failed' ? 'error' : ['idle', 'done'].includes(j.status) ? 'waiting' : 'ended';
-    const reply = [...j.log].reverse().find((l) => l.kind === 'text')?.text ?? j.answer ?? null;
-    return { state, t: j.endedAt ?? j.log.at(-1)?.t ?? j.startedAt, cwd: homeDisplay(root), last: reply ? String(reply).replace(/[*`#>]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 200) : (j.error ?? null), prompt: String([...j.log].reverse().find((l) => l.kind === 'user')?.text ?? j.text ?? '').replace(/\s+/g, ' ').slice(0, 200), dashboard: true }; // the last message sent
+    const reply = [...j.log].reverse().find((l) => l.kind === 'text' && !l.sub)?.text ?? j.answer ?? null;
+    return { state, t: j.endedAt ?? j.log.at(-1)?.t ?? j.startedAt, cwd: homeDisplay(root), last: reply ? String(reply).replace(/[*`#>]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 200) : (j.error ?? null), prompt: String([...j.log].reverse().find((l) => l.kind === 'user')?.text ?? j.text ?? '').replace(/\s+/g, ' ').slice(0, 200), app: reply ? appIn(reply) : null, dashboard: true }; // the last message sent
   }
   function brief() {
     const now = Date.now();

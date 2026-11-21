@@ -322,6 +322,11 @@ span.ch-warn { color: var(--st-progress); }
 .cq-l { font-size: 12px; color: var(--muted); } .cq-v { font-size: 24px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
 .cq-s { font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
 .cq-spark { margin-top: 4px; }
+.app-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0 2px; }
+.app-row code { font-size: 12px; overflow-wrap: anywhere; }
+.term-done-row { align-self: center; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
+.term-done-row .term-done { margin: 0; } .app-row.inline { margin: 0; } .app-row.inline code { display: none; }
+.bg-app { flex: none; align-self: center; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
 .wm-speed { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .wm-speed input[type="range"] { width: 140px; }
 #wm-speed-v { font-weight: 600; min-width: 5.5em; }
@@ -3615,8 +3620,10 @@ function termThreadHtml(sid) {
   // terminal colors: the steps as the CLI shows them (⏺ Tool(argument), ⎿ the first lines of the result)
   const cli = termView.look > 0 && ag.termWrite;
   const results = new Map(items.filter((e) => e.kind === 'result' || (e.kind === 'error' && e.id)).map((e) => [e.id, e]));
+  let lastAsk = '';
   for (const e of items) {
     if (e.kind === 'result' || (e.kind === 'error' && e.id && cli)) continue;
+    if (e.kind === 'user' || e.kind === 'mine') lastAsk = e.kind === 'mine' ? e.m.text : e.text;
     if (e.kind === 'note') { flush(); out.push(`<div class="term-note"><span>${esc(e.text)}</span>${e.t ? `<span class="meta">${hhmm(e.t)}</span>` : ''}</div>`); continue; }
     if (cli && e.kind === 'tool') {
       flush();
@@ -3636,7 +3643,7 @@ function termThreadHtml(sid) {
     else {
       const id = `term:${sid}:${e.t}:${n++}`;
       rx.msgs.set(id, e.text);
-      out.push(`<div class="msg them ${e.sub ? 'sub' : ''} ${rx.openId === id ? 'rx-open' : ''}" data-msg="${esc(id)}"><div class="md">${md(e.text)}</div>${rxFootHtml(id, canWrite && !e.sub, reacted.get(excerptOf(e.text)) ?? [], e.t)}</div>`);
+      out.push(`<div class="msg them ${e.sub ? 'sub' : ''} ${rx.openId === id ? 'rx-open' : ''}" data-msg="${esc(id)}"><div class="md">${md(e.text)}</div>${e.sub ? '' : appHtml(appOf(e.text, isStart(lastAsk)))}${rxFootHtml(id, canWrite && !e.sub, reacted.get(excerptOf(e.text)) ?? [], e.t)}</div>`);
     }
   }
   flush();
@@ -3654,6 +3661,11 @@ function termStateHtml(T, items) {
   }
   if (T.state === 'listening') return '<div class="term-done"><span class="dot on"></span>Listening: waiting for your message</div>';
   if (T.state === 'asking') return '<div class="term-done term-ask">? Needs you: it asks something in its terminal (a permission, a choice)</div>';
+  if (T.state === 'waiting' && items.length) { // the app the last answer started: its button next to "Done"
+    const i = items.findLastIndex((e) => e.kind === 'text' && !e.sub), ask = items.slice(0, Math.max(0, i)).findLast((e) => e.kind === 'user' || e.kind === 'mine');
+    const app = i >= 0 ? appOf(items[i].text, isStart(ask?.kind === 'mine' ? ask.m.text : ask?.text)) : null;
+    if (app && /^https?:/.test(app)) return `<div class="term-done-row"><div class="term-done">✓ Done · the app runs${T.shell ? ' in the background' : ''}</div>${appHtml(app).replace('class="app-row"', 'class="app-row inline"')}</div>`;
+  }
   if (T.state === 'waiting') return items.length ? `<div class="term-done">✓ Done · waiting for your next message${T.shell ? '<span class="muted"> · something it started still runs in the background (e.g. the app)</span>' : ''}</div>` : '<div class="term-done">Waiting for its first prompt</div>';
   if (T.state === 'ended') return '<div class="term-done muted">Session ended</div>';
   return '';
@@ -3774,7 +3786,7 @@ function bgRender() {
     <ul>${bgList.map((e, i) => {
       const st = bgState.get(e.sessionId), [cls, ico, what] = BG_ICON[st?.state ?? 'working'];
       const label = st?.prompt && (e.kind === 'chat' || /^[0-9a-f]{8}$/.test(e.label)) ? `${e.kind === 'chat' ? '💬 ' : ''}${st.prompt.replace(/\s+/g, ' ').slice(0, 70)}` : e.label;
-      return `<li><button type="button" class="bg-item" data-bg-open="${esc(e.sessionId)}" title="${esc(what)} · open it"><span class="bg-ico ${cls}" aria-label="${esc(what)}">${ico}</span><span class="bg-txt"><b>${esc(label)}</b><span class="muted">${esc([e.projectLabel ?? st?.cwd ?? '', e.kind === 'chat' ? (e.convo === 'brainstorm' ? 'Brainstorm' : e.convo?.startsWith('session:') ? 'session on a ticket' : 'Assistant') : '', what, st?.t ? ago(st.t) : ''].filter(Boolean).join(' · '))}</span>${st?.last ? `<span class="bg-last">${esc(st.last)}</span>` : ''}${st?.ctx ? `<span class="bg-ctx">${ctxHtml(st.ctx)}</span>` : ''}</span></button><button type="button" class="link bg-x" data-bg-remove="${esc(e.sessionId)}" title="Remove from the list (the session keeps running)" aria-label="Remove">✕</button></li>`;
+      return `<li><button type="button" class="bg-item" data-bg-open="${esc(e.sessionId)}" title="${esc(what)} · open it"><span class="bg-ico ${cls}" aria-label="${esc(what)}">${ico}</span><span class="bg-txt"><b>${esc(label)}</b><span class="muted">${esc([e.projectLabel ?? st?.cwd ?? '', e.kind === 'chat' ? (e.convo === 'brainstorm' ? 'Brainstorm' : e.convo?.startsWith('session:') ? 'session on a ticket' : 'Assistant') : '', what, st?.t ? ago(st.t) : ''].filter(Boolean).join(' · '))}</span>${st?.last ? `<span class="bg-last">${esc(st.last)}</span>` : ''}${st?.ctx ? `<span class="bg-ctx">${ctxHtml(st.ctx)}</span>` : ''}</span></button>${st?.app && /^https?:/.test(st.app) ? `<a class="bg-app" href="${esc(st.app)}" target="_blank" rel="noopener" data-bg-app>Open the app ↗</a>` : ''}<button type="button" class="link bg-x" data-bg-remove="${esc(e.sessionId)}" title="Remove from the list (the session keeps running)" aria-label="Remove">✕</button></li>`;
     }).join('')}</ul>`;
 }
 async function bgPoll() {
@@ -3946,9 +3958,25 @@ const QUICK = [
   ['🧹', 'Wrap up: finish the current task, update tasks.md, and summarize what is done and what is left.', 'Wrap up'],
   null,
   ['🧪', 'Run the quality gate now and tell me the result; fix nothing yet.', 'Quality gate'],
-  ['▶️', 'Start the app in a clean way: stop whatever of it still runs, build it from a clean state, start it, and tell me how to reach it (URL or command) and whether it came up without errors.', 'Start the app'],
+  ['▶️', 'Start the app in a clean way: stop whatever of it still runs, build it from a clean state, start it, and tell me whether it came up without errors. End your answer with one line exactly like "App: http://localhost:8080" (its URL), or "App: <command>" when it is not a web app.', 'Start the app'],
 ];
 const quick = { open: false };
+// the app an answer started (▶️ asks for a last line "App: <URL or command>"; without it, the first local URL of the
+// answer to ▶️): a button to open it. On a phone or tablet, localhost means this computer's address
+const APP_RE = /^[ \t>*_]*App:[ \t*_`]*([^\n]+)/m, LOCAL_URL = /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::\d+)?[^\s)*`'"<>]*/;
+function appOf(text, afterStart) {
+  let m = String(text ?? '').match(APP_RE)?.[1]?.replace(/[`*_\s]+$/, '') ?? (afterStart ? String(text ?? '').match(LOCAL_URL)?.[0] : null);
+  if (m && /^https?:\/\//.test(m)) m = m.split(/[\s`*]/)[0].replace(/[.,;:)]+$/, ''); // a URL: its first word; a command: the line
+  return m || null;
+}
+const isStart = (t) => /^▶️?\s*Start the app/.test(String(t ?? '').trim());
+function appHtml(app) {
+  if (!app) return '';
+  if (!/^https?:\/\//.test(app)) return `<div class="app-row">▶ App: <code>${esc(app)}</code></div>`;
+  let url = app;
+  try { const u = new URL(app); if (REMOTE && /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])$/.test(u.hostname)) { u.hostname = location.hostname; url = u.toString(); } if (u.hostname === '0.0.0.0') { u.hostname = 'localhost'; url = u.toString(); } } catch { return ''; }
+  return `<div class="app-row"><a class="btn primary" href="${esc(url)}" target="_blank" rel="noopener">Open the app ↗</a><code>${esc(url)}</code></div>`;
+}
 const quickHtml = () => `<span class="qk"><button type="button" class="rx-more qk-more" data-qk-more aria-expanded="${quick.open}" title="Quick messages" aria-label="Quick messages">⋯</button><span class="qk-bar" ${quick.open ? '' : 'hidden'}>${QUICK.map((q) => (q ? `<button type="button" class="rx" data-qk="${q[0]}" title="${esc(`${q[2]}: sends "${q[0]} ${q[1]}"`)}" aria-label="${esc(q[2])}">${q[0]}</button>` : '<span class="rx-sep"></span>')).join('')}</span></span>`;
 document.addEventListener('click', (e) => {
   const more = e.target.closest?.('[data-qk-more]'), qk = e.target.closest?.('[data-qk]');
@@ -4154,17 +4182,18 @@ function threadHtml(c) {
     out.push(`<details class="steps"><summary>${steps.length === 1 ? esc(steps[0].text) : `${steps.length} steps · ${esc(steps.at(-1).text)}`}</summary>${steps.map((x) => `<div class="${x.kind}">${esc(x.text)}</div>`).join('')}</details>`);
     steps = [];
   };
+  let lastChatAsk = '';
   for (const j of c.jobs) {
     for (const l of j.log) {
       if (l.kind === 'tool' || l.kind === 'error') { steps.push(l); continue; }
       flush();
-      if (l.kind === 'user') out.push(userMsgHtml(l));
+      if (l.kind === 'user') { out.push(userMsgHtml(l)); lastChatAsk = l.text; }
       else if (l.kind === 'text') {
         const id = `${j.id}:${l.t}`;
         rx.msgs.set(id, l.text);
         const got = reacted.get(excerptOf(l.text)) ?? [];
         out.push(`<div class="msg them ${l.sub ? 'sub' : ''} ${rx.openId === id ? 'rx-open' : ''}" data-msg="${esc(id)}"><div class="md">${c.newproject ? projectMd(l.text, id) : c.brainstorm ? brainstormMd(l.text, id, j.idea ?? c.jobs.find((x) => x.idea)?.idea) : editMd(l.text, id)}</div>
-          ${rxFootHtml(id, !l.sub, got, l.t)}
+          ${l.sub ? '' : appHtml(appOf(l.text, isStart(lastChatAsk)))}${rxFootHtml(id, !l.sub, got, l.t)}
         </div>`);
       }
       else if (l.kind === 'prompt') out.push(`<details class="sys"><summary>${j.kind === 'onboard' ? 'Onboarding started with the setup prompt' : 'Started on the ticket with the workflow prompt'}</summary><div>${esc(l.text)}</div></details>`);

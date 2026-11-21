@@ -390,7 +390,9 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     first sentence, or the selected part, in a fixed form (`[Reaction 👍 to your message: "…"]`,
     `[Request 📝 about your message: "…"]`, `[Replying to your message: "…"]`), which it finds in its own conversation; the whole answer is not sent again. **⋯ under the input box** holds
     quick messages about no answer in particular, in groups (👀 status, ❓ blockers, 🔍 changes so far, 📍 ticket
-    progress · ⏸ pause after this step, 🎯 stay on the ticket, 🧹 wrap up · 🧪 run the quality gate, ▶️ start the app cleanly), sent as they
+    progress · ⏸ pause after this step, 🎯 stay on the ticket, 🧹 wrap up · 🧪 run the quality gate, ▶️ start the app cleanly and end with `App: <URL or command>`, which becomes an
+    **Open the app ↗** button in the thread, next to ✓ Done and in the background list (`app` in
+    `/api/sessions/status`); without that line the first `localhost`/`127.0.0.1` URL of the answer), sent as they
     are and shown short in the thread. A message typed into a working terminal session is absorbed mid-turn; Claude Code keeps it as a
     `queued_command` attachment in the transcript, which the thread shows like a prompt.
     Reactions show as small badges on the answer they belong to.

@@ -310,7 +310,10 @@ thread shows each one short, e.g. **👀 Status**.
 - steer the work: ⏸ finish the current step, then stop and wait, 🎯 stay within the current ticket and put anything
   else in the parking lot, 🧹 wrap up (finish the task, update tasks.md, summarize);
 - quality and trying it out: 🧪 run the quality gate now and report the result, without fixing anything yet;
-  ▶️ start the app in a clean way (stop what still runs, a clean build, start it) and say how to reach it.
+  ▶️ start the app in a clean way (stop what still runs, a clean build, start it) and say how to reach it. Claude
+  ends that answer with a line `App: <URL>` (or `App: <command>`); the dashboard turns it into an **Open the app ↗**
+  button, in the answer, next to **✓ Done** at the end of the thread and in the background list. Without that line
+  it takes the first local URL of the answer (on a phone or tablet, `localhost` becomes the computer's address).
 
 ![Quick messages under the input box](images/dashboard-quick-messages.png)
 
