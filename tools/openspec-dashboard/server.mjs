@@ -889,7 +889,7 @@ function createAgent(project) {
       hookInstall: `node ${displayPath(hookFile)} install ${displayPath(root)}`,
       sessions: inbox.sessions.filter((x) => now - x.t < 12 * 3600e3).slice(0, 6),
       messages: inbox.messages,
-      jobs: jobs.slice(-25).map(({ child, ...j }) => ({ ...j, log: j.log.slice(-250) })),
+      jobs: jobs.slice(-25).map(({ child, planIds, ...j }) => ({ ...j, log: j.log.slice(-250) })),
     };
   }
   function send() {
@@ -908,10 +908,43 @@ function createAgent(project) {
     job.log.push({ t: Date.now(), kind, text: String(text).slice(0, 6000), sub });
     if (job.log.length > 600) job.log.splice(0, job.log.length - 600);
   }
+  // the plan Claude keeps with its task tools (TaskCreate/TaskUpdate, or TodoWrite in older versions): what is done,
+  // what is being done and what is still open, for the progress dialog of an onboarding
+  const planLine = (job) => {
+    const done = job.plan.filter((t) => t.status === 'completed').length, now = job.plan.find((t) => t.status === 'in_progress');
+    return `Plan · ${done} of ${job.plan.length} done${now ? ` · ${now.activeForm ?? now.content}` : ''}`;
+  };
+  const planItem = (t) => ({ content: String(t.content ?? t.subject ?? '').slice(0, 300), status: ['completed', 'in_progress'].includes(t.status) ? t.status : 'pending', activeForm: t.activeForm ? String(t.activeForm).slice(0, 300) : null });
+  function planTool(job, b) {
+    const i = b.input ?? {};
+    if (b.name === 'TodoWrite' && Array.isArray(i.todos)) job.plan = i.todos.slice(0, 40).map(planItem);
+    else if (b.name === 'TaskCreate' && (i.subject || i.description)) {
+      job.plan ??= [];
+      job.planIds ??= {};
+      const item = { ...planItem({ subject: i.subject || i.description, activeForm: i.activeForm }), id: String(job.plan.length + 1) };
+      job.planIds[b.id] = item; // the result says the real id
+      if (job.plan.length < 40) job.plan.push(item);
+      push(job, 'tool', `Plan · + ${item.content}`);
+      job.planAt = Date.now();
+      return true;
+    } else if (b.name === 'TaskUpdate' && job.plan && i.taskId != null) {
+      const t = job.plan.find((x) => x.id === String(i.taskId));
+      if (!t) return false;
+      if (i.status === 'deleted') job.plan.splice(job.plan.indexOf(t), 1);
+      else { if (i.status) t.status = planItem(i).status; if (i.subject) t.content = String(i.subject).slice(0, 300); if (i.activeForm) t.activeForm = String(i.activeForm).slice(0, 300); }
+      job.planAt = Date.now();
+      const n = job.plan.filter((x) => x.status === 'completed').length;
+      push(job, 'tool', i.status === 'completed' ? `✓ ${t.content} (${n} of ${job.plan.length})` : i.status === 'in_progress' ? `▸ ${t.activeForm ?? t.content}` : planLine(job));
+      return true;
+    } else return false;
+    job.planAt = Date.now();
+    push(job, 'tool', planLine(job));
+    return true;
+  }
   const toolLine = (b) => {
     const i = b.input ?? {};
     const arg = b.name === 'Bash' ? (i.description || i.command) : (i.file_path || i.path || i.pattern || i.description || i.url || i.skill || '');
-    return `${b.name}${arg ? ' · ' + rel(arg).slice(0, 180) : ''}`;
+    return `${b.name}${arg ? ' · ' + homeDisplay(rel(arg)).slice(0, 180) : ''}`; // other paths with ~ for the home folder
   };
   function onLine(job, line) {
     let m;
@@ -921,10 +954,13 @@ function createAgent(project) {
     else if (m.type === 'assistant') {
       for (const b of m.message?.content ?? []) {
         if (b.type === 'text' && b.text.trim()) push(job, 'text', b.text, sub);
+        else if (b.type === 'tool_use' && !sub && planTool(job, b)) { /* recorded as the plan */ }
         else if (b.type === 'tool_use') push(job, 'tool', toolLine(b), sub);
       }
     } else if (m.type === 'user' && Array.isArray(m.message?.content)) {
       for (const b of m.message.content) {
+        const created = b.type === 'tool_result' && job.planIds?.[b.tool_use_id];
+        if (created && m.tool_use_result?.task?.id != null) created.id = String(m.tool_use_result.task.id);
         if (b.type !== 'tool_result' || !b.is_error) continue;
         const t = Array.isArray(b.content) ? b.content.map((x) => x.text ?? '').join(' ') : String(b.content ?? '');
         push(job, 'error', t.slice(0, 400), sub);
@@ -1140,6 +1176,7 @@ function createAgent(project) {
     if (brief) return [
       'This project was just created: an empty folder with git initialised. Set it up for OpenSpec and the OpenSpec ticket workflow from the brief the user agreed on in a brainstorming:',
       '', brief, '',
+      'Start by writing your plan with your task tools (TaskCreate and TaskUpdate; TodoWrite in older versions): 5 to 12 steps in the order you will do them, in plain words with an activeForm (the dashboard shows them to the user as the progress). Keep them current: mark a step in_progress when you start it and completed when it is done; add a step when you find more to do.',
       'Create CLAUDE.md (purpose, stack, conventions, the quality gate, and that work goes ticket by ticket with the workflow) and a short README.md.',
       `Then set up OpenSpec: ${skill}.`,
       USE_CLI ? `The OpenSpec CLI is available as \`${CLI}\`; use non-interactive options.` : 'Use the OpenSpec CLI if it is installed; otherwise write the files by hand.',
@@ -1153,6 +1190,7 @@ function createAgent(project) {
     return [
       'Onboard this project to OpenSpec and the OpenSpec ticket workflow now' + (jobs.some((j) => j.kind === 'chat' && j.mode === 'scout') ? ', taking into account what we discussed.' : '.'),
       `To set it up, ${skill}.`,
+      'Start by writing your plan with your task tools (TaskCreate and TaskUpdate; TodoWrite in older versions): 5 to 12 steps in the order you will do them, in plain words with an activeForm (the dashboard shows them to the user as the progress). Keep them current: mark a step in_progress when you start it and completed when it is done; add a step when you find more to do.',
       USE_CLI ? `The OpenSpec CLI is available as \`${CLI}\`; use non-interactive options.` : 'Use the OpenSpec CLI if it is installed; otherwise write the files by hand.',
       'Read CLAUDE.md or AGENTS.md, the README, the build and the structure first. Create openspec/ with config.yaml (project context, conventions, the quality gate), roadmap.md with a first milestone and backlog drafts in openspec/backlog/ for the next tickets you can derive from the docs, TODOs and the code, and specs only for behaviour that clearly exists.',
       'Do not change application code. Do not commit: leave every change uncommitted for the user to review.',
@@ -1173,7 +1211,7 @@ function createAgent(project) {
     job.prompt = onboardPrompt(brief);
     job.onExit = (j) => { if (j.status === 'done' && fs.existsSync(path.join(root, 'openspec'))) onDone?.(); };
     push(job, 'prompt', job.prompt);
-    const tools = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash(git status:*)', 'Bash(git log:*)', 'Bash(ls:*)', 'Bash(mkdir:*)', ...(USE_CLI ? [`Bash(${CLI}:*)`] : [])];
+    const tools = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'TodoWrite', 'Bash(git status:*)', 'Bash(git log:*)', 'Bash(ls:*)', 'Bash(mkdir:*)', ...(USE_CLI ? [`Bash(${CLI}:*)`] : [])];
     const base = ['-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits', '--permission-prompts', 'none', ...modelArgs()];
     if (scout) { job.sessionId = scout.sessionId; launch(job, [...base, '--resume', scout.sessionId, '--allowedTools', ...tools], job.prompt, false); }
     else { job.sessionId = randomUUID(); launch(job, [...base, '--session-id', job.sessionId, '-n', `onboard ${project.name}`, '--allowedTools', ...tools], job.prompt, false); }

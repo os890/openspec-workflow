@@ -297,6 +297,14 @@ or **Skip → next candidate** to move on to the next one.
 
 ![Chatting about a candidate before deciding](images/dashboard-discover-chat.png)
 
+While it runs, the row says what Claude is doing right now; **Show progress** opens the whole picture: Claude's plan
+(it writes one first and keeps it current) with what is done ✓, what it is doing now ◐ and what is still open ○, a
+progress bar, how long it has been running, and every step so far, newest at the bottom, updating live. Once the
+project is followed, **What it did** shows the same with Claude's summary. A new project (below) shows the same
+progress while it is set up.
+
+![The progress of an onboarding: the plan and every step so far](images/dashboard-onboarding-progress.png)
+
 ### Start a new project
 
 **＋ Start a new project** (on the right of the "Onboard more projects" heading in the screenshot above) brainstorms a

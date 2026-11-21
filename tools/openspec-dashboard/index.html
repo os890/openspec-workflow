@@ -364,6 +364,27 @@ span.ch-warn { color: var(--st-progress); }
 /* settings dialog: local models */
 .set-dialog { width: min(780px, calc(100vw - 32px)); max-height: calc(100vh - 48px); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); padding: 18px 22px; box-shadow: var(--shadow-hover); }
 .set-dialog::backdrop { background: rgba(0, 0, 0, .35); }
+/* onboarding progress */
+.onb-dialog { display: none; } .onb-dialog[open] { display: flex; flex-direction: column; gap: 10px; }
+.onb-status { font-size: 13px; display: flex; gap: 6px 14px; flex-wrap: wrap; align-items: center; }
+.onb-status .bad { color: var(--st-blocked); } .onb-status .ok { color: var(--st-complete); font-weight: 600; }
+.onb-sec h3 { margin: 0 0 6px; font-size: 14px; display: flex; gap: 8px; align-items: baseline; }
+.onb-sec h3 .muted { font-weight: 400; font-size: 12.5px; }
+.onb-bar { height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; margin: 0 0 8px; }
+.onb-bar > span { display: block; height: 100%; background: var(--st-complete); border-radius: 99px; transition: width .4s; }
+.onb-plan { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; }
+.onb-plan li { display: flex; gap: 8px; align-items: baseline; }
+.onb-plan li > i { font-style: normal; width: 16px; flex: none; text-align: center; color: var(--muted); }
+.onb-plan li.p-done { color: var(--muted); } .onb-plan li.p-done > i { color: var(--st-complete); }
+.onb-plan li.p-now { font-weight: 600; } .onb-plan li.p-now > i { color: var(--st-progress); }
+.onb-steps { list-style: none; margin: 0; padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; max-height: 38vh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); font-size: 12.5px; }
+.onb-steps li { display: flex; gap: 10px; align-items: baseline; min-width: 0; }
+.onb-steps li > time { color: var(--muted); flex: none; font-variant-numeric: tabular-nums; font-size: 11.5px; }
+.onb-steps li > span { min-width: 0; overflow-wrap: anywhere; }
+.onb-steps li.tool > span { font-family: var(--font-mono); font-size: 12px; }
+.onb-steps li.sub { padding-left: 18px; opacity: .8; }
+.onb-steps li.text > span { color: var(--ink); } .onb-steps li.error > span { color: var(--st-blocked); }
+.onb-sum { border-top: 1px solid var(--line); padding-top: 10px; font-size: 13.5px; max-height: 30vh; overflow: auto; }
 .set-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
 .set-head h2 { margin: 0; font-size: 19px; margin-right: auto; }
 .set-sec { border-top: 1px solid var(--line); padding: 12px 0 6px; display: flex; flex-direction: column; gap: 6px; }
@@ -1645,6 +1666,7 @@ body.ag-max { overflow: hidden; }
 </div>
 <dialog class="set-dialog" id="settings" aria-labelledby="set-title"></dialog>
 <dialog class="set-dialog pd-dialog" id="propose" aria-labelledby="pd-title"></dialog>
+<dialog class="set-dialog onb-dialog" id="onbdlg" aria-labelledby="onb-title"></dialog>
 <aside class="drawer agent-panel" id="agent" aria-label="Agent" hidden></aside>
 <aside class="drawer agent-panel gh-panel" id="githist" aria-label="Git history" hidden></aside>
 
@@ -4258,7 +4280,46 @@ function renderOverview(o) {
     sel.value = '';
   }
   if (sc.open) renderScout();
+  if ($('onbdlg').open) onbRender();
 }
+
+// ---- onboarding progress: the plan Claude keeps (done, now, still open) and every step so far, live
+const onb = { path: null };
+const planNow = (j) => { const t = j?.plan?.find((x) => x.status === 'in_progress'); return t ? (t.activeForm ?? t.content) : null; };
+function onbJob() { const c = ui.overview?.discovery?.candidates.find((x) => x.path === onb.path); return c ? { c, job: discJobs(c).onboard } : {}; }
+function onbRender() {
+  const dlg = $('onbdlg');
+  const { c, job } = onbJob();
+  if (!c || !job) { dlg.innerHTML = '<div class="set-head"><h2 id="onb-title">Onboarding</h2><button class="link" type="button" data-onb-close>Close ✕</button></div><div class="empty">Nothing is running.</div>'; return; }
+  const running = alive(job);
+  const end = running ? Date.now() : (job.lastActivity ?? Date.now());
+  const mins = Math.max(0, Math.round((end - job.startedAt) / 60000));
+  const steps = job.log.filter((l) => l.kind === 'tool' || l.kind === 'text' || l.kind === 'error');
+  const plan = job.plan ?? [];
+  const done = plan.filter((t) => t.status === 'completed').length;
+  const summary = !running ? [...job.log].reverse().find((l) => l.kind === 'text' && !l.sub) : null;
+  const status = running ? `<span><span class="ag-spin"></span> Running</span>`
+    : job.status === 'failed' ? `<span class="bad">✕ Failed${job.error ? `: ${esc(job.error.slice(0, 200))}` : ''}</span>`
+    : `<span class="ok">✓ Done</span>`;
+  const list = dlg.querySelector('#onb-steps');
+  const atEnd = !list || list.scrollTop + list.clientHeight >= list.scrollHeight - 30;
+  morphHtml(dlg, `<div class="set-head"><h2 id="onb-title">Onboarding ${esc(c.name)}</h2><button class="link" type="button" data-sc-open="${esc(c.path)}" data-onb-close>Open the conversation</button><button class="link" type="button" data-onb-close autofocus>Close ✕</button></div>
+    <div class="onb-status">${status}<span class="muted">started ${esc(hhmm(job.startedAt))} · ${mins < 1 ? 'less than a minute' : `${mins} min`}${running ? ' so far' : ''} · ${steps.length} step${steps.length === 1 ? '' : 's'}</span><bdi class="muted">${esc(c.display)}</bdi></div>
+    <div class="onb-sec"><h3>Plan <span class="muted">${plan.length ? `${done} of ${plan.length} done${running && planNow(job) ? ` · now: ${esc(planNow(job))}` : ''}` : ''}</span></h3>
+      ${plan.length ? `<div class="onb-bar"><span style="width:${Math.round((done / plan.length) * 100)}%"></span></div>
+        <ol class="onb-plan">${plan.map((t) => `<li class="${t.status === 'completed' ? 'p-done' : t.status === 'in_progress' ? 'p-now' : 'p-open'}"><i>${t.status === 'completed' ? '✓' : t.status === 'in_progress' ? '◐' : '○'}</i><span>${esc(t.status === 'in_progress' ? (t.activeForm ?? t.content) : t.content)}</span></li>`).join('')}</ol>`
+      : `<div class="muted" style="font-size:13px">${running ? 'Claude has not written its plan yet; the steps below show what it is doing.' : 'No plan was recorded.'}</div>`}</div>
+    <div class="onb-sec"><h3>Steps <span class="muted">newest at the bottom</span></h3>
+      <ol class="onb-steps" id="onb-steps">${steps.map((l) => `<li class="${l.kind} ${l.sub ? 'sub' : ''}"><time>${esc(hhmm(l.t))}</time><span>${esc(l.kind === 'text' ? l.text.replace(/\s+/g, ' ').slice(0, 220) + (l.text.length > 220 ? '…' : '') : l.text)}</span></li>`).join('') || '<li><span class="muted">Starting…</span></li>'}</ol></div>
+    ${summary ? `<div class="onb-sec onb-sum"><h3>Summary</h3><div class="md">${md(summary.text)}</div></div>` : ''}`);
+  const l2 = dlg.querySelector('#onb-steps');
+  if (l2 && atEnd) l2.scrollTop = l2.scrollHeight;
+}
+document.addEventListener('click', (e) => {
+  const show = e.target.closest?.('[data-onb-show]');
+  if (show) { e.stopPropagation(); onb.path = show.dataset.onbShow; onbRender(); $('onbdlg').showModal(); const l = $('onbdlg').querySelector('#onb-steps'); if (l) l.scrollTop = l.scrollHeight; return; }
+  if (e.target.closest?.('[data-onb-close]') || e.target === $('onbdlg')) $('onbdlg').close();
+}, true);
 
 // ---- discovering projects to onboard: folders with CLAUDE.md / AGENTS.md below a path (with --agent)
 const sc = { open: false, path: null, showSkipped: false, busy: false, note: '' };
@@ -4270,9 +4331,9 @@ function discoveryHtml(d) {
     const { chat, onboard } = discJobs(c);
     const chatting = chat.some((j) => alive(j));
     const lastStep = onboard?.log.filter((l) => l.kind === 'tool').at(-1);
-    const state = c.followed ? `<span class="disc-ok">✓ followed</span> <a class="btn" href="${esc(hrefFor(c.projectId))}">Open</a>`
-      : onboard && alive(onboard) ? `<span class="disc-run"><span class="ag-spin"></span>Onboarding… ${lastStep ? `<span class="muted">${esc(lastStep.text.slice(0, 70))}</span>` : ''}</span><button class="link" type="button" data-sc-open="${esc(c.path)}">Follow it</button>`
-      : onboard?.status === 'failed' ? `<span class="disc-err" title="${esc(onboard.error ?? '')}">✕ Onboarding failed</span><button class="link" type="button" data-sc-open="${esc(c.path)}">See why</button>`
+    const state = c.followed ? `<span class="disc-ok">✓ followed</span> <a class="btn" href="${esc(hrefFor(c.projectId))}">Open</a>${onboard ? `<button class="link" type="button" data-onb-show="${esc(c.path)}" title="The plan and every step of the onboarding, and Claude's summary">What it did</button>` : ''}`
+      : onboard && alive(onboard) ? `<span class="disc-run"><span class="ag-spin"></span>Onboarding… ${planNow(onboard) ? `<span class="muted">${esc(planNow(onboard))}</span>` : lastStep ? `<span class="muted">${esc(lastStep.text.slice(0, 70))}</span>` : ''}</span><button class="link" type="button" data-onb-show="${esc(c.path)}" title="The plan, what is done and what is still open, and every step so far">Show progress${onboard.plan ? ` (${onboard.plan.filter((t) => t.status === 'completed').length}/${onboard.plan.length})` : ''}</button><button class="link" type="button" data-sc-open="${esc(c.path)}">Follow it</button>`
+      : onboard?.status === 'failed' ? `<span class="disc-err" title="${esc(onboard.error ?? '')}">✕ Onboarding failed</span><button class="link" type="button" data-onb-show="${esc(c.path)}">Show progress</button><button class="link" type="button" data-sc-open="${esc(c.path)}">See why</button>`
       : '';
     const actions = c.followed ? '' : c.openspec
       ? `<button class="btn primary" type="button" data-disc="follow" data-path="${esc(c.path)}" title="It has an openspec/ folder already">Follow</button>`

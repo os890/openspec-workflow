@@ -36,7 +36,10 @@ markers, the first line of its README, and when it was last committed; the most 
   `openspec-ticket-workflow` skill, sets up `openspec/` (config with the quality gate, specs for what clearly
   exists, a roadmap with a first milestone and backlog drafts) and commits nothing. It may write files and run the
   OpenSpec CLI, `git status`/`git log`, `ls` and `mkdir`, nothing else. When it is done, the project is followed:
-  it appears in the overview and in the project picker.
+  it appears in the overview and in the project picker. Claude first writes its plan with its task tools
+  (`TaskCreate`/`TaskUpdate`, `TodoWrite` in older versions) and keeps it current; the server records it, so
+  **Show progress** (while it runs; **What it did** afterwards) opens a dialog with the plan (done, now, open, a
+  progress bar), the elapsed time, every step so far and, at the end, Claude's summary, live.
 - **Chat about it** opens a read-only conversation about the project: what it is, whether it is still developed,
   whether it has a build and tests, and whether the ticket workflow pays off. Claude ends with a recommendation;
   you decide with **Onboard it** (the onboarding continues that conversation, so it knows what you agreed) or
