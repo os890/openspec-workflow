@@ -74,7 +74,10 @@ Work through the steps in order. Do not skip a step; if a step does not apply (n
    rendering them.
 9. **Quality gate** again. Red: back to step 7.
 10. **Archive and commit.** `openspec archive <name>` (`/openspec-archive-change`), then make exactly one commit
-    for the whole ticket, archive included, so the next change builds on archived specs.
+    for the whole ticket, archive included, so the next change builds on archived specs. Follow the branch strategy
+    in `openspec/config.yaml` or the agent instructions: by default on the main branch; with a branch per ticket,
+    the ticket starts on a new branch named after the change and is merged once it is done; with a branch per
+    milestone, its tickets are committed to the milestone's branch, merged once the milestone is done.
 
 ## Rules
 
@@ -84,6 +87,14 @@ Work through the steps in order. Do not skip a step; if a step does not apply (n
 - Behaviour changes go through the spec; never silently implement something different from a scenario.
 - The parking lot is never archived. At every milestone, triage it and promote items to real changes early.
 - Never lower a quality-gate threshold.
+
+## Messages from the OpenSpec dashboard
+
+If the user follows the session in the OpenSpec dashboard, some messages come in a fixed form: reactions and
+requests about one of your answers (`[Reaction 👍 to your message: "…"]`, `[Request 📝 about your message: "…"]`),
+quotes (`[Replying to your message: "…"]`) and quick messages (👀 status, ⏸ pause after this step, 🧪 run the
+quality gate, …). What each one means is in [references/dashboard-messages.md](references/dashboard-messages.md).
+Answer such a message briefly at the next sensible point and continue, unless it asks you to stop or wait.
 
 ## Report
 

@@ -43,6 +43,14 @@ Out of scope: <what this change deliberately does not do, and which change does 
 - `<area>/<capability>`: <one line>
 ```
 
+An **idea** (not planned yet, no roadmap row) is a backlog draft that starts with two marker lines, then the
+proposal as far as it is known:
+
+```markdown
+> **Idea**: needs refinement before it is planned.
+> Goal: <one line>
+```
+
 ## Parking lot: openspec/changes/&lt;parking-lot&gt;/tasks.md
 
 ```markdown

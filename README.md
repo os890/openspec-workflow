@@ -13,7 +13,8 @@ The repository contains:
   [Mermaid](diagrams/openspec-workflow-horizontal.mmd) and [PlantUML](diagrams/openspec-workflow-horizontal-plantuml.puml),
   each rendered to SVG and PNG),
 - an agent skill, [`openspec-ticket-workflow`](skills/openspec-ticket-workflow/SKILL.md), that runs a ticket
-  through the workflow and sets it up in a new project.
+  through the workflow and sets it up in a new project, and a second one,
+  [`openspec-dashboard`](skills/openspec-dashboard/SKILL.md), that starts, sets up and explains the dashboard.
 - [`openspec-dashboard`](tools/openspec-dashboard/README.md), a live local dashboard to follow the progress of the
   changes while agents work on them, with a backlog, charts from the git history and a chat with Claude Code
   (see [below](#the-dashboard)).
@@ -146,13 +147,14 @@ Horizontal versions for slides and wide pages:
 The slash commands are the agent skills that `openspec init` installs; names can differ between OpenSpec versions
 and tools.
 
-## Using the skill
+## Using the skills
 
-Copy the skill into a project (or into your user-level skills directory):
+Copy the skills into a project (or into your user-level skills directory):
 
 ```sh
 cp -r skills/openspec-ticket-workflow <project>/.claude/skills/      # Claude Code, per project
 cp -r skills/openspec-ticket-workflow ~/.claude/skills/              # Claude Code, all projects
+cp -r skills/openspec-dashboard ~/.claude/skills/                    # the dashboard skill, the same way
 ```
 
 Other agents that read [Agent Skills](https://agentskills.io) (`SKILL.md` with YAML front matter) can use the same
@@ -165,7 +167,14 @@ skill's references hold the pieces it uses:
   `openspec/config.yaml`,
 - [agent-prompts.md](skills/openspec-ticket-workflow/references/agent-prompts.md): prompts for the fresh agents
   (acceptance check, diff review, findings validation, docs, diagrams),
-- [templates.md](skills/openspec-ticket-workflow/references/templates.md): roadmap, backlog draft and parking lot.
+- [templates.md](skills/openspec-ticket-workflow/references/templates.md): roadmap, backlog draft, idea and parking
+  lot,
+- [dashboard-messages.md](skills/openspec-ticket-workflow/references/dashboard-messages.md): what the reactions,
+  requests, quotes and quick messages from the dashboard mean, so a session handles them the same way every time.
+
+The [`openspec-dashboard`](skills/openspec-dashboard/SKILL.md) skill lets an agent start the dashboard for one or
+more projects ("show me the OpenSpec dashboard"), install it as an app, connect a running session or find out why
+something does not work; it points to the tool in this repository (`tools/openspec-dashboard/`).
 
 ## The dashboard
 
@@ -231,7 +240,9 @@ What makes it more than a status page:
   **background**: a header button lists them with their state (working, done, needs you, an issue). Sessions in other projects
   switch there; one in a folder that is not followed yet can be followed on its own and onboarded with one click.
 - **Git history** of the project: the commits with a graph of branches, tags and remote branches, and each commit's
-  message, files and diff, read-only; **openspec/ only** shows just the commits that changed the specs.
+  message, files and diff, read-only; **openspec/ only** shows just the commits that changed the specs. A dot on
+  its button marks uncommitted changes, and another button opens the project folder in your file manager
+  (configurable).
 - **Ten styles**, from Flat and Glass to Clay, Paper, Blackboard or a green-screen Terminal.
 - **An app of its own**: `launcher.mjs install` puts the dashboard with its logo into Launchpad and the Dock
   (macOS) or the application menu (Linux); one click starts it if needed and opens it.
