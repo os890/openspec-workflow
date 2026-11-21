@@ -174,7 +174,7 @@ sends messages to a session running elsewhere. Enter sends, Shift+Enter starts a
 **⤢ Maximize** gives the chat the whole window; `Esc` brings the side panel back.
 
 To answer quickly, react to one of Claude's answers with 👍 ✅ 🙏 🎉 or 💡 (each sends a short sentence such as "Yes,
-go ahead with this."), ask for it again in simpler words (🔁) or as a short summary (📝), or press **↩ Quote** to reply to that answer, after selecting the part you mean if it is
+go ahead with this."), ask for it again in simpler words (🔁), as a short summary (📝) or as an overview table (📊), or press **↩ Quote** to reply to that answer, after selecting the part you mean if it is
 only a part. Claude gets the first sentence or the selected part as a reference, so it knows which answer you mean
 even when the conversation has moved on.
 

@@ -172,6 +172,12 @@ details.group.current > summary .num { color: var(--st-progress); background: co
 .md pre { background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px 12px; overflow-x: auto; font-size: 12px; }
 .md pre code { background: none; padding: 0; }
 .md .tbl { overflow-x: auto; }
+/* tables in chat answers: the bubble may use the full width, words do not break, a wide table scrolls sideways */
+.msg.them:has(table) { max-width: 100%; }
+.msg .md .tbl { max-width: 100%; }
+.msg .md table { width: max-content; max-width: none; border-collapse: collapse; font-size: 12.5px; }
+.msg .md th, .msg .md td { overflow-wrap: normal; word-break: normal; min-width: 4ch; max-width: 30ch; padding: 4px 8px; vertical-align: top; border-bottom: 1px solid var(--line); text-align: left; }
+.msg .md td code { white-space: nowrap; }
 .md table { border-collapse: collapse; font-size: 13px; }
 .md th, .md td { border-bottom: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
 
@@ -1356,7 +1362,7 @@ body.board-max { overflow: hidden; }
 .msg.them { align-self: flex-start; background: var(--surface-2); border-bottom-left-radius: 5px; }
 .msg.them.sub { margin-left: 16px; opacity: .85; }
 .msg-foot { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
-.msg-foot .meta { margin-left: auto; white-space: nowrap; }
+.msg .msg-foot .meta { margin-left: auto; white-space: nowrap; }
 .rx-bar { display: flex; gap: 2px; opacity: 0; transition: opacity .15s; flex-wrap: wrap; }
 .msg.them:hover .rx-bar, .msg.them:focus-within .rx-bar, .ag-thread > .msg.them:last-of-type .rx-bar { opacity: 1; }
 @media (hover: none) { .rx-bar { opacity: 1; } }
@@ -2919,7 +2925,8 @@ const columnLabel = (c) => COLS.find(([k]) => k === columnOf(c))?.[1] ?? STATUS[
 // Only positive reactions; each one sends a short sentence with the reference.
 const REACTIONS = [['👍', 'I agree with this.'], ['✅', 'Yes, go ahead with this.'], ['🙏', 'Thanks, that helps.'], ['🎉', 'Great, that is exactly right.'], ['💡', 'Good idea, let us keep that.']];
 // requests about an answer: sent the same way, but asking Claude to do something with it
-const REQUESTS = [['🔁', 'Please say this again in other words, simpler and clearer.', 'Rephrase'], ['📝', 'Please summarize this in three to five short bullet points.', 'Summarize']];
+const REQUESTS = [['🔁', 'Please say this again in other words, simpler and clearer.', 'Rephrase'], ['📝', 'Please summarize this in three to five short bullet points.', 'Summarize'],
+  ['📊', 'Please turn this into an overview table (Markdown): one row per item or point, with the columns that fit the content, and nothing important left out.', 'Table']];
 const rx = { msgs: new Map(), quote: null };
 const plainOf = (md) => String(md).replace(/```[\s\S]*?```/g, ' ').replace(/`([^`]*)`/g, '$1').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[#>*_|]+/g, ' ').replace(/\s+/g, ' ').trim();
 const clip = (t, n) => (t.length > n ? t.slice(0, n - 1).replace(/\s+\S*$/, '') + '…' : t).replace(/"/g, '”');
