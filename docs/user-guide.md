@@ -325,7 +325,8 @@ container, if you use one) whenever `openspec/` changes. So with `--agent`, each
 - **Archive**: for a project that is done or on hold. The dashboard stops watching, scanning and validating it; it
   moves to a folded **Archived** section below the projects, with the status it had. **Reactivate** follows it again.
 - **Unfollow**: the dashboard stops following it and lists it below only by name; **Follow again** brings it back,
-  ✕ removes it from the list.
+  **Archive** moves it to the archived ones (without the status, since it was not watched any more), ✕ removes it
+  from the list.
 
 Neither changes anything in the project, and both are remembered, also for projects given on the command line. The
 dashboard keeps following at least one project, and a project Claude is working in (a session or an onboarding)

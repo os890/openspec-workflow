@@ -2417,6 +2417,13 @@ function adopt(dir) { const p = addProject(dir); disc.added.add(dir); saveDisc()
 // Unfollow / Archive a followed project, Reactivate an archived one or Follow an unfollowed one again.
 function projectAction(body) {
   const action = String(body.action ?? '');
+  if (action === 'archive' && !body.project && parkedState.unfollowed.has(String(body.root ?? ''))) { // an unfollowed project
+    const root = String(body.root);
+    parkedState.archived.set(root, { ...parkedState.unfollowed.get(root), at: Date.now(), summary: null });
+    parkedState.unfollowed.delete(root);
+    saveParked(); overviewChanged();
+    return { ok: true };
+  }
   if (action === 'unfollow' || action === 'archive') {
     const p = byId.get(String(body.project ?? ''));
     if (!p) throw httpError(404, 'No such project.');
@@ -2424,7 +2431,7 @@ function projectAction(body) {
     if (p.agent?.busy()) throw httpError(409, 'Claude is working in this project (a session or an onboarding); end it first.');
     const entry = { name: p.name, display: displayPath(p.root), at: Date.now(), ...(action === 'archive' ? { summary: p.state ? p.summary() : null } : {}) };
     p.stop(); p.agent?.stopWatching();
-    projects.splice(projects.indexOf(p), 1); byId.delete(p.id);
+    projects.splice(projects.indexOf(p), 1); byId.delete(p.id); usedIds.delete(p.id); // followed again, it keeps its id (and its links)
     for (const res of p.clients) { res.write(`event: gone\ndata: ${JSON.stringify({ action })}\n\n`); res.end(); }
     p.clients.clear();
     parkedState.unfollowed.delete(p.root); parkedState.archived.delete(p.root);

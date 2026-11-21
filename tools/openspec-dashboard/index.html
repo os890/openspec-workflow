@@ -4394,7 +4394,7 @@ function parkedHtml(o) {
       ${AGENT_TOKEN ? `<div class="ov-acts show">${back(x, 'reactivate', 'Reactivate')}</div>` : ''}</div>`; };
   return `<details class="ov-parked" ${ui.parkedOpen ? 'open' : ''} data-parked><summary><span class="label">${a.length ? 'Archived' : 'Unfollowed'}</span><span class="muted">${[a.length && `${a.length} archived`, u.length && `${u.length} unfollowed`].filter(Boolean).join(' · ')} · not watched, scanned or validated</span></summary>
     ${a.length ? `<div class="ov-grid">${a.map(arch).join('')}</div>` : ''}
-    ${u.length ? `<div class="ov-unf"><span class="muted">Unfollowed:</span>${u.map((x) => `<span class="ov-unf-i" title="${esc(x.display)}"><b>${labelHtml(x.label ?? x.name)}</b>${AGENT_TOKEN ? back(x, 'follow', 'Follow again') : ''}${AGENT_TOKEN && x.exists ? `<button class="link" type="button" data-proj-act="forget" data-root="${esc(x.root)}" title="Remove it from this list">✕</button>` : ''}</span>`).join('')}</div>` : ''}
+    ${u.length ? `<div class="ov-unf"><span class="muted">Unfollowed:</span>${u.map((x) => `<span class="ov-unf-i" title="${esc(x.display)}"><b>${labelHtml(x.label ?? x.name)}</b>${AGENT_TOKEN ? back(x, 'follow', 'Follow again') : ''}${AGENT_TOKEN && x.exists ? `<button class="link" type="button" data-proj-act="archive" data-root="${esc(x.root)}" title="Move it to the archived projects">Archive</button>` : ''}${AGENT_TOKEN && x.exists ? `<button class="link" type="button" data-proj-act="forget" data-root="${esc(x.root)}" title="Remove it from this list">✕</button>` : ''}</span>`).join('')}</div>` : ''}
   </details>`;
 }
 document.addEventListener('toggle', (e) => { if (e.target.matches?.('[data-parked]')) ui.parkedOpen = e.target.open; }, true);

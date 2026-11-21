@@ -40,7 +40,8 @@ process stays after it.
 everything above for that project (watchers, scans, validation, the inbox; idle chats end and can be resumed) and
 are remembered in `projects.json` in the state folder, also for projects given with `--project` or `--scan`. An
 archived project stays on the overview in a folded **Archived** section with the status it had and **Reactivate**;
-an unfollowed one is listed there by name with **Follow again** (✕ removes it from the list). The project's files
+an unfollowed one is listed there by name with **Follow again**, **Archive** (moves it to the archived ones) and ✕
+(removes it from the list). A project followed again keeps its id, so its links stay the same. The project's files
 are not touched. One project always stays followed, and a project with a running session or onboarding cannot be
 put aside. A page of a project that is no longer followed shows the overview. `POST /api/project` with `action`
 `archive`, `unfollow` (and `project`), `reactivate`, `follow` or `forget` (and `root`).
