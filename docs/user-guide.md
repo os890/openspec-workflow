@@ -16,7 +16,7 @@ milestone ([`examples/habit-tracker`](../examples/habit-tracker) is a second, sm
 | `openspec/config.yaml` | project context, the rules for proposals, specs and tasks, and the ticket workflow as agent guidance |
 | `openspec/roadmap.md` | eight changes in order, with prerequisites and three milestones |
 | `openspec/backlog/` | drafts of the five changes that have not started |
-| `openspec/changes/add-due-dates/` | the ticket in progress: proposal, design, spec deltas, tasks with `verify:` criteria, 6 of 9 done |
+| `openspec/changes/add-due-dates/` | the ticket in progress: proposal, design, spec deltas, tasks with `verify:` criteria, 6 of 11 done |
 | `openspec/changes/archive/` | two finished tickets, archived in the commit that completed them |
 | `openspec/specs/` | the living specs those two tickets produced |
 | `openspec/changes/parking-lot/` | deferred review minors, known issues and trade-offs |
