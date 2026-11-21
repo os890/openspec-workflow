@@ -382,6 +382,14 @@ dashboard may control Terminal; when the dashboard runs as a service (`launcher.
 question can stay unanswered in the background: the panel then says so, and the switch is in **System Settings ›
 Privacy & Security › Automation**.
 
+**When Claude asks you something.** A question of Claude's (its menu with options in the terminal) shows up in the
+thread as a card: the question, its options as buttons (one or several, as the question allows), a field for your own
+answer, and **Send answer**. It goes to the terminal as if you answered there: a single choice picks the option in
+the menu; your own answer, several choices or several questions at once close the menu with "Chat about this" and
+follow as a message (`[Answers to your questions] Which color? → Purple · Size: Large`), since the terminal shows one
+question at a time. For the further questions the card has one field. Answered questions stay in the thread with
+their answer. A permission prompt is not such a question: answer that in the terminal.
+
 **How full its context is.** Next to the session's state, a small bar shows how much of the context window the
 session uses, e.g. **45k / 200k**: amber from 60 %, orange from 80 %, when Claude Code will soon compact the
 conversation (summarize it, and continue with the summary). The tooltip has the exact number and how often it was

@@ -324,6 +324,26 @@ span.ch-warn { color: var(--st-progress); }
 .cq-spark { margin-top: 4px; }
 /* the quick messages, open: a row of their own below the input row, so Send stays where it is */
 .qk:has(.qk-bar:not([hidden])) { flex-basis: 100%; order: 99; display: flex; align-items: center; flex-wrap: wrap; }
+/* in terminal colors */
+.agent-panel.term-look .ask-card { background: #161b22; color: #d6dde6; }
+.agent-panel.term-look .ask-card.done { border-color: #30363d; opacity: 1; }
+.agent-panel.term-look .ask-opt, .agent-panel.term-look .ask-text { background: #0d1117; color: #d6dde6; border-color: #30363d; }
+.agent-panel.term-look .ask-opt[aria-pressed="true"] { border-color: #58a6ff; background: #13233b; box-shadow: inset 0 0 0 1px #58a6ff; }
+.agent-panel.term-look .ask-h { color: #f5a35c; } .agent-panel.term-look .ask-card.done .ask-h, .agent-panel.term-look .ask-opt span { color: #8b949e; }
+.ask-card { border: 1.5px solid #f08c2e; border-radius: 14px; padding: 12px 14px; background: color-mix(in srgb, #f08c2e 7%, var(--surface)); display: flex; flex-direction: column; gap: 8px; max-width: 92%; }
+.ask-card.done { border-color: var(--line); background: var(--surface); opacity: .9; }
+.ask-h { font-weight: 700; font-size: 13px; color: #c2410c; } .ask-card.done .ask-h { color: var(--muted); }
+.ask-block { display: flex; flex-direction: column; gap: 6px; }
+.ask-tag { align-self: flex-start; font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; color: var(--muted); }
+.ask-q { font-weight: 600; }
+.ask-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.ask-opt { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 10px; padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer; max-width: 100%; }
+.ask-opt span { font-size: 12px; color: var(--muted); }
+.ask-opt[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.ask-opt:disabled { cursor: default; opacity: .75; }
+.ask-text { font: inherit; font-size: 13px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.ask-ans { font-weight: 600; }
+:root[data-theme="dark"] .ask-h { color: #f5a35c; }
 .app-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0 2px; }
 .app-row code { font-size: 12px; overflow-wrap: anywhere; }
 .term-done-row { align-self: center; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
@@ -3627,6 +3647,7 @@ function termThreadHtml(sid) {
   for (const e of items) {
     if (e.kind === 'result' || (e.kind === 'error' && e.id && cli)) continue;
     if (e.kind === 'user' || e.kind === 'mine') lastAsk = e.kind === 'mine' ? e.m.text : e.text;
+    if (e.kind === 'ask') { flush(); const after = items.slice(items.indexOf(e) + 1, items.indexOf(e) + 8); out.push(askDoneHtml(e, results.get(e.id), after.some((x) => x.kind === 'user' && /^\[Answers to your question/.test(x.text)))); continue; }
     if (e.kind === 'note') { flush(); out.push(`<div class="term-note"><span>${esc(e.text)}</span>${e.t ? `<span class="meta">${hhmm(e.t)}</span>` : ''}</div>`); continue; }
     if (cli && e.kind === 'tool') {
       flush();
@@ -3650,11 +3671,58 @@ function termThreadHtml(sid) {
     }
   }
   flush();
-  out.push(termStateHtml(T, items));
+  out.push(termStateHtml(T, items, canWrite && sx?.typeable));
   return out.join('') || '<div class="ag-empty">Nothing in this session yet.</div>';
 }
+// ---- Claude's question (AskUserQuestion). While it waits, the server reads it from the terminal screen (T.ask):
+// a card with its options (one or several), an own answer, the answers to further questions, Send. Answered ones
+// come from the transcript (the question with its answer).
+const askSel = new Map(); // id -> { picks: Set, text, rest }
+const askState = new Map(); // id -> { busy, err, sent }
+const askOf = (id) => askSel.get(id) ?? askSel.set(id, { picks: new Set(), text: '', rest: '' }).get(id);
+function askDoneHtml(e, res, byMessage) {
+  if (!res) return '';
+  if (res.kind === 'error' && byMessage) return `<div class="ask-card done"><div class="ask-h">❓ Claude asked</div>${e.questions.map((q) => `<div class="ask-q">${esc(q.question)}</div>`).join('')}<div class="ask-ans"><span class="muted">answered from the dashboard, in the message below</span></div></div>`;
+  const pairs = [...String(res.text).matchAll(/"([^"]+)"="([^"]*)"/g)];
+  const said = res.kind === 'error' ? 'not answered in the menu' : pairs.length ? pairs.map(([, q, v]) => (pairs.length > 1 ? `${q} → ${v}` : v)).join(' · ') : res.text;
+  return `<div class="ask-card done"><div class="ask-h">❓ Claude asked</div>${e.questions.map((q) => `<div class="ask-q">${esc(q.question)}</div>`).join('')}<div class="ask-ans">${res.kind === 'error' ? '<span class="muted">' : '→ '}${esc(said.slice(0, 400))}${res.kind === 'error' ? '</span>' : ''}</div></div>`;
+}
+const askReady = (q) => { const a = askOf(q.id); return (a.text.trim() || a.picks.size) && (q.tabs.length < 2 || a.rest.trim()); };
+function askCardHtml(q, canAnswer) {
+  const st = askState.get(q.id) ?? {}, a = askOf(q.id), off = !canAnswer || st.sent || st.busy;
+  return `<div class="ask-card" data-ask="${esc(q.id)}"><div class="ask-h">❓ Claude asks you${q.tabs.length > 1 ? ` (${q.tabs.length} questions)` : ''}</div>
+    <div class="ask-block">${q.tabs[0] ? `<span class="ask-tag">${esc(q.tabs[0])}</span>` : ''}<div class="ask-q">${esc(q.question)}${q.multi ? ' <span class="muted">(several possible)</span>' : ''}</div>
+      <div class="ask-opts">${q.options.map((o, k) => `<button type="button" class="ask-opt" data-ask-opt="${k}" aria-pressed="${a.picks.has(k)}" ${off ? 'disabled' : ''}><b>${k + 1}. ${esc(o.label)}</b>${o.description ? `<span>${esc(o.description)}</span>` : ''}</button>`).join('')}</div>
+      <input class="ask-text" data-ask-text value="${esc(a.text)}" placeholder="…or your own answer" ${off ? 'disabled' : ''}></div>
+    ${q.tabs.length > 1 ? `<div class="ask-block"><div class="ask-q">${esc(q.tabs.slice(1).join(', '))} <span class="muted">· the terminal shows one question at a time; your answers to the others go along as text</span></div><input class="ask-text" data-ask-rest value="${esc(a.rest)}" placeholder="Your answers to ${esc(q.tabs.slice(1).join(', '))}" ${off ? 'disabled' : ''}></div>` : ''}
+    ${canAnswer ? `<div class="ag-row"><button class="btn primary" type="button" data-ask-send ${askReady(q) && !off ? '' : 'disabled'}>${st.busy ? '<span class="ag-spin"></span>Answering…' : st.sent ? '✓ Sent' : 'Send answer'}</button>${st.err ? `<span class="ag-note warn">✕ ${esc(st.err)}</span>` : '<span class="ag-note">goes to its terminal as if you answered it there</span>'}</div>`
+      : '<div class="ag-note">Answer it in its terminal, or <b>✎ Write to it</b> to answer here.</div>'}</div>`;
+}
+document.addEventListener('click', async (e) => {
+  const opt = e.target.closest?.('[data-ask-opt]'), send = e.target.closest?.('[data-ask-send]');
+  if (!opt && !send) return;
+  const q = termLog.get(ag.term)?.ask, id = e.target.closest('[data-ask]')?.dataset.ask;
+  if (!q || q.id !== id) return;
+  const a = askOf(id);
+  if (opt) { const k = Number(opt.dataset.askOpt); if (q.multi) { if (a.picks.has(k)) a.picks.delete(k); else a.picks.add(k); } else a.picks = new Set([k]); a.text = ''; return renderAgentLive(); }
+  const answer = a.text.trim() ? { text: a.text.trim() } : q.multi ? { choices: [...a.picks] } : { choice: [...a.picks][0] };
+  askState.set(id, { busy: true }); renderAgentLive();
+  try { await agentPost('answer', { session: ag.term, id, answer, rest: a.rest }); askState.set(id, { sent: true }); const L = termLog.get(ag.term); if (L) { L.sentAt = Date.now(); L.waitStart = L.sentAt; } }
+  catch (err) { askState.set(id, { err: err.message }); }
+  ag.stick = true; renderAgentLive(); termPoll(true);
+});
+document.addEventListener('input', (e) => {
+  const t = e.target.closest?.('[data-ask-text], [data-ask-rest]'); if (!t) return;
+  const q = termLog.get(ag.term)?.ask, card = t.closest('[data-ask]');
+  if (!q || q.id !== card?.dataset.ask) return;
+  const a = askOf(q.id);
+  if (t.hasAttribute('data-ask-rest')) a.rest = t.value;
+  else { a.text = t.value; if (a.text) { a.picks.clear(); for (const b of card.querySelectorAll('[data-ask-opt]')) b.setAttribute('aria-pressed', 'false'); } }
+  const btn = card.querySelector('[data-ask-send]'); if (btn) btn.disabled = !askReady(q);
+});
 // the end of a joined session's thread: is it working (and on what), done, or ended
-function termStateHtml(T, items) {
+function termStateHtml(T, items, canAnswer) {
+  if (T.state === 'asking' && T.ask) return askCardHtml(T.ask, canAnswer); // its question, to answer here
   const sent = T.sentAt && Date.now() - T.sentAt < 20000 && T.state !== 'working'; // just typed: it starts in a moment
   if (T.state === 'working' || sent) {
     const lastUser = [...items].reverse().find((e) => e.kind === 'user' || e.kind === 'mine');
@@ -3684,11 +3752,11 @@ async function termPoll(force) {
     const fresh = !termLog.has(sid) || r.entries.length || T.err;
     T.entries.push(...r.entries); if (T.entries.length > 4000) T.entries.splice(0, T.entries.length - 4000);
     const stateChanged = T.state !== r.state || T.ctx?.used !== r.context?.used;
-    T.next = r.next; T.cut ||= r.cut; T.err = ''; T.state = r.state; T.shell = !!r.shell; if (r.context) T.ctx = r.context;
+    T.next = r.next; T.cut ||= r.cut; T.err = ''; T.state = r.state; T.shell = !!r.shell; const askChanged = (T.ask?.id ?? null) !== (r.ask?.id ?? null); T.ask = r.ask ?? null; if (askChanged && r.ask) { askState.delete(r.ask.id); askSel.delete(r.ask.id); } // asked anew (the same question again): a fresh card if (r.context) T.ctx = r.context;
     if (r.state === 'working') { T.waitStart ||= T.sentAt || Date.now(); T.sentAt = 0; }
     else if (!T.sentAt) T.waitStart = 0; // done (or not started yet): the wait is over
     termLog.set(sid, T);
-    if (fresh || force || stateChanged || T.sentAt) renderAgentLive();
+    if (fresh || force || stateChanged || askChanged || T.sentAt) renderAgentLive();
   } catch (e) { T.err = e.message; termLog.set(sid, T); renderAgentLive(); }
   finally { termPolling = false; }
 }
@@ -4352,7 +4420,7 @@ function renderAgentLive() {
     for (const el of document.querySelectorAll('#agent .ag-compose, #agent #ag-suggest')) el.hidden = !!ro;
     const th = $('ag-thread');
     const atEnd = th.scrollHeight - th.scrollTop - th.clientHeight < 60;
-    th.innerHTML = threadHtml(c);
+    if (!document.activeElement?.matches?.('#ag-thread .ask-text')) th.innerHTML = threadHtml(c); // typing an own answer: the card stays
     edFill();
     if (atEnd || ag.stick) { th.scrollTop = th.scrollHeight; ag.stick = false; }
     $('ag-route').innerHTML = c?.terminal ? (ag.note.startsWith('✕') ? `<span style="color:var(--st-blocked)">${esc(ag.note)}</span>` : '') : 'Enter sends · Shift+Enter for a new line';

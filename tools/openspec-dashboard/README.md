@@ -372,6 +372,14 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     panel, filling the frame; no header, no close or maximize) and `term=<session>&write=1` on the session's project
     page (or the overview); each half polls, joins and writes on its own. The left one is the joined session, the
     right one the most recent other running session.
+  - **Claude's questions** (AskUserQuestion): while the menu is open, Claude Code has not written the question to the
+    transcript yet, so the server reads it from the session's Terminal tab (the question above the numbered options,
+    their descriptions, `[ ]` for several choices, the tabs of further questions, the number of "Chat about this")
+    and returns it with the transcript (`ask`, an id from the question and its options). `POST
+    /api/agent/answer` checks that the same menu is on screen, then types the option's digit (one question, one
+    choice; the digit picks and submits, the Return that follows goes to the empty prompt) or "Chat about this"'s
+    digit, waits until the session is idle and types the answers as one message. Answered questions come from the
+    transcript (the tool call and its result).
   - **Context gauge**: the session list, the transcript and `/api/sessions/status` carry `ctx` (`used`, `window`,
     `compactions`): `used` from the last main-chain assistant message's `usage` (input + cache creation + cache read
     + output tokens) or, after a `compact_boundary`, its `postTokens`; `window` is 1M when the model id has `[1m]` or

@@ -1318,6 +1318,59 @@ async function typeInto(pid, text) {
     await termScript(tty, 'enter', '');
   }
 }
+// ---- Claude's questions (AskUserQuestion) in a joined session, answered from the page. In the terminal they are a
+// menu: a digit picks an option and moves on, the Return that follows every typed text would pick the next one. So a
+// single question with one choice is answered with its digit; anything else (several questions, several choices,
+// an own answer) picks "Chat about this", which closes the menu, and then sends the answers as a message.
+const askQuestions = (input) => (Array.isArray(input?.questions) ? input.questions : []).slice(0, 4).map((q) => ({
+  question: String(q.question ?? '').slice(0, 500), header: String(q.header ?? '').slice(0, 40), multi: !!q.multiSelect,
+  options: (Array.isArray(q.options) ? q.options : []).slice(0, 6).map((o) => ({ label: String(o.label ?? '').slice(0, 200), description: String(o.description ?? '').slice(0, 300) })),
+}));
+// While the menu is open, the question is not in the transcript yet (Claude Code writes it with the answer): it is
+// read from the session's terminal screen.
+function screenAsk(screen) {
+  const ls = String(screen ?? '').replace(/\s+$/, '').split('\n').slice(-60);
+  const foot = ls.findLastIndex((l) => /Enter to select/.test(l));
+  if (foot < 0) return null;
+  const optRe = /^\s*(?:❯\s*)?(\d+)\.\s+(.*?)\s*$/;
+  const first = ls.findIndex((l, i) => i < foot && optRe.test(l) && ls.slice(0, i).every((x) => !/Enter to select/.test(x)) && i > foot - 40);
+  if (first < 0) return null;
+  const options = []; let chat = null, multi = false;
+  for (let i = first; i < foot; i++) {
+    const m = ls[i].match(optRe);
+    if (m) {
+      let label = m[2]; const box = label.match(/^\[(.)\]\s*/);
+      if (box) { multi = true; label = label.slice(box[0].length); }
+      if (/^Chat about this$/i.test(label)) chat = Number(m[1]);
+      else if (/^Type something\.?$/i.test(label)) { /* the own answer */ }
+      else options.push({ n: Number(m[1]), label, description: '' });
+      continue;
+    }
+    const t = ls[i].trim();
+    if (!t || /^─{5,}/.test(t) || /^Submit$/.test(t)) continue;
+    const o = options.at(-1);
+    if (o && /^\s{4,}/.test(ls[i]) && o.n === options.length) o.description = (o.description ? o.description + ' ' : '') + t;
+  }
+  if (!chat || !options.length) return null; // e.g. the review screen of several questions, or another prompt
+  let q = first - 1; while (q >= 0 && !ls[q].trim()) q--;
+  const qLines = []; while (q >= 0 && ls[q].trim() && !/^\s*←.*→\s*$/.test(ls[q]) && !/^─{5,}/.test(ls[q].trim())) qLines.unshift(ls[q].trim()), q--;
+  const tabLine = ls.slice(Math.max(0, first - 12), first).findLast((l) => /^\s*←.*→\s*$/.test(l));
+  const tabs = tabLine ? [...tabLine.matchAll(/[☐☒]\s+(.+?)(?=\s{2,}|$)/g)].map((m) => m[1].trim()) : [];
+  const question = qLines.join(' ').trim();
+  if (!question) return null;
+  return { question, multi, tabs, options: options.map(({ label, description }) => ({ label, description: description === label ? '' : description })), chat };
+}
+const askIdOf = (a) => createHash('sha1').update(`${a.question}|${a.options.map((o) => o.label).join('|')}`).digest('hex').slice(0, 12);
+const screenAskCache = new Map(); // pid -> { t, ask }
+async function screenAskOf(pid, fresh) {
+  const c = screenAskCache.get(pid);
+  if (!fresh && c && Date.now() - c.t < 1500) return c.ask;
+  const ps = (await runCmd('ps', ['-o', 'tty=', '-p', String(pid)])).out.trim();
+  let ask = null;
+  if (ps && ps !== '??') { const sc = await termScript(`/dev/${ps}`, 'check', '').catch(() => null); ask = sc ? screenAsk(sc.out) : null; if (ask) Object.assign(ask, { id: askIdOf(ask), tty: `/dev/${ps}` }); }
+  screenAskCache.set(pid, { t: Date.now(), ask });
+  return ask;
+}
 // ---- the background list of the page (write sessions sent to the background): the state of each one, across folders.
 // working / waiting (done) from Claude Code's own record; asking: a waiting session in macOS Terminal shows a
 // question or menu; ended: the process is gone; error: its last reply is an API error.
@@ -1836,6 +1889,35 @@ function createAgent(project) {
     await typeInto(x.pid, text);
     return { typed: true };
   }
+  // the answer to Claude's open question, from the page: answers[i] = { choice: <option index> } | { choices: [...] } | { text }
+  // answer: { choice: <option index> } | { choices: [...] } | { text }; rest: the answers to the other questions (tabs)
+  async function answer({ session, id, answer: a = {}, rest }) {
+    const x = sessionOf(session);
+    if (!x || x.ended || !x.pid) throw httpError(404, 'No running session with that id.');
+    if (process.platform === 'darwin') await termAppOf(x.pid);
+    if (!typeableOf(x.pid)) throw httpError(409, 'This session does not run in macOS Terminal; answer it there.');
+    // the same menu has to be on its screen right now (never a digit into another prompt)
+    const q = await screenAskOf(x.pid, true);
+    if (!q || q.id !== id) throw httpError(409, 'That question is not on the screen of its terminal any more (answered already?).');
+    const picks = (Array.isArray(a.choices) ? a.choices : a.choice != null ? [a.choice] : []).map(Number).filter((k) => q.options[k]);
+    const said = typeof a.text === 'string' && a.text.trim() ? a.text.trim().slice(0, 1000) : picks.map((k) => q.options[k].label).join(', ');
+    if (!said) throw httpError(400, 'Pick an option or write an answer.');
+    const others = q.tabs.length > 1 ? q.tabs.slice(1) : [];
+    if (others.length && !String(rest ?? '').trim()) throw httpError(400, `It asks more: ${others.join(', ')}. Add those answers too.`);
+    if (!others.length && !q.multi && !(a.text?.trim()) && picks.length === 1) { await termScript(q.tty, 'type', String(picks[0] + 1)); screenAskCache.delete(x.pid); return { answered: 'direct' }; }
+    await termScript(q.tty, 'type', String(q.chat)); // "Chat about this": the menu closes
+    screenAskCache.delete(x.pid);
+    // then the answers as a message, once the session waits for one again
+    const msg = `[Answers to your question${others.length ? 's' : ''}] ${q.question} → ${said}${others.length ? ` · ${others.join(', ')}: ${String(rest).trim().slice(0, 1000)}` : ''}`;
+    for (let i = 0; i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      runningCache.t = 0;
+      const r = runningSessions().find((y) => y.sessionId === x.sessionId);
+      if (!r) throw httpError(409, 'The session has ended.');
+      if (r.waiting && i >= 1) { await typeInto(x.pid, msg); return { answered: 'message' }; }
+    }
+    throw httpError(504, 'The session did not get back to its prompt; answer it in its terminal.');
+  }
   function listen({ session, on }) {
     const x = sessionOf(session);
     if (!x || x.dashboardJob) throw httpError(404, 'No such session.');
@@ -1940,12 +2022,13 @@ function createAgent(project) {
         return [];
       });
     }
-    if (m.type === 'assistant') return (Array.isArray(c) ? c : []).flatMap((b) => b.type === 'text' && b.text?.trim() ? [{ t, kind: 'text', text: b.text.slice(0, 20000), sub }] : b.type === 'tool_use' ? [{ t, kind: 'tool', text: toolLine(b), cli: cliLine(b), id: b.id, sub }] : []);
+    if (m.type === 'assistant') return (Array.isArray(c) ? c : []).flatMap((b) => b.type === 'text' && b.text?.trim() ? [{ t, kind: 'text', text: b.text.slice(0, 20000), sub }] : b.type === 'tool_use' && b.name === 'AskUserQuestion' && !sub ? [{ t, kind: 'ask', id: b.id, questions: askQuestions(b.input) }]
+      : b.type === 'tool_use' ? [{ t, kind: 'tool', text: toolLine(b), cli: cliLine(b), id: b.id, sub }] : []);
     return [];
   }
   // the transcript grows; the page asks for what came after `from` (a byte offset). Only files in Claude Code's own
   // folder are read; a long one starts with its last 2 MB.
-  function transcript({ session, from }) {
+  async function transcript({ session, from }) {
     const x = sessionOf(session);
     const r0 = x && runningSessions().find((y) => y.sessionId === x.sessionId);
     if (!x?.transcript && r0) return { entries: [], next: 0, cut: false, size: 0, state: r0.asking ? 'asking' : r0.waiting ? 'waiting' : 'working' }; // started, no prompt yet: Claude Code writes the transcript with the first one
@@ -1968,7 +2051,9 @@ function createAgent(project) {
     // the state right now, for "working…" / "done" at the end of the thread (Claude Code's own idle/busy when it runs)
     const r = runningSessions().find((y) => y.sessionId === x.sessionId);
     const state = x.listening ? 'listening' : r ? (r.asking ? 'asking' : r.waiting ? 'waiting' : 'working') : x.ended || x.elsewhere || x.hookless ? 'ended' : x.waiting ? 'waiting' : 'working';
-    return { entries, next: start + Math.max(end, from0), cut, size, state, shell: !!r?.shell, context: transcriptInfo(file)?.ctx ?? null };
+    // a question of Claude's that waits in its terminal (a menu): read from the screen
+    const ask = r?.asking && r.typeable ? await screenAskOf(r.pid) : null;
+    return { entries, next: start + Math.max(end, from0), cut, size, state, shell: !!r?.shell, ask: ask && { id: ask.id, question: ask.question, multi: ask.multi, tabs: ask.tabs, options: ask.options }, context: transcriptInfo(file)?.ctx ?? null };
   }
 
   function control({ job: jobId, action }) {
@@ -2024,7 +2109,7 @@ function createAgent(project) {
   const busy = () => jobs.some((j) => j.child && ['starting', 'running'].includes(j.status) && j.kind !== 'chat');
   sttListeners.add(() => changed(0));
   rpListeners.add(() => changed(0));
-  return { view, ask, chat, start, message, control, cancel, brief, jobState, startWatching, stopWatching, busy, onboard, listen, transcript, hook, type, newSession };
+  return { view, ask, chat, start, message, control, cancel, brief, jobState, startWatching, stopWatching, busy, onboard, listen, transcript, hook, type, newSession, answer };
 }
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => { for (const c of children) { try { c.kill('SIGTERM'); } catch { /* gone */ } } process.exit(0); });
@@ -3301,7 +3386,7 @@ async function readBody(req, max = 100_000) {
   for await (const chunk of req) { raw += chunk; if (raw.length > max) throw httpError(413, 'Too large.'); }
   try { return JSON.parse(raw || '{}'); } catch { throw httpError(400, 'Expected JSON.'); }
 }
-const AGENT_ACTIONS = { ask: 'ask', chat: 'chat', start: 'start', message: 'message', control: 'control', cancel: 'cancel', listen: 'listen', transcript: 'transcript', hook: 'hook', type: 'type', 'new-session': 'newSession' };
+const AGENT_ACTIONS = { ask: 'ask', chat: 'chat', start: 'start', message: 'message', control: 'control', cancel: 'cancel', listen: 'listen', transcript: 'transcript', hook: 'hook', type: 'type', 'new-session': 'newSession', answer: 'answer' };
 
 // ---------------------------------------------------------------- phones and tablets (Settings › Phone and tablet)
 // Off by default. On, the dashboard also listens on this computer's addresses in the local network (same port), and
