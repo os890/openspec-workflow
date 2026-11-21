@@ -254,8 +254,9 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
   - **Session · <ticket>**: every session started from the dashboard is a conversation with its steps and replies.
     Your messages go straight to it; you can end it after the current turn or stop it, and a message to an ended
     session continues it. `claude --resume <session-id>` takes it over in a terminal.
-  - **Terminal session** (also **⌨** in the header, with the number of running sessions): join a session running
-    elsewhere (a terminal, an IDE). On macOS, a session running in Terminal is written to by typing: the server finds
+  - **⌨ Terminal sessions** (its own button in the header, with the number of running sessions; not a chat tab; on
+    the overview it lists every running session, and one of a followed project opens that project): join a session
+    running elsewhere (a terminal, an IDE). On macOS, a session running in Terminal is written to by typing: the server finds
     its tty (`ps`), checks that Claude Code is the foreground process there and that it is not asking something (a
     permission prompt in the tab's contents), and types the message with AppleScript (`do script … in` the tab with
     that tty), one line, sent with Return; no hook needed, and it works while the session waits at its prompt. A long
@@ -267,10 +268,13 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     quotes of the chat; a quote typed into a terminal is one line, so the dashboard reads `[Replying to …] text`
     with a space as well as with a line break. **▣ Terminal** cycles terminal colors for the conversation (with the
     steps CLI-style: `⏺ Tool(argument)` and `⎿` the first four lines of its result, taken from the transcript's
-    `tool_result`), for the whole panel, and back; **A− / A / A+** set the text size; **≋ Matrix** (on by default)
-    shows a rain canvas behind the conversation while the session has been working for more than 30 s since your
-    message, and removes it when it is done (a still image with reduced motion). Both only apply in write mode
-    and are kept in `localStorage` (`osd-term-view`). The drop-down lists the project's sessions of the last 12 hours: the ones the
+    `tool_result`), for the whole panel, and back; **A− / A / A+** set the text size. While the session has been working
+    for more than 30 s since your message, a rain canvas (the Matrix style's falling code, fading to transparent)
+    runs behind the conversation and is removed when it is done (a still image with reduced motion); the **Write
+    mode** tab of the settings (⚙ below the input box opens it there) turns it off, sets the delay (5–600 s) and the
+    color of your messages (highlighted, the style's accent, or an own color with a readable text color). Both only apply in write mode
+    and are kept in `localStorage` (`osd-term-view`: `look`, `fs`, `matrix`, `rainAfter`, `me`). **Set up the hook** is
+    only offered for a picked session that cannot be typed into. The drop-down lists the project's sessions of the last 12 hours: the ones the
     hook below reports, and also those it has not seen (no hook, or started before it), found in Claude Code's own
     records: `~/.claude/sessions/<pid>.json` (session id, folder, idle or busy; the process must still run) for the
     running ones and the interactive transcripts in `~/.claude/projects/<folder>/` for the ended ones (`claude -p`
@@ -282,7 +286,7 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     such a folder too: **Set up the hook** there (or `agent-hook.mjs install <folder>`) installs it in that folder, the
     hook then uses the folder with the hook in its `.claude` settings as the session's root when there is no
     `openspec/` above, and the panel writes to that folder's inbox (messages and listening as for the project).
-    `OPENSPEC_DASHBOARD_CLAUDE_DIR` reads these records from another folder than `~/.claude`. The list shows running ones first, with the last prompt typed there, working or
+    `OPENSPEC_DASHBOARD_CLAUDE_DIR` reads these records from another folder than `~/.claude`. Each group of the list has the latest session on top (by its last activity), with the last prompt typed there, working or
     waiting, last step); a joined session shows its transcript live, read-only, until **✎ Write to it**; then
     messages go to that session only, as if typed there. **👂 Keep it listening** makes the session wait for a
     message when it is done instead of stopping. **Any session** sends to the next session that takes a step.

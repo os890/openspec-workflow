@@ -997,7 +997,7 @@ end run`;
 const squash = (t) => t.replace(/\s+/g, ' ').trim();
 // the input box of Claude Code: the lines between the last two horizontal rules
 const inputBox = (contents) => { const ls = contents.replace(/\s+$/, '').split('\n'); const rules = ls.map((l, i) => (/^─{10,}/.test(l.trim()) ? i : -1)).filter((i) => i >= 0); return rules.length >= 2 ? squash(ls.slice(rules.at(-2) + 1, rules.at(-1)).join(' ')).replace(/^❯\s*/, '') : ''; };
-const ASKING = /Do you want to|\b1\. Yes\b|❯ 1\./;
+const ASKING = /Do you want to|\b1\. Yes\b|❯ 1\.|Enter to confirm|Esc to cancel/; // a question or menu of Claude Code (permission, trust, choice)
 async function typeInto(pid, text) {
   if (!typeableOf(pid)) throw httpError(409, 'This session does not run in macOS Terminal; the message can only go through the hook.');
   const ps = (await runCmd('ps', ['-o', 'tty=,stat=', '-p', String(pid)])).out.trim().split(/\s+/);

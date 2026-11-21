@@ -200,8 +200,8 @@ node tools/openspec-dashboard/server.mjs --agent examples/todo-app
 
 **Chat** (in the header and on the full-screen board) is a messenger, independent of any ticket. The
 **Assistant** reads the project but never changes it, knows its status and remembers the conversation; **New chat**
-starts over. Every session started from the dashboard becomes a conversation of its own, and **Terminal session**
-lets you join a session running elsewhere (see below). Enter sends, Shift+Enter starts a new line.
+starts over. Every session started from the dashboard becomes a conversation of its own. Sessions running in a
+terminal have a panel of their own, **⌨** (see below). Enter sends, Shift+Enter starts a new line.
 
 ![Chat next to the full-screen board](images/dashboard-chat.png)
 
@@ -238,64 +238,79 @@ Before the first session:
   `.claude/settings.json`: nobody can answer permission prompts in a started session, so they are declined.
 - Run `claude` in the project folder once and accept the trust dialog; until then Claude Code ignores the
   project's permission rules (the panel warns about it).
-- To write to a session running in a terminal, set up the hook once (see below).
+- Sessions running in macOS Terminal need nothing else (see below); for one in an IDE or another terminal app, set
+  up the hook once.
 
-**Join a session running in a terminal.** **⌨** in the header (next to ⎇; its badge counts the running sessions)
-opens **Chat › Terminal session**. The drop-down lists the Claude Code sessions of the project (in a terminal or an
-IDE), with the last prompt you typed there, whether it is working or waiting for input, and when it last did
-something; ended ones stay in the list for 12 hours. Pick one to join it: you see what it does, live (your prompts,
-Claude's replies and its steps). The end of the thread says where it stands: **Working: <its current step> · since
-<time>** while it works (an answer is on its way), **✓ Done · waiting for your next message** once it has answered,
-or **Session ended**.
+### Join a session running in a terminal
 
-While you write to a session, the details above the conversation fold into one line (**✎ Writing to …**, its state,
-**Details ▾**, **Read only**), so the conversation gets the panel; **Details ▾** shows the session picker and the
-notes again, **Fewer details ▴** folds them. Claude's answers there have the same quick replies as the chat
-(👍 ✅ 🌿 🙏 🎉 💡, 🔁 📝 📊 and ↩ to quote, also a selected part); they are typed into the session like any message,
-and the thread shows them as reactions and quotes. Also only while writing: **▣ Terminal** shows the conversation in
-terminal colors (dark, monospaced; your own messages keep a bright blue background, so they stand out), with the
-steps as the CLI shows them (`⏺ Bash(git log --oneline -3)`, then `⎿` and the first lines of the result); a second
-click colors the whole panel, including the input area, and a third brings the normal colors back. **A−** / **A+**
-change the text size, **A** resets it. When an answer takes longer than 30 seconds, falling green code (as in the
-Matrix style) runs behind the conversation until the session is done, so you see at a glance when it has
-finished; **≋ Matrix** turns it off (and on again). All of these are remembered in the browser. The CLI's own rendering of some tools
-(e.g. the colored diff of an edit) and live output while a command runs are not shown.
-
-Following a session works without any setup: the dashboard finds the running sessions in Claude Code's own records
-(`~/.claude/sessions`) and reads their transcripts.
-
-**Writing to a session in macOS Terminal needs no setup either.** **✎ Write to it** types your message into the
-session's Terminal tab and sends it with Return, exactly as if you typed it there, also while the session waits at
-its prompt; the transcript marks it as *typed from the dashboard*. It goes as one line (line breaks become spaces).
-The dashboard only types while Claude Code itself is in the foreground of that tab (never into a shell), and not
-while the session asks you something there, such as a permission, since Return would answer it. Terminal may ask
-once whether the dashboard may control it.
-
-For sessions elsewhere (an IDE, another terminal app), writing needs the dashboard's hook in the project:
-**Set up the hook** in the panel adds it (a few lines in `.claude/settings.local.json`, which is kept out of git
-through `.git/info/exclude`; or run `node tools/openspec-dashboard/agent-hook.mjs install <project>`). Sessions
-started after that can be written to; one that runs already is marked **◌ … read-only** in the list until you
-restart it (`/exit`, then `claude --resume <id>` continues it).
+**⌨** in the header (next to ⎇) opens **⌨ Terminal sessions**; its badge counts the running sessions. The drop-down
+lists the Claude Code sessions of the project (in a terminal or an IDE), the latest on top, with the last prompt you typed there,
+whether it is working or waiting for input, and when it last did something; ended ones stay in the list for 12
+hours. Pick one to join it: you see what it does, live (your prompts, Claude's replies and its steps). The end of
+the thread says where it stands: **Working: <its current step> · since <time>** while it works (an answer is on its
+way), **✓ Done · waiting for your next message** once it has answered, or **Session ended**. Following a session
+needs no setup: the dashboard finds the running sessions in Claude Code's own records (`~/.claude/sessions`) and
+reads their transcripts.
 
 The drop-down also lists sessions running in other folders. One in another project the dashboard follows is under
 **Other projects**: picking it switches to that project and joins the session there. One in a folder the dashboard
-does not follow is under **Session only**: you follow it read-only, without a board, roadmap or specs around it,
-and **Onboard it as a project…** opens the onboarding chat for its folder in the overview (or **Follow it as a
-project** when the folder has an `openspec/` already). **Set up the hook** works there too, without onboarding: it
-puts the hook into that folder, and after a restart of the session you can write to it and keep it listening like a
-session of the project.
+does not follow is under **Session only**: you follow it without a board, roadmap or specs around it, and
+**Onboard it as a project…** opens the onboarding chat for its folder in the overview (or **Follow it as a
+project** when the folder has an `openspec/` already). On the overview, **⌨** lists every running session the same
+way.
 
-![A session in a folder the dashboard does not follow, read-only, with the offer to onboard it](images/dashboard-terminal-session-only.png)
+![A session in a folder the dashboard does not follow, with the offer to onboard it](images/dashboard-terminal-session-only.png)
 
-With the hook, a session is read-only until you press **✎ Write to it**: then your message reaches the session as if you typed it there, at its next step. A session that
-waits for input in the terminal takes no steps, so your message arrives with the next prompt typed there (the
-message says so while it is queued). **👂 Keep it listening** changes that from the session's next answer on: when
-it is done, it waits for your message instead of stopping (the terminal shows the hook running; `Esc` there takes it
-back), and each of your messages continues it. A session that is already waiting needs one prompt in its terminal
-first. **👂 Listening · stop** lets it finish. **Any session** sends to whichever
-session takes the next step.
+**Write to it.** A joined session is read-only at first; **✎ Write to it** next to its state starts writing. Your
+message is typed into the session's macOS Terminal tab and sent with
+Return, exactly as if you typed it there, also while the session waits at its prompt; no setup is needed, and the
+transcript marks it as *typed from the dashboard*. It goes as one line (line breaks become spaces). The dashboard
+only types while Claude Code itself is in the foreground of that tab (never into a shell), and not while the session
+asks you something there (a permission, a choice), since Return would answer it. Terminal may ask once whether the
+dashboard may control it.
 
-![Joined a session running in a terminal: its prompt, steps and answer, and a question sent from the dashboard](images/dashboard-terminal-session.png)
+While you write, the details above the conversation fold into one line (**✎ Writing to …**, its state, **Details ▾**,
+**Read only**), so the conversation gets the panel; **Details ▾** shows the session picker and the notes again,
+**Fewer details ▴** folds them. Claude's answers have the same quick replies as the chat (👍 ✅ 🌿 🙏 🎉 💡, 🔁 📝 📊
+and ↩ to quote, also a selected part); they are typed into the session like any message, and the thread shows them
+as reactions and quotes.
+
+**The look while writing.** **▣ Terminal** shows the conversation in terminal colors (dark, monospaced; your own
+messages keep a bright blue background, so they stand out), with the steps as the CLI shows them
+(`⏺ Bash(git log --oneline -3)`, then `⎿` and the first lines of the result); a second click colors the whole panel,
+including the input area, and a third brings the normal colors back. **A−** / **A+** change the text size, **A**
+resets it. The CLI's own rendering of some tools (e.g. the colored diff of an edit) and live output while a command
+runs are not shown.
+
+**Falling code while you wait.** When an answer takes longer than 30 seconds, green code rains behind the
+conversation, as in the Matrix style, until the session is done: the moment it stops, the answer is in, so you see
+at a glance whether it has finished, even from across the room. It shows in both color modes and only while you
+write to a session (with reduced motion it is a still image).
+
+![Writing to a session in terminal colors: the steps as in the CLI, and falling code while the answer is on its way](images/dashboard-terminal-rain.png)
+
+**⚙** below the input box opens the settings on the **Write mode** tab while you write to a session: turn the
+falling code off, or start it after another number of seconds (5 to 600; 30 by default), and choose the color of
+**your messages**: highlighted (the default: bright blue in terminal colors, the style's color otherwise), the color
+of the current style (in terminal colors too), or a color of your own (the text turns dark or light to stay
+readable). All of the look settings are remembered in the browser.
+
+![The Write mode settings: falling code, its delay, and the color of your messages](images/dashboard-settings-write.png)
+
+**Sessions elsewhere: the hook.** For a session the dashboard cannot type into (in an IDE, another terminal app or
+not on macOS), the panel offers **Set up the hook**: a few lines in the project's `.claude/settings.local.json`,
+kept out of git through `.git/info/exclude` (or run `node tools/openspec-dashboard/agent-hook.mjs install
+<project>`); it also works for a session-only folder. Sessions started after that can be written to; one that runs
+already is marked **◌ … read-only** until you restart it (`/exit`, then `claude --resume <id>` continues it). With
+the hook, your message reaches the session at its next step; a session that waits for input takes it with the next
+prompt typed there (the message says so while it is queued). **👂 Keep it listening** changes that from the
+session's next answer on: when it is done, it waits for your message instead of stopping (the terminal shows the
+hook running; `Esc` there takes it back), and each of your messages continues it; **👂 Listening · stop** lets it
+finish. **Any session** sends to whichever session takes the next step.
+
+![Joined a session through the hook: its prompt, steps and answer, and a question sent from the dashboard](images/dashboard-terminal-session.png)
+
+### Voice input, rephrasing and the local models
 
 **Voice input**: if Podman has a speech-to-text image (whisper.cpp's `whisper-cli` with a model), the text boxes get
 a microphone. Click it, speak, click **Stop**: the recording is transcribed locally in that container, and the text
@@ -315,7 +330,7 @@ Apple's on-device model on macOS 26 with Apple Intelligence, or off; for speech-
 
 ![Settings: the local models in use](images/dashboard-settings-models.png)
 
-The **Podman** tab of the same dialog shows how the Podman VM is doing (memory, CPU load, disk) and its containers:
+The **Write mode** tab holds the settings for writing to a session (see above). The **Podman** tab of the same dialog shows how the Podman VM is doing (memory, CPU load, disk) and its containers:
 the 15 used last at the top (running ones first), then all others by name, each with a **Start** or **Stop**
 button. When the VM is stuck or full, **Restart the VM** stops and starts it; the containers you checked (↻) come
 back, the others stay stopped. The dashboard's own model container cannot be checked: it is removed when it stops

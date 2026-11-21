@@ -217,10 +217,13 @@ What makes it more than a status page:
   and lets Claude check your local containers for a service to reuse (e.g. a running Postgres) before anything is
   installed on the host. Projects you are done with can be **archived** or **unfollowed**, so they cost nothing
   while they rest.
-- **Join a session running in a terminal** (⌨ in the header): pick it from a list, follow what it does live
-  (read-only by default, no setup needed), and write to it: in macOS Terminal the message is typed right into the
-  session, also while it waits, without any setup; elsewhere through a hook (one click); it can even wait for your next message when it is done. Sessions in other projects switch there; one in
-  a folder that is not followed yet can be followed on its own and onboarded with one click.
+- **Join a session running in a terminal** (⌨ in the header, also on the overview): pick it from a list of all
+  running Claude Code sessions, follow what it does live (no setup needed), and write to it: in macOS Terminal the
+  message is typed right into the session, also while it waits; elsewhere through a hook (one click). While you
+  write, it can look like the CLI (terminal colors, steps as `⏺ Bash(…)` / `⎿ output`), offers the chat's quick
+  replies (🌿 accepts a proposal on a new branch), and when an answer takes a while, **green code rains behind the
+  conversation until it is done** — you see from across the room when it has finished. Sessions in other projects
+  switch there; one in a folder that is not followed yet can be followed on its own and onboarded with one click.
 - **Git history** of the project: the commits with a graph of branches, tags and remote branches, and each commit's
   message, files and diff, read-only; **openspec/ only** shows just the commits that changed the specs.
 - **Ten styles**, from Flat and Glass to Clay, Paper, Blackboard or a green-screen Terminal.
