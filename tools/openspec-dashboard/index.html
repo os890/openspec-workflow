@@ -2513,6 +2513,7 @@ function morphChildren(a, b) {
 function morphNode(a, b) {
   if (a.nodeType !== b.nodeType || a.nodeName !== b.nodeName) { a.replaceWith(b); return; }
   if (a.nodeType !== 1) { if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue; return; }
+  if (a.nodeName === 'SELECT' && a === document.activeElement) return; // open or in use: changing its options makes the list flicker; it catches up after
   const keepOpen = a.nodeName === 'DETAILS' && a.classList.contains('ch-data') && a.open;
   for (const { name } of [...a.attributes]) if (!b.hasAttribute(name) && !(keepOpen && name === 'open')) a.removeAttribute(name);
   for (const { name, value } of [...b.attributes]) if (a.getAttribute(name) !== value) a.setAttribute(name, value);
@@ -3839,6 +3840,8 @@ document.addEventListener('click', (e) => {
   }
 }, true);
 function closeAgent() { if (EMBED) return; cancelRecording(); ag.open = false; $('agent').hidden = true; document.body.classList.remove('ag-open', 'ag-max'); updateAgentBtn(); }
+// a session picker that was left alone during updates (it had the focus): bring it up to date when it loses it
+document.addEventListener('focusout', (e) => { if (e.target.matches?.('#agent select')) setTimeout(() => ag.open && renderAgentLive(), 0); });
 // ---- side by side: two terminal sessions next to each other, each half the page itself with ?embed (its own picker,
 // thread, write mode and input box); the left one starts with the joined session, the right one with the next
 const split = { open: false };
@@ -5238,7 +5241,7 @@ function ghRender() {
       <option value="" ${tt.rev ? '' : 'selected'}>Board: now${gh.branch && gh.branch !== 'HEAD' ? ` (${esc(gh.branch)}, working tree)` : ''}</option>
       ${tt.rev && !cur ? `<option value="${esc(tt.rev)}" selected>Board: ${esc(tt.rev.slice(0, 8))}</option>` : ''}
       ${bs.map((b) => `<option value="${esc(b)}" ${b === cur ? 'selected' : ''}>Board: ${esc(b)}</option>`).join('')}</select>` : '');
-  const bsel = $('gh-board').querySelector('select'); if (bsel) bsel.value = tt.rev ?? ''; // morphing keeps the old choice
+  const bsel = $('gh-board').querySelector('select'); if (bsel && bsel !== document.activeElement) bsel.value = tt.rev ?? ''; // morphing keeps the old choice
   if (gh.repo === false) { $('gh-list').innerHTML = '<div class="gh-empty">This project is not in a git repository.</div>'; $('gh-detail').innerHTML = ''; return; }
   const lanes = Math.min(12, Math.max(1, ...gh.rows.map((r) => r.width)));
   morphHtml($('gh-list'), gh.commits.map((c, i) => `<div class="gh-row ${c.h === gh.sel ? 'sel' : ''} ${c.h === tt.h ? 'tt-on' : ''}" role="option" aria-selected="${c.h === gh.sel}" data-gh="${c.h}" title="${esc(c.an)} · ${esc(ghFull(c.t))} · double-click: the board at this commit">${ghSvg(gh.rows[i], lanes)}${ghRefs(c.refs)}<span class="gh-s">${esc(c.s)}</span><span class="gh-t">${esc(ghDate(c.t))}</span></div>`).join('')
