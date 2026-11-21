@@ -171,8 +171,9 @@ cd <your project>
 node <path-to>/tools/openspec-dashboard/server.mjs
 ```
 
-Shows the change being worked on with its current task, the milestone, an activity feed and a board of all
-changes, updated live from the files and the `openspec` CLI. Several projects at once (`--scan=<dir>`) get an
+Shows the change being worked on with its current task, the milestone, an activity feed, a board of all
+changes (with a focus mode), a backlog view and charts of how the work flows (cumulative flow, burn-up with a
+forecast, cycle time, the critical path), updated live from the files, git and the `openspec` CLI. Several projects at once (`--scan=<dir>`) get an
 overview page. With `--agent` it also talks to Claude Code: ask about a ticket, message the working session or
 start a session on a ticket. No dependencies; see its [README](tools/openspec-dashboard/README.md).
 

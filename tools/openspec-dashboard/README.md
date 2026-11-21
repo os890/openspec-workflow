@@ -35,14 +35,20 @@ CLI calls for all projects run one at a time.
   tasks and status changes, with a chart of tasks done over time.
 - **Board**: all changes in six columns derived from the files, filterable by milestone. **⤢ Full screen**
   (or `#board` in the address) shows only the board, still live; clicking a card opens its details in a side
-  panel (`#board:<change>` links to it directly), `Esc` closes it.
+  panel (`#board:<change>` links to it directly), `Esc` closes it. **○ Focus** hides the archived changes and
+  folds empty columns into narrow strips, so the open work gets the space.
+- **Backlog**: the roadmap as a list per milestone, like the backlog of an issue tracker, with area, prerequisites,
+  progress and status per change. The change you opened last stays highlighted, so you find your place again.
+  With `--agent`, changes that have not started can be reordered (see below).
+- **Charts**: how the work flows over time (see below).
 
 Everything updates within a second of a file change (file watching + Server-Sent Events).
 
 ## How status is derived
 
 The board is read-only on purpose: a change's column follows from its files, so dragging a card could not write a
-design or tasks, and editing files an agent is working on would race with it.
+design or tasks, and editing files an agent is working on would race with it. Only the *order* of changes that have
+not started can be changed, in the backlog.
 
 | Column | Rule |
 |---|---|
@@ -54,7 +60,9 @@ design or tasks, and editing files an agent is working on would race with it.
 | Archived | in `openspec/changes/archive/YYYY-MM-DD-<name>` |
 
 Prerequisites come from the *Depends on* column of `openspec/roadmap.md` (row numbers; ranges like `5–8`;
-numbers in parentheses are soft and never block). Milestones come from lines like
+numbers in parentheses are soft and never block). A row added later between two others can carry a letter (`2a`,
+`10b`, ranges like `10a–10c`), and a mark after the number (`3 ✓`) is ignored; a lettered row belongs to the
+milestone of its number. Milestones come from lines like
 `- **M1 "First release"** (3–9): …`. Both formats match the templates of the
 [`openspec-ticket-workflow`](../../skills/openspec-ticket-workflow/references/templates.md) skill. Without a
 roadmap the dashboard still works and lists every change.
@@ -62,6 +70,36 @@ roadmap the dashboard still works and lists every change.
 A **parking lot** (a change that collects deferred items and is never archived) is recognized by the words
 "parking lot" at the top of its `tasks.md`, or named with `--parking-lot=<change>`. It is kept out of the board,
 the totals and "next up", and shown as its own chip.
+
+## Reordering the backlog (with `--agent`)
+
+In the **Backlog**, drag a change that has not started (⠿) to another place in its milestone, or move it with
+Alt+↑/↓. The dashboard rewrites `openspec/roadmap.md`: the rows swap places, every position keeps its number, and
+every *Depends on* reference in the table follows the change it points to. A move is refused when it would put a
+change before one of its hard prerequisites, pass a change that has started, or leave the milestone, and when the
+file changed since it was read. Nothing else in the file is touched.
+
+## Charts
+
+**Charts** (next to Board and Backlog, or `?view=charts`) shows, for the milestone picked above or all changes:
+
+- **Cumulative flow**: the number of changes per status over time; a band that widens is work piling up there.
+- **Milestone burn-up**: changes done against changes planned (the line rises when a change is added), with a
+  forecast from the recent pace once two changes are done. It counts changes, not tasks, because tasks only exist
+  once a change is specified.
+- **Work in progress: age**: how long each open change has been in its status, against the typical (median) time
+  of finished changes in that status; much longer than usual is flagged.
+- **Cycle time per change**: each change from specified to archived, split into specifying, implementing and
+  review/archive, with the median per phase. "+n tasks" marks tasks added after work started.
+- **Dependencies and critical path**: the roadmap as a graph; the longest chain of open changes is highlighted.
+  Click a change to open it.
+- **When tasks get checked off**: check-offs per day and hour.
+
+The data comes from two sources. **git**: every commit that touched `openspec/changes` or `openspec/backlog`
+(when a draft, a design or tasks appeared, a task was checked, a change was archived), so the charts cover the
+whole history, but only as finely as the commits: a ticket committed once shows up as done in one step. **The
+dashboard's own history**, recorded within seconds while it runs. Per change and status (and per task) the earlier
+time wins. Hover a chart for the values; **Data** under a chart shows them as a table.
 
 ## Agent panel (optional)
 
@@ -94,6 +132,19 @@ Each recording runs in a throwaway container without network, with a read-only r
 goes in on stdin and is never written to a file. The small selector next to the microphone is the language you
 speak (default: the browser's language). With a fixed language a short clip takes a few seconds; **Auto** detects
 the language first, which takes noticeably longer on a CPU.
+
+**Rephrase.** If a local language model is available, **✨ Rephrase** next to the microphone rewrites the draft in
+the box into a clear prompt: to the point, nothing important dropped, in the language of the draft. The result is a
+suggestion: **Accept** replaces the text (you can still edit it), **Reject** keeps yours. Like the transcription it
+runs locally, never through Claude. Two ways to provide a model:
+
+- `--rephrase-url=<url>`: any OpenAI-compatible server (e.g. llama.cpp's `llama-server` or Ollama, such as
+  `http://127.0.0.1:11434/v1`).
+- A Podman (or Docker) image whose entrypoint is an LLM adapter (`*-llm-adapter`) that speaks JSON lines on stdin
+  and stdout in front of llama.cpp and takes `--model <file.gguf> --ctx <n>`. The dashboard finds such an image and a
+  GGUF chat model (in a Hugging Face cache layout under `~/.cache/huggingface/hub`, or `--rephrase-models=<dir>`,
+  or `--rephrase-model=<file>`), starts the container on the first request without network and with the model
+  folder read-only, and ends it after 10 idle minutes. On a CPU the first request waits for the model to load.
 
 It runs the `claude` command (Claude Code) in the project folder, so it uses Claude Code's own login and counts
 towards the same plan or account as your other sessions; there is no separate key. Each question and session is
@@ -159,9 +210,17 @@ Without a working CLI everything except the validation results still works.
 | `--stt-image=<image>` | detected (or `OPENSPEC_DASHBOARD_STT_IMAGE`) | speech-to-text image: entrypoint `whisper-cli -m <model>` |
 | `--stt-language=<code>` | `auto` | language when the page sends none |
 | `--no-stt` | | no voice input |
+| `--rephrase-url=<url>` | | an OpenAI-compatible server for **Rephrase** |
+| `--rephrase-image=<image>` | detected | an LLM adapter image for **Rephrase** |
+| `--rephrase-model=<file.gguf>` | the largest chat model found | the model the adapter image loads |
+| `--rephrase-models=<dir>` | | another folder to look for models in |
+| `--no-rephrase` | | no **Rephrase** |
 
-Nine styles, picked in the header: Flat, Glass, Paper, Whiteboard, Notebook and Comic (each in light and dark), Blackboard, Matrix and Terminal (always dark). In the address, `?style=flat|glass|paper|whiteboard|blackboard|notebook|matrix|terminal|comic` and `?theme=light|dark` choose the look (otherwise the header buttons and the
-system setting decide), `?panel=chat` opens the chat, and `?snapshot` loads the data once without the live stream (useful for screenshots).
+Ten styles, picked in the header: Flat, Glass, Clay, Paper, Whiteboard, Notebook and Comic (each in light and
+dark), Blackboard, Matrix and Terminal (always dark). In the address, `?style=flat|glass|clay|paper|whiteboard|blackboard|notebook|matrix|terminal|comic`
+and `?theme=light|dark` choose the look (otherwise the header buttons and the system setting decide),
+`?view=board|backlog|charts` the view of the board, `?focus` turns on focus mode, `?panel=chat` opens the chat,
+and `?snapshot` loads the data once without the live stream (useful for screenshots).
 
 ## Notes
 
@@ -170,4 +229,4 @@ system setting decide), `?panel=chat` opens the chat, and `?snapshot` loads the 
 - The "files written" signal scans the project tree every 10 seconds, skipping `.git`, `node_modules`, `target`,
   `build`, `dist` and similar folders.
 - The server only serves `openspec/**/*.md` from the project and binds to `127.0.0.1` by default. Without
-  `--agent` it never writes to the project or starts anything.
+  `--agent` it never writes to the project or starts anything; it only reads (including `git log` for the charts).

@@ -93,6 +93,27 @@ Click a card to open its details next to the board; `Esc` closes them. A link to
 
 ![Board with the details of a change](images/dashboard-board-details.png)
 
+**○ Focus** hides the archived changes and folds empty columns into narrow strips, so the open work gets the space
+(`?focus` in a link):
+
+![Board in focus mode](images/dashboard-board-focus.png)
+
+**Backlog** shows the roadmap as a list per milestone, like the backlog of an issue tracker. The change you opened
+last stays highlighted, so you find your place in the list again. With `--agent` you can reorder the changes that
+have not started: drag one by its handle (⠿) within its milestone, or use Alt+↑/↓. The dashboard rewrites
+`openspec/roadmap.md`, keeps the numbers of the positions and updates every *Depends on* reference; it refuses a
+move that would put a change before one of its prerequisites.
+
+![Backlog with the opened change highlighted](images/dashboard-backlog.png)
+
+**Charts** shows how the work flows: a cumulative flow diagram, a burn-up of the milestone with a forecast, the
+age of open changes against the typical time, the cycle time of each change split into its phases, the
+dependency graph with the critical path, and when tasks get checked off. The milestone picked above filters them.
+They are built from the git history of `openspec/` and from what the dashboard recorded while it ran, so they also
+cover the time before you first started it; hover for values, **Data** shows a table.
+
+![Charts](images/dashboard-charts.png)
+
 ## Talk to the agent (optional)
 
 Start the dashboard with `--agent` to chat with Claude about the project, start a session on a ticket and talk to
@@ -134,6 +155,11 @@ a microphone. Click it, speak, click **Stop**: the recording is transcribed loca
 lands in the box for you to check before you send it. Pick the language you speak next to it; that is much faster
 than **Auto**.
 
+**Rephrase**: with a local language model (an OpenAI-compatible server given with `--rephrase-url`, or a Podman image
+with an LLM adapter), **✨ Rephrase** turns a rough draft into a clear prompt: to the point, nothing important
+dropped, in the language you wrote. It shows a suggestion; **Accept** replaces your text, **Reject** keeps it. On a
+CPU the first request waits until the model has loaded.
+
 Every question, chat message and session is a normal Claude Code run and counts towards your plan. Details:
 [dashboard README](../tools/openspec-dashboard/README.md#agent-panel-optional).
 
@@ -154,12 +180,13 @@ dashboard; **All projects** in the picker returns to the overview.
 
 ## Styles
 
-The dashboard has nine styles:
+The dashboard has ten styles:
 
 | Style | Look |
 |---|---|
 | **Flat** (default) | clean and quiet |
 | **Glass** | frosted panels over a soft colour field |
+| **Clay** | warm ivory and terracotta with serif headings, close to the look of Claude; warm charcoal in dark mode |
 | **Paper** | post-its on light wooden boards, one colour per column, the current task on a sticky note |
 | **Whiteboard** | marker on a framed whiteboard, cards held by magnets; a dark glass board in dark mode |
 | **Blackboard** | chalk on a green board in a wooden frame; always dark |
@@ -175,6 +202,10 @@ http://127.0.0.1:4590/?style=paper&theme=dark.
 | Flat, light | Flat, dark | Glass, dark |
 |---|---|---|
 | ![Flat style, light](images/style-flat-light.png) | ![Flat style, dark](images/style-flat-dark.png) | ![Glass style, dark](images/style-glass-dark.png) |
+
+| Clay, light | Clay, dark |
+|---|---|
+| ![Clay style, light](images/style-clay-light.png) | ![Clay style, dark](images/style-clay-dark.png) |
 
 | Paper, light | Paper, dark |
 |---|---|
@@ -205,7 +236,8 @@ http://127.0.0.1:4590/?style=paper&theme=dark.
 ## Tips
 
 - If OpenSpec runs in a container or behind a wrapper, start the dashboard with `--cli=<wrapper>`.
-- The dashboard never writes to your project. Its history lives in `~/.local/state/openspec-dashboard/`.
+- The dashboard never writes to your project, except when you reorder the backlog with `--agent`. Its history
+  lives in `~/.local/state/openspec-dashboard/`.
 - Ticket by ticket, `openspec/specs/` becomes the description of what the system does today; point new team
   members and new agents there first.
 - More options: [dashboard README](../tools/openspec-dashboard/README.md). The skill itself:

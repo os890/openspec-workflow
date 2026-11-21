@@ -6,7 +6,7 @@
 <title>OpenSpec Dashboard</title>
 <meta name="osd-agent" content="">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Patrick+Hand&family=Courier+Prime:wght@400;700&family=Permanent+Marker&family=Cabin+Sketch:wght@400;700&family=Architects+Daughter&family=Share+Tech+Mono&family=Bangers&family=VT323&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Patrick+Hand&family=Courier+Prime:wght@400;700&family=Permanent+Marker&family=Cabin+Sketch:wght@400;700&family=Architects+Daughter&family=Share+Tech+Mono&family=Bangers&family=VT323&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap">
 <style>
 /* Layout: focus card (current change, its current task, its checklist) + side column (milestone, activity),
    then a soft kanban board. Friendly: rounded surfaces, soft shadows, tinted status lanes, readable titles. */
@@ -33,6 +33,8 @@
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --radius: 16px;
   --radius-sm: 11px;
+  /* chart palette (status flow), validated for colour-vision deficiency on light and dark surfaces */
+  --cf-draft: #e87ba4; --cf-specified: #2a78d6; --cf-progress: #eb6834; --cf-complete: #1baf7a; --cf-archived: #6250d6;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -43,6 +45,8 @@
     --shadow: 0 1px 2px rgba(0, 0, 0, .35); --shadow-hover: 0 4px 16px rgba(0, 0, 0, .45); color-scheme: dark;
   }
 }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --cf-draft: #d55181; --cf-specified: #3987e5; --cf-progress: #d95926; --cf-complete: #199e70; --cf-archived: #9085e9; } }
+:root[data-theme="dark"], :root[data-style="blackboard"], :root[data-style="matrix"], :root[data-style="terminal"] { --cf-draft: #d55181; --cf-specified: #3987e5; --cf-progress: #d95926; --cf-complete: #199e70; --cf-archived: #9085e9; }
 :root[data-theme="dark"] {
   --bg: #14151f; --surface: #1d1e2c; --surface-2: #252738; --ink: #e9eaf6; --muted: #a6a9c4; --faint: #6f7291;
   --line: #2e3047; --accent: #9da2ff; --accent-soft: #2a2c52;
@@ -223,6 +227,96 @@ svg text { fill: var(--muted); font-family: var(--font-sans); font-size: 10.5px;
 .kc-flag { font-size: 11.5px; color: var(--st-blocked); font-weight: 600; }
 .kc-flag.muted { color: var(--muted); font-weight: 500; }
 
+/* view switch and backlog list */
+.view-switch { display: inline-flex; background: var(--surface-2); border-radius: 999px; padding: 3px; gap: 2px; }
+.view-switch button { border: 0; background: none; border-radius: 999px; padding: 4px 14px; font-size: 15px; font-weight: 800; color: var(--muted); cursor: pointer; letter-spacing: -.01em; }
+.view-switch button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.board.max .view-switch { background: var(--surface); box-shadow: var(--shadow); }
+.board.max .view-switch button[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); box-shadow: none; }
+.backlog { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 18px; overflow: auto; }
+.bl-hint { font-size: 12.5px; color: var(--muted); display: flex; gap: 6px 14px; flex-wrap: wrap; align-items: baseline; }
+.bl-note { font-weight: 600; color: var(--accent); } .bl-note.warn { color: var(--st-blocked); }
+.bl-head { display: flex; gap: 8px; align-items: baseline; font-size: 15px; font-weight: 700; padding: 0 4px 6px; border-bottom: 1px solid var(--line); }
+.bl-head b { color: var(--accent); } .bl-head .muted { font-size: 12.5px; font-weight: 500; margin-left: auto; }
+.bl-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.bl-row { display: grid; grid-template-columns: 18px 38px minmax(0, 1.6fr) minmax(0, .6fr) minmax(0, .7fr) 130px 104px; gap: 10px; align-items: center;
+  padding: 8px 8px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13.5px; background: var(--surface); position: relative; }
+.bl-row:hover { background: color-mix(in srgb, var(--accent) 4%, var(--surface)); }
+.bl-row.done { color: var(--muted); } .bl-row.done .bl-name { text-decoration: line-through; text-decoration-color: var(--faint); }
+.bl-row.picked { background: color-mix(in srgb, var(--accent) 11%, var(--surface)); box-shadow: inset 4px 0 0 var(--accent); }
+.bl-row.picked .bl-name { color: var(--accent); }
+.bl-row.picked:hover { background: color-mix(in srgb, var(--accent) 15%, var(--surface)); }
+.bl-row.movable { cursor: grab; } .bl-row.dragging { opacity: .45; }
+.bl-row.moved { animation: moved 3s ease-out; }
+.bl-row.drop-before::before, .bl-row.drop-after::after { content: ""; position: absolute; left: 0; right: 0; height: 3px; background: var(--accent); border-radius: 3px; }
+.bl-row.drop-before::before { top: -2px; } .bl-row.drop-after::after { bottom: -2px; }
+.bl-grip { color: var(--faint); font-size: 14px; line-height: 1; }
+.bl-o { color: var(--faint); font-weight: 700; font-size: 12.5px; }
+.bl-name { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bl-name .slug { margin-left: 8px; font-weight: 400; }
+.bl-area, .bl-deps { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bl-deps.wait { color: var(--st-blocked); }
+.bl-prog { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.bl-prog .bar { flex: 1; height: 6px; }
+.bl-row > .pill { justify-self: end; }
+.bl-empty { color: var(--faint); font-size: 13px; padding: 8px; }
+@media (max-width: 860px) { .bl-row { grid-template-columns: 18px 34px minmax(0, 1fr) 96px; } .bl-area, .bl-deps, .bl-prog { display: none; } }
+/* charts view */
+.charts { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 16px; overflow: auto; align-content: start; }
+.ch-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 14px 16px 12px; min-width: 0; }
+.ch-card.wide { grid-column: 1 / -1; }
+.ch-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+.ch-head h3 { margin: 0; font-size: 15px; }
+.ch-sub, .ch-note { font-size: 12.5px; color: var(--muted); }
+.ch-note { margin: 6px 0 0; }
+.ch-plot { min-width: 0; }
+.ch-plot .empty { color: var(--muted); font-size: 13px; padding: 18px 0; }
+.ch-svg { display: block; overflow: visible; }
+.ch-svg text { font-family: var(--font-sans); }
+.ch-ax { fill: var(--muted); font-size: 11px; }
+.ch-lbl { fill: var(--ink); font-size: 12px; font-weight: 600; }
+.ch-lbl.muted, .ch-lbl .muted { fill: var(--muted); font-weight: 500; }
+.ch-num { font-variant-numeric: tabular-nums; }
+.ch-warn { fill: var(--st-progress); font-weight: 700; }
+span.ch-warn { color: var(--st-progress); }
+.ch-row { cursor: pointer; } .ch-row:hover { fill: var(--accent); }
+.ch-grid { stroke: var(--line); stroke-width: 1; }
+.ch-now { stroke: var(--ink); stroke-width: 1; opacity: .5; }
+.ch-cross { stroke: var(--ink); stroke-width: 1; opacity: .45; pointer-events: none; }
+.ch-hit { fill: transparent; cursor: crosshair; }
+.ch-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin-bottom: 6px; align-items: center; }
+.ch-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.ch-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+.ch-legend i.dot { border-radius: 50%; }
+.ch-legend i.line { height: 0; width: 16px; border-top: 1.5px solid var(--muted); border-radius: 0; }
+.ch-legend i.dash { height: 0; width: 16px; border-top: 2px dashed var(--cf-complete); border-radius: 0; }
+.ch-legend i.tick { width: 2px; height: 14px; background: var(--ink); border-radius: 0; }
+.ch-scroll { overflow-x: auto; }
+.ch-edge { stroke: var(--faint); stroke-width: 1.2; }
+.ch-edge.crit { stroke: var(--ink); stroke-width: 2.2; }
+.ch-edge.settled { opacity: .35; }
+.ch-node { cursor: pointer; }
+.ch-nbox { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
+.ch-node.crit .ch-nbox { stroke: var(--ink); stroke-width: 2; }
+.ch-node:hover .ch-nbox { stroke: var(--accent); }
+.ch-node.ghost { opacity: .5; }
+.ch-data { margin-top: 8px; font-size: 12.5px; }
+.ch-data summary { cursor: pointer; color: var(--muted); }
+.ch-data table { border-collapse: collapse; margin-top: 6px; width: 100%; font-variant-numeric: tabular-nums; }
+.ch-data th, .ch-data td { text-align: left; padding: 3px 10px 3px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.ch-data th { color: var(--muted); font-weight: 600; }
+.ch-tip { position: fixed; z-index: 200; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--line); box-shadow: var(--shadow-hover);
+  border-radius: 8px; padding: 6px 10px; font-size: 12px; line-height: 1.45; max-width: 320px; }
+.ch-tip .h { font-weight: 700; }
+.board.max .charts { padding-bottom: 8px; }
+/* focus mode: archived column hidden, empty columns folded into narrow strips */
+.cols.focus { grid-template-columns: var(--cols); }
+.col.folded { min-width: 0; align-items: center; }
+.col.folded .col-head { padding: 12px 0; display: flex; justify-content: center; }
+.col.folded .t { flex-direction: column; gap: 10px; }
+.col.folded .t::before { display: none; }
+.col.folded .t .num { margin: 0; }
+.col.folded .vt { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 13px; white-space: nowrap; color: var(--muted); }
 /* full-screen board */
 .board-toggle { white-space: nowrap; flex: none; }
 /* the milestone filters take the free space and wrap inside it, so the Full screen button never drops to a new line */
@@ -1089,10 +1183,11 @@ body.board-max { overflow: hidden; }
   .board.max { overflow: auto; }
   .board.max .board-body { flex: none; }
   .drawer { position: fixed; inset: 0; width: auto; z-index: 60; border-radius: 0; }
-  .cols { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .cols, .cols.focus { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .col.folded { display: none; }
 }
 @media (max-width: 720px) {
-  .cols { grid-template-columns: 1fr; }
+  .cols, .cols.focus { grid-template-columns: 1fr; }
   .col-body { max-height: none; }
   .ms-filter { margin-left: 0; }
   .focus-head { padding: 18px; } .now { margin: 4px 18px 0; } .f-body { padding: 12px 18px 20px; } .tabs { padding: 0 12px; }
@@ -1164,9 +1259,11 @@ body.board-max { overflow: hidden; }
 .sys { align-self: center; font-size: 11.5px; color: var(--muted); text-align: center; max-width: 90%; flex: none; }
 .sys summary { cursor: pointer; } .sys > div { white-space: pre-wrap; text-align: left; margin-top: 4px; }
 .sys.err { color: var(--st-blocked); }
-.ag-compose { display: flex; gap: 8px; align-items: flex-end; padding: 10px var(--agp) 4px; border-top: 1px solid var(--line); }
+.ag-compose { display: flex; flex-direction: column; gap: 8px; align-items: stretch; padding: 10px var(--agp) 4px; border-top: 1px solid var(--line); }
 .ag-compose textarea { flex: 1; min-height: 42px; max-height: 160px; resize: vertical; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); color: var(--ink); padding: 9px 12px; font: inherit; font-size: 13.5px; }
 .ag-route { padding: 0 var(--agp) 12px; }
+.ag-tools { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.ag-tools [data-ag-send] { margin-left: auto; }
 .ag-voice { display: inline-flex; align-items: center; gap: 4px; flex: none; }
 .ag-voice[hidden] { display: none !important; }
 .ag-mic { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; }
@@ -1174,6 +1271,16 @@ body.board-max { overflow: hidden; }
   box-shadow: 0 0 0 calc(var(--lvl, 0) * 6px) color-mix(in srgb, var(--st-blocked) 25%, transparent); transition: box-shadow .15s; }
 .ag-mic.busy { color: var(--muted); }
 .rec-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st-blocked); animation: pulse 1.2s infinite; }
+.ag-rp { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; flex: none; }
+.ag-rp[hidden] { display: none !important; }
+.ag-suggest-wrap { padding: 0 var(--agp); }
+.ag-suggest-wrap:empty { display: none; }
+.ag-suggest { margin: 8px 0 0; border: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 6%, var(--surface)); border-radius: var(--radius-sm); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.ag-suggest .h { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.ag-suggest .h b { color: var(--accent); font-size: 12.5px; }
+.ag-suggest .h.warn { color: var(--st-blocked); }
+.ag-suggest .txt { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 30vh; overflow: auto; font-size: 13.5px; }
+.ag-form .ag-suggest-wrap { padding: 0; }
 .ag-lang { border: 0; background: var(--surface-2); color: var(--muted); border-radius: 999px; padding: 4px 6px; font-size: 11.5px; cursor: pointer; }
 /* on wide screens the full-screen board makes room for the panel instead of hiding columns under it */
 @media (min-width: 1100px) { body.ag-open:not(.ag-max) .board.max { padding-right: calc(min(480px, 100vw - 24px) + 24px); } }
@@ -1195,6 +1302,74 @@ body.ag-max { overflow: hidden; }
 :root[data-style="glass"] .agent-panel { background: var(--g-surface-strong); }
 :root[data-style="matrix"] .agent-panel { background: var(--surface); }
 @media (max-width: 600px) { .agent-panel { inset: 0; width: auto; border-radius: 0; } }
+/* ---------------------------------------------------------------- style: clay
+   Calm and warm, in the spirit of Claude's apps without copying them: ivory paper and warm charcoal, a terracotta
+   accent, serif headings, quiet hairline borders; in the chat your messages sit in a soft bubble and answers read
+   as plain serif text. */
+:root[data-style="clay"] {
+  --bg: #f5f4ee; --surface: #fdfcf8; --surface-2: #efede5; --ink: #1f1e1c; --muted: #64625b; --faint: #9a978d;
+  --line: #e3e0d5; --accent: #c15f3c; --accent-soft: #f5e6dd;
+  --st-proposed: #8b887e; --st-specified: #5b7ea6; --st-progress: #c4852f; --st-complete: #58895a;
+  --st-archived: #7e8e7b; --st-blocked: #b94a3e; --st-missing: #b94a3e;
+  --shadow: 0 1px 2px rgba(60, 48, 30, .05), 0 3px 12px rgba(60, 48, 30, .04); --shadow-hover: 0 2px 4px rgba(60, 48, 30, .07), 0 8px 22px rgba(60, 48, 30, .07);
+  --radius: 14px; --radius-sm: 10px;
+  --font-serif: "Source Serif 4", "Iowan Old Style", Georgia, serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-style="clay"]:not([data-theme="light"]) {
+    --bg: #262624; --surface: #2f2f2c; --surface-2: #393935; --ink: #ecebe4; --muted: #b8b5ab; --faint: #85837a;
+    --line: #44433e; --accent: #d97757; --accent-soft: #4a3229;
+    --st-proposed: #a6a399; --st-specified: #8db0d8; --st-progress: #e0a45c; --st-complete: #8dbf86;
+    --st-archived: #a2b19e; --st-blocked: #e47b6c; --st-missing: #e47b6c;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .25); --shadow-hover: 0 4px 16px rgba(0, 0, 0, .35); color-scheme: dark;
+  }
+}
+:root[data-style="clay"][data-theme="dark"] {
+  --bg: #262624; --surface: #2f2f2c; --surface-2: #393935; --ink: #ecebe4; --muted: #b8b5ab; --faint: #85837a;
+  --line: #44433e; --accent: #d97757; --accent-soft: #4a3229;
+  --st-proposed: #a6a399; --st-specified: #8db0d8; --st-progress: #e0a45c; --st-complete: #8dbf86;
+  --st-archived: #a2b19e; --st-blocked: #e47b6c; --st-missing: #e47b6c;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .25); --shadow-hover: 0 4px 16px rgba(0, 0, 0, .35); color-scheme: dark;
+}
+:root[data-style="clay"] header.top h1,
+:root[data-style="clay"] .f-name,
+:root[data-style="clay"] .ms-title,
+:root[data-style="clay"] .board-head .label,
+:root[data-style="clay"] .ov-head .label,
+:root[data-style="clay"] .ov-name,
+:root[data-style="clay"] .ag-head h2,
+:root[data-style="clay"] .md h1, :root[data-style="clay"] .md h2, :root[data-style="clay"] .md h3 { font-family: var(--font-serif); font-weight: 500; letter-spacing: -.01em; }
+:root[data-style="clay"] header.top h1 { font-size: 22px; }
+:root[data-style="clay"] .f-name { font-size: 30px; }
+:root[data-style="clay"] .panel,
+:root[data-style="clay"] .drawer { border: 1px solid var(--line); }
+:root[data-style="clay"] .board.max { border: 0; }
+:root[data-style="clay"] .live > span, :root[data-style="clay"] .board-live { box-shadow: none; border: 1px solid var(--line); }
+:root[data-style="clay"] .btn { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+:root[data-style="clay"] .btn:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--surface); color: var(--ink); }
+:root[data-style="clay"] .style-select, :root[data-style="clay"] .ag-lang { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+:root[data-style="clay"] .tab[aria-selected="true"], :root[data-style="clay"] .chip[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+:root[data-style="clay"] .ms-filter button { border-radius: 10px; }
+:root[data-style="clay"] .ms-filter button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+:root[data-style="clay"] .ms-filter button[aria-pressed="true"] b { color: var(--bg); }
+:root[data-style="clay"] .col { background: color-mix(in srgb, var(--st) 5%, var(--surface-2)); border: 1px solid var(--line); }
+:root[data-style="clay"] .kc { border: 1px solid var(--line); box-shadow: none; }
+:root[data-style="clay"] .kc:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); box-shadow: var(--shadow); transform: none; }
+:root[data-style="clay"] .kc.focus { box-shadow: 0 0 0 1.5px var(--accent); border-color: var(--accent); }
+:root[data-style="clay"] .kc-name { font-family: var(--font-serif); font-weight: 600; font-size: 14.5px; }
+:root[data-style="clay"] .now { border: 1px solid color-mix(in srgb, var(--st-progress) 30%, var(--line)); }
+:root[data-style="clay"] .now .t { font-family: var(--font-serif); font-weight: 600; font-size: 17px; }
+/* chat in the manner of Claude's apps: your bubble, the answer as plain reading text */
+:root[data-style="clay"] .msg.me { background: var(--surface-2); color: var(--ink); border-radius: 16px; border-bottom-right-radius: 16px; }
+:root[data-style="clay"] .msg.them { background: none; padding: 2px 2px 6px; max-width: 100%; font-family: var(--font-serif); font-size: 15px; line-height: 1.6; }
+:root[data-style="clay"] .msg.them .md { font-size: 15px; }
+:root[data-style="clay"] .msg.them .meta { align-self: flex-start; }
+:root[data-style="clay"] .ag-compose textarea { background: var(--surface); border-radius: 16px; box-shadow: var(--shadow); }
+:root[data-style="clay"] .ag-compose textarea:focus { outline: none; border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+:root[data-style="clay"] .agent-panel .btn.primary { border-radius: 10px; color: #fff !important; }
+:root[data-style="clay"] .ag-answer { font-family: var(--font-serif); font-size: 14.5px; }
+:root[data-style="clay"] .ag-item { background: var(--surface-2); border: 1px solid var(--line); }
+:root[data-style="clay"] .ag-suggest { background: var(--surface); }
 </style>
 </head>
 <body>
@@ -1206,7 +1381,7 @@ body.ag-max { overflow: hidden; }
       <span id="conn"><span class="dot"></span>connecting…</span>
       <span id="cli"></span>
       <select id="style" class="style-select" aria-label="Style" title="Visual style">
-        <option value="flat">Flat</option><option value="glass">Glass</option><option value="paper">Paper</option><option value="whiteboard">Whiteboard</option><option value="blackboard">Blackboard</option><option value="notebook">Notebook</option><option value="matrix">Matrix</option><option value="terminal">Terminal</option><option value="comic">Comic</option>
+        <option value="flat">Flat</option><option value="glass">Glass</option><option value="clay">Clay</option><option value="paper">Paper</option><option value="whiteboard">Whiteboard</option><option value="blackboard">Blackboard</option><option value="notebook">Notebook</option><option value="matrix">Matrix</option><option value="terminal">Terminal</option><option value="comic">Comic</option>
       </select>
       <button class="btn" id="agent-btn" type="button" data-chat-btn aria-controls="agent" hidden>Chat</button>
       <button class="btn" id="theme" type="button" aria-label="Toggle light or dark theme">◐</button>
@@ -1237,10 +1412,10 @@ const STATUS = {
   'missing':     { label: 'Missing',     v: '--st-missing' },
   'parking':     { label: 'Parking lot', v: '--st-proposed' },
 };
-const ui = { state: null, pinned: null, tab: 'tasks', open: new Map(), fileCache: new Map(), fresh: new Set(), prevCol: new Map(), ms: '', boardMax: false, drawer: null, drawerScroll: 0, colScroll: new Map() };
-try { const t = localStorage.getItem('osd-theme'); if (t) document.documentElement.dataset.theme = t; ui.ms = localStorage.getItem('osd-ms') || ''; } catch {}
+const ui = { boardView: 'board', drag: null, pendingBoard: false, blMoved: null, lastPick: null, boardFocus: false, state: null, pinned: null, tab: 'tasks', open: new Map(), fileCache: new Map(), fresh: new Set(), prevCol: new Map(), ms: '', boardMax: false, drawer: null, drawerScroll: 0, colScroll: new Map() };
+try { const t = localStorage.getItem('osd-theme'); if (t) document.documentElement.dataset.theme = t; ui.ms = localStorage.getItem('osd-ms') || ''; ui.boardFocus = localStorage.getItem('osd-board-focus') === '1'; ui.boardView = ['backlog', 'charts'].includes(localStorage.getItem('osd-board-view')) ? localStorage.getItem('osd-board-view') : 'board'; } catch {}
 // visual style: flat (default) or glass; ?style=glass overrides the remembered choice
-const STYLES = ['flat', 'glass', 'paper', 'whiteboard', 'blackboard', 'notebook', 'matrix', 'terminal', 'comic'];
+const STYLES = ['flat', 'glass', 'clay', 'paper', 'whiteboard', 'blackboard', 'notebook', 'matrix', 'terminal', 'comic'];
 // Matrix style: falling code on a canvas behind the page; only exists while that style is active.
 let rain = null;
 function setRain(on) {
@@ -1512,6 +1687,7 @@ function renderFeed(s) {
     else if (e.kind === 'task-reopened') what = `<span style="color:var(--st-progress)">↺</span> <span class="mono">${esc(e.task)}</span> ${inline(e.text)} <span class="muted">· ${name(e.change)}</span>`;
     else if (e.kind === 'status') what = `${name(e.change)} → <b style="color:${stVar(e.to)}">${STATUS[e.to]?.label ?? e.to}</b>`;
     else if (e.kind === 'added') what = `${name(e.change)} added`;
+    else if (e.kind === 'scope') what = `${name(e.change)}: <b>+${e.to - e.from}</b> task${e.to - e.from === 1 ? '' : 's'} added after work started`;
     else what = `<span class="mono">${esc(e.change)}</span> removed`;
     return `<li><time title="${new Date(e.t).toLocaleString()}">${hhmm(e.t)}</time><span class="what">${what}</span></li>`;
   });
@@ -1555,6 +1731,7 @@ const COLS = [
 const columnOf = (c) => (c.status === 'proposed' || c.status === 'missing') ? (c.blockedBy.length ? 'blocked' : 'ready') : c.status;
 
 function renderBoard(s) {
+  if (ui.drag) { ui.pendingBoard = true; return; } // never replace the list under a drag
   const max = ui.boardMax;
   const cur = currentChange(s);
   const focusName = max && ui.drawer ? ui.drawer : ((ui.pinned && s.changes.find((x) => x.name === ui.pinned)) || cur)?.name;
@@ -1580,6 +1757,9 @@ function renderBoard(s) {
       ${flags.join('')}
     </button>`;
   };
+  const focus = ui.boardFocus;
+  const byCol = Object.fromEntries(COLS.map(([key]) => [key, shown.filter((c) => columnOf(c) === key).sort((a, b) => a.seq - b.seq)]));
+  const visibleCols = COLS.filter(([key]) => !(focus && key === 'archived'));
   const ct = cur && currentTask(cur);
   const now = !max || !cur ? '' : `<div class="board-now ${cur.tasks && !ct ? 'done' : ''}">
       <span class="k">${cur.status === 'in-progress' ? 'Working on' : cur.status === 'complete' ? 'Ready to archive' : 'Up next'}</span>
@@ -1591,28 +1771,563 @@ function renderBoard(s) {
   board.classList.toggle('max', max);
   board.innerHTML = `
     <div class="board-head">
-      <span class="label">Board</span>
+      <span class="view-switch" role="tablist" aria-label="View"><button type="button" role="tab" data-board-view="board" aria-selected="${ui.boardView === 'board'}">Board</button><button type="button" role="tab" data-board-view="backlog" aria-selected="${ui.boardView === 'backlog'}">Backlog</button><button type="button" role="tab" data-board-view="charts" aria-selected="${ui.boardView === 'charts'}">Charts</button></span>
       ${max ? `<span class="board-live">${$('conn').innerHTML}</span>` : ''}
-      <span class="muted num" style="font-size:12.5px">${s.changes.filter(isDone).length} of ${s.changes.filter((c) => c.status !== 'parking').length} changes done · ${s.totals.done}/${s.totals.total} tasks</span>
+      <span class="muted num" style="font-size:12.5px">${s.changes.filter(isDone).length} of ${s.changes.filter((c) => c.status !== 'parking').length} changes done · ${s.totals.done}/${s.totals.total} tasks${focus && byCol.archived.length ? ` · ${byCol.archived.length} archived hidden` : ''}</span>
       ${s.changes.filter((c) => c.status === 'parking').map((c) => `<button type="button" class="btn" data-pick="${esc(c.name)}" title="Parking lot: deferred items, never archived">Parking lot · ${c.tasks ? `${c.tasks.total - c.tasks.done} open` : esc(c.name)}</button>`).join('')}
       <span class="ms-filter">${msBtn('', '<b>All</b>', s.changes.filter((c) => c.status !== 'parking'))}${s.milestones.map((m) => msBtn(m.id, `<b>${esc(m.id)}</b><span class="ms-name">${esc(m.title)}</span>`, s.changes.filter((c) => c.milestone === m.id), m.title)).join('')}</span>
       ${AGENT_TOKEN ? '<button class="btn board-toggle" type="button" data-chat-btn aria-controls="agent">Chat</button>' : ''}
+      <button class="btn board-toggle" type="button" data-board-focus aria-pressed="${ui.boardFocus}" title="${ui.boardFocus ? 'Show all columns again' : 'Hide archived tickets and fold empty columns, so the open tickets get the space'}">${ui.boardFocus ? '◉ Focus' : '○ Focus'}</button>
       <button class="btn board-toggle" type="button" data-max aria-pressed="${max}" title="${max ? 'Back to the dashboard (Esc)' : 'Show the board across the whole window'}">${max ? 'Exit full screen ✕' : '⤢ Full screen'}</button>
     </div>
     ${now}
     <div class="board-body">
-    <div class="cols">${COLS.map(([key, title, desc, v]) => {
-      const cs = shown.filter((c) => columnOf(c) === key).sort((a, b) => a.order - b.order);
+    ${ui.boardView === 'charts' ? chartsHtml(s, shown) : ui.boardView === 'backlog' ? backlogHtml(s, shown, (max && ui.drawer) || ui.lastPick || focusName) : `<div class="cols ${focus ? 'focus' : ''}" ${focus ? `style="--cols:${visibleCols.map(([k]) => (byCol[k].length ? 'minmax(0, 1fr)' : '46px')).join(' ')}"` : ''}>${visibleCols.map(([key, title, desc, v]) => {
+      const cs = byCol[key];
+      if (focus && !cs.length) return `<section class="col folded" style="--st:var(${v})" aria-label="${title}: none" title="${title}: none"><div class="col-head"><div class="t"><span class="num">0</span><span class="vt">${title}</span></div></div></section>`;
       return `<section class="col" style="--st:var(${v})" aria-label="${title}">
         <div class="col-head"><div class="t">${title}<span class="num">${cs.length}</span></div><div class="d">${desc}</div></div>
         <div class="col-body" data-col="${key}">${cs.map(card).join('') || '<div class="col-empty">None</div>'}</div>
       </section>`;
-    }).join('')}</div>
+    }).join('')}</div>`}
     ${max && ui.drawer ? '<aside class="drawer" id="drawer" aria-label="Change details"></aside>' : ''}
     </div>`;
-  for (const el of board.querySelectorAll('.col-body[data-col]')) el.scrollTop = ui.colScroll.get(el.dataset.col) ?? 0;
+  for (const el of board.querySelectorAll('[data-col]')) el.scrollTop = ui.colScroll.get(el.dataset.col) ?? 0;
+  if (ui.blMoved) { const r = board.querySelector(`.bl-row[data-bl="${CSS.escape(ui.blMoved)}"]`); if (r) { r.classList.add('moved'); r.focus({ preventScroll: true }); } ui.blMoved = null; }
   if (max && ui.drawer) renderFocus(s, $('drawer'), ui.drawer);
+  if (ui.boardView === 'charts') { drawCharts(s); loadTimeline(); }
 }
+
+// ------------------------------------------------------------ charts: how the work flows over time
+// Data: /api/timeline merges git (every commit touching openspec/changes or openspec/backlog) with the history this
+// dashboard records while it runs; per change and status, and per task, the earliest time wins. Colours: a chart
+// palette of its own (--cf-*), checked for colour-vision deficiency in light and dark; every chart also has direct
+// labels, a legend or a data table, so no value depends on colour alone.
+const CF = [ // stacking order, bottom to top
+  ['archived', 'Archived', '--cf-archived'],
+  ['complete', 'Tasks done', '--cf-complete'],
+  ['in-progress', 'In progress', '--cf-progress'],
+  ['specified', 'Specified', '--cf-specified'],
+  ['proposed', 'Draft', '--cf-draft'],
+];
+const CF_LABEL = Object.fromEntries(CF.map(([k, l]) => [k, l]));
+const CF_VAR = Object.fromEntries(CF.map(([k, , v]) => [k, `var(${v})`]));
+const RANK = { proposed: 0, specified: 1, 'in-progress': 2, complete: 3, archived: 4 };
+const tl = { data: null, at: 0, rev: -1, loading: false, project: null, error: null };
+const chartGeo = new Map();
+
+async function loadTimeline() {
+  if (tl.loading) return;
+  const s = ui.state;
+  if (tl.data && tl.project === PROJECT && tl.rev === s?.rev && Date.now() - tl.at < 60000) return;
+  tl.loading = true;
+  try {
+    const r = await fetch(withProject('/api/timeline'));
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    tl.data = await r.json();
+    tl.error = null;
+  } catch (e) { tl.error = e.message; }
+  tl.at = Date.now(); tl.rev = s?.rev; tl.project = PROJECT; tl.loading = false;
+  if (ui.boardView === 'charts' && ui.state) renderBoard(ui.state);
+}
+
+const dur = (ms) => {
+  if (ms == null || !isFinite(ms)) return '—';
+  const m = ms / 60000;
+  if (m < 1) return '< 1 min';
+  if (m < 90) return `${Math.round(m)} min`;
+  const h = m / 60;
+  if (h < 48) return `${h < 10 ? h.toFixed(1).replace(/\.0$/, '') : Math.round(h)} h`;
+  return `${(h / 24).toFixed(h < 240 ? 1 : 0).replace(/\.0$/, '')} d`;
+};
+const median = (xs) => { const a = xs.filter((x) => x != null && isFinite(x)).sort((p, q) => p - q); if (!a.length) return null; const m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+const dayFmt = (t) => new Date(t).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+const whenFmt = (t) => `${new Date(t).toLocaleDateString([], { day: 'numeric', month: 'short' })} ${hhmm(t)}`;
+const tipAttr = (lines) => `data-tip="${esc([].concat(lines).join('\n'))}"`;
+
+// Readable ticks for a time axis: local hours/minutes for spans under two days, dates beyond.
+function timeTicks(t0, t1, maxTicks) {
+  const M = 60000, H = 60 * M, D = 24 * H;
+  const steps = [5 * M, 10 * M, 15 * M, 30 * M, H, 2 * H, 3 * H, 6 * H, 12 * H, D, 2 * D, 7 * D, 14 * D, 30 * D, 91 * D];
+  const step = steps.find((x) => (t1 - t0) / x <= maxTicks) ?? steps.at(-1);
+  const off = new Date(t0).getTimezoneOffset() * M;
+  const out = [];
+  for (let t = Math.ceil((t0 - off) / step) * step + off; t <= t1; t += step) {
+    const d = new Date(t);
+    const midnight = d.getHours() === 0 && d.getMinutes() === 0;
+    out.push({ t, label: step >= D || (midnight && step >= H) ? d.toLocaleDateString([], { day: 'numeric', month: 'short' }) : hhmm(t) });
+  }
+  return out;
+}
+
+// Per change: first time it reached each status (merged, monotonic), from the timeline plus the current files.
+function changeTimes(s) {
+  const by = new Map();
+  for (const x of tl.data?.transitions ?? []) (by.get(x.change) ?? by.set(x.change, {}).get(x.change))[x.to] ??= x.t;
+  for (const c of s.changes) {
+    const m = by.get(c.name) ?? by.set(c.name, {}).get(c.name);
+    if (c.status in RANK && m[c.status] == null) m[c.status] = c.lastModified ?? Date.now();
+  }
+  return by;
+}
+// Status of a change at time t: the furthest status reached by then.
+function statusAt(times, t) {
+  let best = null;
+  for (const k in times) if (times[k] <= t && (best == null || RANK[k] > RANK[best])) best = k;
+  return best;
+}
+
+function chartsHtml(s, shown) {
+  if (!tl.data && !tl.error) return '<div class="charts"><div class="empty" style="padding:24px">Loading the timeline…</div></div>';
+  const card = (id, title, sub, wide) => `<section class="ch-card ${wide ? 'wide' : ''}" aria-labelledby="ch-${id}-t">
+      <div class="ch-head"><h3 id="ch-${id}-t">${title}</h3><span class="ch-sub" id="ch-${id}-sub">${sub}</span></div>
+      <div class="ch-plot" data-chart="${id}"></div>
+    </section>`;
+  return `<div class="charts" data-col="charts">
+    ${tl.error ? `<div class="bl-note warn">✕ Timeline not available: ${esc(tl.error)}</div>` : ''}
+    ${card('cfd', 'Cumulative flow', 'Changes per status over time. A widening band is work piling up there.', true)}
+    ${card('burn', 'Milestone burn-up', '', false)}
+    ${card('aging', 'Work in progress: age', 'How long each open change has been in its status, against the typical time.', false)}
+    ${card('gantt', 'Cycle time per change', 'Each change from specified to archived, split into its phases.', true)}
+    ${card('deps', 'Dependencies and critical path', 'The roadmap as a graph. The highlighted chain is the longest one still open.', true)}
+    ${card('heat', 'When tasks get checked off', 'Check-offs per hour of the day.', true)}
+  </div>`;
+}
+
+function drawCharts(s) {
+  if (!s || ui.boardView !== 'charts') return;
+  const shownNames = new Set(chartShown(s).map((c) => c.name));
+  const times = changeTimes(s);
+  for (const el of document.querySelectorAll('.ch-plot[data-chart]')) {
+    const W = Math.max(280, Math.floor(el.clientWidth));
+    const id = el.dataset.chart;
+    try {
+      el.innerHTML = { cfd: cfdChart, burn: burnChart, aging: agingChart, gantt: ganttChart, heat: heatChart, deps: depsChart }[id](s, shownNames, times, W);
+    } catch (e) { el.innerHTML = `<div class="empty">✕ ${esc(e.message)}</div>`; console.error(e); }
+  }
+}
+const chartShown = (s) => s.changes.filter((c) => c.status !== 'parking' && c.status !== 'missing' && (!ui.ms || c.milestone === ui.ms));
+
+// Shared axis frame for time charts.
+function timeFrame(W, H, t0, t1, maxY, { L = 34, R = 16, T = 10, B = 24 } = {}) {
+  const x = (t) => L + ((t - t0) / Math.max(1, t1 - t0)) * (W - L - R);
+  const y = (v) => T + (1 - v / Math.max(1, maxY)) * (H - T - B);
+  const yStep = maxY <= 6 ? 1 : maxY <= 12 ? 2 : maxY <= 30 ? 5 : maxY <= 60 ? 10 : Math.ceil(maxY / 50) * 10;
+  let grid = '';
+  for (let v = 0; v <= maxY; v += yStep) grid += `<line class="ch-grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="ch-ax" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
+  for (const k of timeTicks(t0, t1, Math.max(2, Math.floor((W - L - R) / 80)))) grid += `<text class="ch-ax" x="${x(k.t)}" y="${H - 6}" text-anchor="middle">${k.label}</text>`;
+  return { x, y, grid, L, R, T, B };
+}
+
+// ---- cumulative flow
+function cfdChart(s, shownNames, times, W) {
+  const names = [...shownNames].filter((n) => times.get(n) && Object.keys(times.get(n)).length);
+  const ts = [...new Set(names.flatMap((n) => Object.values(times.get(n))))].sort((a, b) => a - b);
+  const now = Date.now();
+  if (ts.length < 2) return '<div class="empty">Not enough history yet: the flow appears after the first status changes (from git or while the dashboard runs).</div>';
+  const t0 = ts[0], t1 = now;
+  const pts = [...ts.filter((t) => t <= now), now].map((t) => {
+    const n = Object.fromEntries(CF.map(([k]) => [k, 0]));
+    for (const name of names) { const st = statusAt(times.get(name), t); if (st) n[st]++; }
+    return { t, n };
+  });
+  const maxY = Math.max(...pts.map((p) => CF.reduce((a, [k]) => a + p.n[k], 0)));
+  const H = 240;
+  const f = timeFrame(W, H, t0, t1, maxY, { R: 104 });
+  let bands = '', gaps = '', labels = '';
+  const cum = pts.map(() => 0);
+  const lastY = [];
+  for (const [k, label, v] of CF) {
+    const lo = cum.slice();
+    pts.forEach((p, i) => { cum[i] += p.n[k]; });
+    if (!pts.some((p) => p.n[k])) continue;
+    // step area: hold each value until the next change
+    let top = '', bottom = '';
+    pts.forEach((p, i) => { const nx = i + 1 < pts.length ? f.x(pts[i + 1].t) : f.x(t1); top += `${i ? 'L' : 'M'}${f.x(p.t)},${f.y(cum[i])}L${nx},${f.y(cum[i])}`; });
+    for (let i = pts.length - 1; i >= 0; i--) { const nx = i + 1 < pts.length ? f.x(pts[i + 1].t) : f.x(t1); bottom += `L${nx},${f.y(lo[i])}L${f.x(pts[i].t)},${f.y(lo[i])}`; }
+    bands += `<path d="${top}${bottom}Z" fill="${CF_VAR[k]}" fill-opacity=".88"/>`;
+    gaps += `<path d="${top}" fill="none" stroke="var(--surface)" stroke-width="2"/>`;
+    const yMid = (f.y(cum.at(-1)) + f.y(lo.at(-1))) / 2, hgt = f.y(lo.at(-1)) - f.y(cum.at(-1));
+    if (hgt >= 3) lastY.push({ k, label, y: yMid, n: pts.at(-1).n[k] });
+  }
+  // direct labels at the right end, nudged apart so they never overlap
+  lastY.sort((a, b) => a.y - b.y);
+  for (let i = 1; i < lastY.length; i++) if (lastY[i].y - lastY[i - 1].y < 15) lastY[i].y = lastY[i - 1].y + 15;
+  for (const l of lastY) labels += `<rect x="${W - f.R + 8}" y="${l.y - 5}" width="8" height="8" rx="2" fill="${CF_VAR[l.k]}"/><text class="ch-lbl" x="${W - f.R + 20}" y="${l.y + 3.5}">${l.label} <tspan class="ch-num">${l.n}</tspan></text>`;
+  chartGeo.set('cfd', { x: f.x, t0, t1, rows: pts.map((p) => ({ t: p.t, lines: [whenFmt(p.t), ...CF.slice().reverse().filter(([k]) => p.n[k]).map(([k, l]) => `${l}: ${p.n[k]}`)] })) });
+  const legend = `<div class="ch-legend">${CF.slice().reverse().map(([k, l]) => `<span><i style="background:${CF_VAR[k]}"></i>${l}</span>`).join('')}</div>`;
+  const table = `<details class="ch-data"><summary>Data</summary><table><thead><tr><th>Time</th>${CF.map(([, l]) => `<th>${l}</th>`).join('')}</tr></thead><tbody>${pts.slice(-40).reverse().map((p) => `<tr><td>${whenFmt(p.t)}</td>${CF.map(([k]) => `<td>${p.n[k]}</td>`).join('')}</tr>`).join('')}</tbody></table></details>`;
+  return `${legend}<svg class="ch-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Cumulative flow: ${lastY.map((l) => `${l.label} ${l.n}`).join(', ')}">
+    ${f.grid}${bands}${gaps}${labels}
+    <line class="ch-cross" x1="0" x2="0" y1="${f.T}" y2="${H - f.B}" visibility="hidden"/>
+    <rect class="ch-hit" data-xhover="cfd" x="${f.L}" y="0" width="${W - f.L - f.R}" height="${H - f.B}"/>
+  </svg>${table}`;
+}
+
+// ---- milestone burn-up with a forecast from the recent pace
+function burnChart(s, shownNames, times, W) {
+  const cur = currentChange(s);
+  const ms = ui.ms || cur?.milestone || '';
+  const m = s.milestones.find((x) => x.id === ms);
+  const scope = s.changes.filter((c) => c.status !== 'parking' && c.status !== 'missing' && (!ms || c.milestone === ms));
+  const sub = $('ch-burn-sub');
+  if (sub) sub.textContent = ms ? `${ms} "${m?.title ?? ''}": changes done against the changes planned${ui.ms ? '' : ' (the current milestone; pick another above)'}.` : 'All changes: done against planned.';
+  const born = (c) => { const t = times.get(c.name); return t ? Math.min(...Object.values(t)) : null; };
+  const doneAt = (c) => { const t = times.get(c.name) ?? {}; const xs = [t.complete, t.archived].filter((v) => v != null); return xs.length ? Math.min(...xs) : null; };
+  const evs = scope.map((c) => ({ c, born: born(c), done: doneAt(c) })).filter((e) => e.born != null);
+  if (!evs.length) return '<div class="empty">No changes in this milestone yet.</div>';
+  const now = Date.now();
+  const t0 = Math.min(...evs.map((e) => e.born));
+  const ts = [...new Set([t0, ...evs.map((e) => e.born), ...evs.map((e) => e.done).filter((v) => v != null), now])].filter((t) => t <= now).sort((a, b) => a - b);
+  const pts = ts.map((t) => ({ t, scope: evs.filter((e) => e.born <= t).length, done: evs.filter((e) => e.done != null && e.done <= t).length }));
+  const last = pts.at(-1);
+  const doneTimes = evs.map((e) => e.done).filter((v) => v != null).sort((a, b) => a - b);
+  const recent = doneTimes.slice(-6);
+  const remaining = last.scope - last.done;
+  let eta = null, pace = null;
+  if (remaining > 0 && recent.length >= 2 && recent.at(-1) > recent[0]) {
+    pace = (recent.at(-1) - recent[0]) / (recent.length - 1); // ms per change
+    eta = now + remaining * pace;
+  }
+  const span = now - t0;
+  const showEta = eta && eta - now <= Math.max(span, 3600e3) * 1.5;
+  const t1 = showEta ? eta : now;
+  const H = 210;
+  const f = timeFrame(W, H, t0, t1, Math.max(1, ...pts.map((p) => p.scope)), { R: 40 });
+  const step = (k) => pts.reduce((d, p, i) => d + (i ? `H${f.x(p.t)}V${f.y(p[k])}` : `M${f.x(p.t)},${f.y(p[k])}`), '') + `H${f.x(now)}`;
+  chartGeo.set('burn', { x: f.x, t0, t1: now, rows: pts.map((p) => ({ t: p.t, lines: [whenFmt(p.t), `Done: ${p.done}`, `Planned: ${p.scope}`] })) });
+  const note = remaining === 0 ? `All ${last.scope} done.`
+    : pace ? `${last.done} of ${last.scope} done. At the recent pace (one change every ${dur(pace)}) the remaining ${remaining} take about ${dur(remaining * pace)}: ${whenFmt(eta)}.`
+    : `${last.done} of ${last.scope} done. A forecast needs at least two finished changes.`;
+  return `<div class="ch-legend"><span><i style="background:var(--cf-complete)"></i>Done</span><span><i class="line"></i>Planned</span>${showEta ? '<span><i class="dash"></i>Forecast</span>' : ''}</div>
+  <svg class="ch-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(note)}">
+    ${f.grid}
+    <path d="${step('scope')}" fill="none" stroke="var(--muted)" stroke-width="1.5"/>
+    <path d="${step('done')}V${f.y(0)}H${f.x(t0)}Z" fill="var(--cf-complete)" fill-opacity=".12"/>
+    <path d="${step('done')}" fill="none" stroke="var(--cf-complete)" stroke-width="2" stroke-linejoin="round"/>
+    ${showEta ? `<path d="M${f.x(now)},${f.y(last.done)}L${f.x(eta)},${f.y(last.scope)}" fill="none" stroke="var(--cf-complete)" stroke-width="2" stroke-dasharray="5 4"/>
+      <circle cx="${f.x(eta)}" cy="${f.y(last.scope)}" r="4" fill="var(--surface)" stroke="var(--cf-complete)" stroke-width="2" ${tipAttr(['Forecast', whenFmt(eta)])}/>` : ''}
+    <circle cx="${f.x(now)}" cy="${f.y(last.done)}" r="4.5" fill="var(--cf-complete)" stroke="var(--surface)" stroke-width="2"/>
+    <text class="ch-lbl" x="${f.x(now) + 8}" y="${f.y(last.done) + 4}">${last.done}</text>
+    <text class="ch-lbl muted" x="${f.x(now) + 8}" y="${f.y(last.scope) - 4}">${last.scope}</text>
+    <line class="ch-cross" x1="0" x2="0" y1="${f.T}" y2="${H - f.B}" visibility="hidden"/>
+    <rect class="ch-hit" data-xhover="burn" x="${f.L}" y="0" width="${f.x(now) - f.L}" height="${H - f.B}"/>
+  </svg>
+  <p class="ch-note">${esc(note)} The pace counts changes, not tasks: tasks only exist once a change is specified.</p>`;
+}
+
+// Phases of each change: specified → in progress → tasks done → archived.
+const PHASES = [['specified', 'in-progress'], ['in-progress', 'complete'], ['complete', 'archived']];
+function phasesOf(t, now) {
+  return PHASES.map(([from, to]) => {
+    if (t[from] == null) return null;
+    const end = t[to] ?? (Object.entries(t).some(([k, v]) => RANK[k] > RANK[from] && v != null) ? Math.min(...Object.entries(t).filter(([k]) => RANK[k] > RANK[from]).map(([, v]) => v)) : null);
+    return { k: from, start: t[from], end: end ?? now, open: end == null };
+  }).filter(Boolean);
+}
+
+// ---- cycle time per change (a Gantt of the phases)
+function ganttChart(s, shownNames, times, W) {
+  const now = Date.now();
+  const scopeBy = new Map();
+  for (const x of tl.data?.scope ?? []) scopeBy.set(x.change, (scopeBy.get(x.change) ?? 0) + x.added);
+  const rows = [...shownNames].map((n) => ({ n, c: s.changes.find((x) => x.name === n), t: times.get(n) ?? {} }))
+    .filter((r) => r.t.specified != null || r.t['in-progress'] != null || r.t.complete != null || r.t.archived != null)
+    .map((r) => ({ ...r, ph: phasesOf(r.t, now), start: Math.min(...['specified', 'in-progress', 'complete', 'archived'].map((k) => r.t[k]).filter((v) => v != null)) }))
+    .sort((a, b) => a.start - b.start).slice(-30);
+  if (!rows.length) return '<div class="empty">No change has been specified yet.</div>';
+  const t0 = Math.min(...rows.map((r) => r.start)), t1 = now;
+  const LBL = Math.min(230, Math.max(150, W * 0.28)), RT = 120, rowH = 24, T = 6;
+  const H = T + rows.length * rowH + 26;
+  const x = (t) => LBL + ((t - t0) / Math.max(1, t1 - t0)) * (W - LBL - RT);
+  let g = '';
+  for (const k of timeTicks(t0, t1, Math.max(2, Math.floor((W - LBL - RT) / 80)))) g += `<line class="ch-grid" x1="${x(k.t)}" x2="${x(k.t)}" y1="${T}" y2="${H - 22}"/><text class="ch-ax" x="${x(k.t)}" y="${H - 6}" text-anchor="middle">${k.label}</text>`;
+  const finished = [];
+  rows.forEach((r, i) => {
+    const y = T + i * rowH + 6, h = 12;
+    const lab = `#${r.c?.inRoadmap ? r.c.order : '–'} ${title(r.n)}`;
+    g += `<text class="ch-lbl ch-row" x="${LBL - 10}" y="${y + 10}" text-anchor="end" data-pick="${esc(r.n)}">${esc(lab.length > 34 ? lab.slice(0, 33) + '…' : lab)}<title>${esc(r.n)}</title></text>`;
+    let any = false;
+    for (const p of r.ph) {
+      const x0 = x(p.start), x1 = Math.max(x(p.end), x0 + 2);
+      const w = Math.max(2, x1 - x0 - (p.open ? 0 : 2)); // 2px surface gap between phases
+      g += `<rect x="${x0}" y="${y}" width="${w}" height="${h}" rx="${Math.min(4, w / 2)}" fill="${CF_VAR[p.k]}" ${p.open ? 'fill-opacity=".55"' : ''} ${tipAttr([r.n, `${CF_LABEL[p.k]}${p.open ? ' (still)' : ''}`, `${whenFmt(p.start)} → ${p.open ? 'now' : whenFmt(p.end)}`, dur(p.end - p.start)])}/>`;
+      any = true;
+    }
+    if (r.t.archived != null) g += `<circle cx="${x(r.t.archived)}" cy="${y + h / 2}" r="4" fill="${CF_VAR.archived}" stroke="var(--surface)" stroke-width="2" ${tipAttr([r.n, `Archived ${whenFmt(r.t.archived)}`, ...(any ? [] : ['earlier phases not recorded (one commit)'])])}/>`;
+    const st = r.t.specified ?? r.start;
+    const end = r.t.archived ?? r.t.complete;
+    const total = end != null ? end - st : now - st;
+    if (end != null && r.t.specified != null) finished.push({ total, ph: r.ph });
+    const extra = scopeBy.get(r.n);
+    g += `<text class="ch-lbl" x="${W - RT + 10}" y="${y + 10}">${r.t.specified == null ? '<tspan class="muted">—</tspan>' : `${end == null ? '<tspan class="muted">open </tspan>' : ''}${dur(total)}`}${extra ? ` <tspan class="ch-warn">+${extra} task${extra > 1 ? 's' : ''}</tspan>` : ''}</text>`;
+  });
+  g += `<line class="ch-now" x1="${x(now)}" x2="${x(now)}" y1="${T}" y2="${H - 22}"/>`;
+  const med = median(finished.map((f) => f.total));
+  const medPh = Object.fromEntries(PHASES.map(([k]) => [k, median(finished.flatMap((f) => f.ph.filter((p) => p.k === k && !p.open).map((p) => p.end - p.start)))]));
+  const sub = $('ch-gantt-sub');
+  if (sub && med != null) sub.textContent = `From specified to done. Median ${dur(med)} over ${finished.length} change${finished.length > 1 ? 's' : ''}: specifying ${dur(medPh.specified)}, implementing ${dur(medPh['in-progress'])}, review and archive ${dur(medPh.complete)}.`;
+  const legend = `<div class="ch-legend">${PHASES.map(([k]) => `<span><i style="background:${CF_VAR[k]}"></i>${CF_LABEL[k]}</span>`).join('')}<span><i class="dot" style="background:${CF_VAR.archived}"></i>Archived</span><span class="muted">pale = still in that phase · <span class="ch-warn">+n tasks</span> = added after work started</span></div>`;
+  const table = `<details class="ch-data"><summary>Data</summary><table><thead><tr><th>Change</th><th>Specified</th><th>In progress</th><th>Tasks done</th><th>Archived</th><th>Cycle time</th></tr></thead><tbody>${rows.slice().reverse().map((r) => `<tr><td>${esc(r.n)}</td>${['specified', 'in-progress', 'complete', 'archived'].map((k) => `<td>${r.t[k] != null ? whenFmt(r.t[k]) : '—'}</td>`).join('')}<td>${r.t.specified != null ? dur((r.t.archived ?? r.t.complete ?? now) - r.t.specified) : '—'}</td></tr>`).join('')}</tbody></table></details>`;
+  return `${legend}<svg class="ch-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Cycle time per change">${g}</svg>${table}`;
+}
+
+// ---- age of the open changes in their current status, against the median of finished ones
+function agingChart(s, shownNames, times, W) {
+  const now = Date.now();
+  const open = s.changes.filter((c) => shownNames.has(c.name) && ['specified', 'in-progress', 'complete'].includes(c.status));
+  if (!open.length) return '<div class="empty">Nothing open right now: no change is specified, in progress or waiting to be archived.</div>';
+  const typical = {};
+  for (const [k] of PHASES) typical[k] = median([...times.entries()].map(([, t]) => phasesOf(t, now).find((p) => p.k === k && !p.open)).filter(Boolean).map((p) => p.end - p.start));
+  const rows = open.map((c) => { const since = times.get(c.name)?.[c.status] ?? c.lastModified ?? now; return { c, age: now - since, typ: typical[c.status] }; })
+    .sort((a, b) => b.age - a.age);
+  const maxV = Math.max(...rows.map((r) => Math.max(r.age, r.typ ?? 0))) * 1.08;
+  const LBL = Math.min(190, W * 0.4), R = 130, rowH = 34, T = 4;
+  const H = T + rows.length * rowH + 4;
+  const x = (v) => LBL + (v / maxV) * (W - LBL - R);
+  let g = '';
+  rows.forEach((r, i) => {
+    const y = T + i * rowH;
+    const slow = r.typ && r.age > 2 * r.typ;
+    g += `<text class="ch-lbl ch-row" x="0" y="${y + 13}" data-pick="${esc(r.c.name)}">${esc(title(r.c.name).slice(0, 30))}<title>${esc(r.c.name)}</title></text>
+      <text class="ch-ax" x="0" y="${y + 27}">${CF_LABEL[r.c.status]}${slow ? ' · ⚠ longer than usual' : ''}</text>
+      <rect x="${LBL}" y="${y + 9}" width="${Math.max(3, x(r.age) - LBL)}" height="12" rx="4" fill="${CF_VAR[r.c.status]}" ${tipAttr([r.c.name, `${CF_LABEL[r.c.status]} for ${dur(r.age)}`, r.typ ? `typical: ${dur(r.typ)}` : 'no finished change to compare with yet'])}/>
+      ${r.typ ? `<line x1="${x(r.typ)}" x2="${x(r.typ)}" y1="${y + 4}" y2="${y + 26}" stroke="var(--ink)" stroke-width="2" ${tipAttr([`typical ${CF_LABEL[r.c.status]}: ${dur(r.typ)}`])}/>` : ''}
+      <text class="ch-lbl" x="${Math.max(x(r.age), r.typ ? x(r.typ) : 0) + 8}" y="${y + 19}">${dur(r.age)}${r.typ ? `<tspan class="muted"> / typ. ${dur(r.typ)}</tspan>` : ''}</text>`;
+  });
+  return `<div class="ch-legend"><span><i class="tick"></i>typical time in that status (median of finished changes)</span></div><svg class="ch-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Age of open changes">${g}</svg>`;
+}
+
+// ---- check-offs by day and hour
+function heatChart(s, shownNames, times, W) {
+  const checks = (tl.data?.checks ?? []).filter((x) => shownNames.has(x.change));
+  if (!checks.length) return '<div class="empty">No checked-off tasks recorded yet.</div>';
+  const dayKey = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  const days = [...new Set(checks.map((x) => dayKey(x.t)))].sort((a, b) => a - b).slice(-14);
+  const cell = new Map();
+  for (const x of checks) { const k = `${dayKey(x.t)}:${new Date(x.t).getHours()}`; cell.set(k, (cell.get(k) ?? 0) + 1); }
+  const max = Math.max(...cell.values());
+  const L = 92, T = 4, gap = 2;
+  const cw = Math.min(40, Math.max(8, Math.floor((W - L - 4) / 24) - gap)), ch = Math.min(22, cw);
+  const H = T + days.length * (ch + gap) + 22;
+  let g = '';
+  days.forEach((d, r) => {
+    const y = T + r * (ch + gap);
+    g += `<text class="ch-ax" x="${L - 8}" y="${y + ch / 2 + 4}" text-anchor="end">${dayFmt(d)}</text>`;
+    for (let h = 0; h < 24; h++) {
+      const n = cell.get(`${d}:${h}`) ?? 0;
+      const xx = L + h * (cw + gap);
+      g += `<rect x="${xx}" y="${y}" width="${cw}" height="${ch}" rx="3" fill="${n ? `color-mix(in srgb, var(--cf-specified) ${Math.round(18 + 82 * (n / max))}%, var(--surface))` : 'var(--surface-2)'}" ${tipAttr([`${dayFmt(d)}, ${String(h).padStart(2, '0')}:00–${String(h + 1).padStart(2, '0')}:00`, `${n} task${n === 1 ? '' : 's'} checked off`])}/>`;
+    }
+  });
+  for (const h of [0, 6, 12, 18]) g += `<text class="ch-ax" x="${L + h * (cw + gap)}" y="${H - 6}">${String(h).padStart(2, '0')}:00</text>`;
+  const live = checks.filter((x) => x.src === 'live').length;
+  const sub = $('ch-heat-sub');
+  if (sub) sub.textContent = `${checks.length} check-offs (${live} recorded live, ${checks.length - live} from commits, which only know the commit time). Darker = more.`;
+  return `<div class="ch-legend"><span>fewer</span>${[18, 45, 72, 100].map((p) => `<i style="background:color-mix(in srgb, var(--cf-specified) ${p}%, var(--surface))"></i>`).join('')}<span>more (max ${max} per hour)</span></div><div class="ch-scroll"><svg class="ch-svg" width="${L + 24 * (cw + gap)}" height="${H}" role="img" aria-label="Check-offs per hour">${g}</svg></div>`;
+}
+
+// ---- the roadmap as a dependency graph, with the longest open chain highlighted
+function depsChart(s, shownNames, times, W) {
+  const all = s.changes.filter((c) => c.inRoadmap && c.status !== 'parking');
+  const byOrder = new Map(all.map((c) => [c.order, c]));
+  const nodes = all.filter((c) => shownNames.has(c.name) || all.some((x) => shownNames.has(x.name) && x.dependsOn.includes(c.order)));
+  if (!nodes.length) return '<div class="empty">No roadmap.</div>';
+  const inSet = new Set(nodes.map((c) => c.order));
+  const deps = (c) => c.dependsOn.filter((o) => inSet.has(o));
+  const soft = (c) => (c.softDependsOn ?? []).filter((o) => inSet.has(o));
+  const layer = new Map();
+  const lay = (c, seen = new Set()) => {
+    if (layer.has(c.order)) return layer.get(c.order);
+    if (seen.has(c.order)) return 0; seen.add(c.order);
+    const l = deps(c).length ? 1 + Math.max(...deps(c).map((o) => lay(byOrder.get(o), seen))) : 0;
+    layer.set(c.order, l); return l;
+  };
+  nodes.forEach((c) => lay(c));
+  // critical path: longest chain of changes that are not done yet
+  const chain = new Map();
+  const len = (c) => {
+    if (chain.has(c.order)) return chain.get(c.order).n;
+    if (isDone(c)) { chain.set(c.order, { n: 0, prev: null }); return 0; }
+    let best = { n: 1, prev: null };
+    for (const o of deps(c)) { const n = len(byOrder.get(o)) + 1; if (n > best.n) best = { n, prev: o }; }
+    chain.set(c.order, best); return best.n;
+  };
+  nodes.forEach(len);
+  const end = nodes.filter((c) => !isDone(c)).sort((a, b) => chain.get(b.order).n - chain.get(a.order).n || a.seq - b.seq)[0];
+  const crit = new Set();
+  for (let o = end?.order; o != null; o = chain.get(o)?.prev) crit.add(o);
+  const cols = Math.max(...nodes.map((c) => layer.get(c.order))) + 1;
+  const byLayer = Array.from({ length: cols }, (_, l) => nodes.filter((c) => layer.get(c.order) === l).sort((a, b) => a.seq - b.seq));
+  // fewer crossings: order each layer by the mean row of its prerequisites (barycenter), roadmap order on ties
+  const row = new Map();
+  byLayer.forEach((l, li) => {
+    if (li) {
+      const bary = (c) => { const ys = deps(c).map((o) => row.get(o)).filter((v) => v != null); return ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : Infinity; };
+      l.sort((a, b) => bary(a) - bary(b) || a.seq - b.seq);
+    }
+    l.forEach((c, i) => row.set(c.order, i));
+  });
+  const gx = 30, NH = 34, gy = 10;
+  const NW = Math.max(124, Math.min(170, Math.floor((W - 8 - (cols - 1) * gx) / cols)));
+  const Wd = cols * (NW + gx) - gx + 8, Hd = Math.max(...byLayer.map((l) => l.length)) * (NH + gy) + 8;
+  const pos = new Map();
+  byLayer.forEach((l, li) => l.forEach((c, i) => pos.set(c.order, { x: 4 + li * (NW + gx), y: 4 + i * (NH + gy) })));
+  let edges = '', boxes = '';
+  const maxCh = Math.floor((NW - 18) / 6.6);
+  for (const c of nodes) {
+    const b = pos.get(c.order);
+    for (const [list, dashed] of [[deps(c), false], [soft(c), true]]) for (const o of list) {
+      const a = pos.get(o);
+      const isCrit = !dashed && crit.has(o) && crit.has(c.order) && chain.get(c.order)?.prev === o;
+      const x1 = a.x + NW, y1 = a.y + NH / 2, x2 = b.x, y2 = b.y + NH / 2, mx = (x1 + x2) / 2;
+      const settled = isDone(byOrder.get(o)) && isDone(c);
+      edges += `<path d="M${x1},${y1}C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" class="ch-edge${isCrit ? ' crit' : settled ? ' settled' : ''}" ${dashed ? 'stroke-dasharray="4 4"' : ''}/>`;
+    }
+  }
+  for (const c of nodes) {
+    const p = pos.get(c.order);
+    const st = c.status === 'proposed' ? 'proposed' : c.status;
+    const ghost = !shownNames.has(c.name);
+    const lab = title(c.name);
+    boxes += `<g class="ch-node ${crit.has(c.order) ? 'crit' : ''} ${ghost ? 'ghost' : ''}" data-pick="${esc(c.name)}" ${tipAttr([`#${c.order} ${c.name}`, `${CF_LABEL[st] ?? st}${c.blockedBy?.length && !isDone(c) ? ` · waits for ${c.blockedBy.map((o) => '#' + o).join(', ')}` : ''}`, ...(crit.has(c.order) ? ['on the critical path'] : [])])}>
+      <rect x="${p.x}" y="${p.y}" width="${NW}" height="${NH}" rx="8" class="ch-nbox"/>
+      <rect x="${p.x}" y="${p.y}" width="5" height="${NH}" rx="2.5" fill="${CF_VAR[st] ?? 'var(--faint)'}"/>
+      <text class="ch-ax" x="${p.x + 12}" y="${p.y + 13}">#${c.order} · ${CF_LABEL[st] ?? st}</text>
+      <text class="ch-lbl" x="${p.x + 12}" y="${p.y + 27}">${esc(lab.length > maxCh ? lab.slice(0, maxCh - 1) + '…' : lab)}</text>
+    </g>`;
+  }
+  const sub = $('ch-deps-sub');
+  if (sub) sub.textContent = crit.size ? `Critical path: ${[...crit].reverse().map((o) => '#' + o).join(' → ')} (${crit.size} open change${crit.size > 1 ? 's' : ''} in a row). Dashed: soft dependency. Click a change to open it.` : 'Everything here is done.';
+  return `<div class="ch-scroll"><svg class="ch-svg" width="${Wd}" height="${Hd}" role="img" aria-label="Dependency graph">${edges}${boxes}</svg></div>`;
+}
+
+// ---- hover: a tooltip for marks with data-tip, a crosshair for the time charts
+const tip = document.createElement('div');
+tip.className = 'ch-tip'; tip.hidden = true; document.body.appendChild(tip);
+function showTip(e, lines) {
+  tip.innerHTML = lines.map((l, i) => `<div class="${i ? '' : 'h'}">${esc(l)}</div>`).join('');
+  tip.hidden = false;
+  const r = tip.getBoundingClientRect();
+  tip.style.left = `${Math.min(innerWidth - r.width - 8, e.clientX + 14)}px`;
+  tip.style.top = `${e.clientY + 16 + r.height > innerHeight ? e.clientY - r.height - 10 : e.clientY + 16}px`;
+}
+document.addEventListener('pointermove', (e) => {
+  const hit = e.target.closest?.('[data-xhover]');
+  document.querySelectorAll('.ch-cross').forEach((l) => { if (!hit || !hit.closest('svg').contains(l)) l.setAttribute('visibility', 'hidden'); });
+  if (hit) {
+    const geo = chartGeo.get(hit.dataset.xhover);
+    if (!geo) return;
+    const svg = hit.closest('svg');
+    const px = e.clientX - svg.getBoundingClientRect().left;
+    let row = geo.rows[0];
+    for (const r of geo.rows) if (geo.x(r.t) <= px) row = r;
+    const line = svg.querySelector('.ch-cross');
+    line.setAttribute('x1', px); line.setAttribute('x2', px); line.setAttribute('visibility', 'visible');
+    return showTip(e, row.lines);
+  }
+  const t = e.target.closest?.('[data-tip]');
+  if (t && t.closest('.charts')) return showTip(e, t.dataset.tip.split('\n'));
+  tip.hidden = true;
+});
+document.documentElement.addEventListener('mouseleave', () => { tip.hidden = true; });
+let chartResize = null;
+addEventListener('resize', () => { clearTimeout(chartResize); chartResize = setTimeout(() => ui.state && drawCharts(ui.state), 150); });
+
+// ------------------------------------------------------------ backlog: the roadmap as a list, by milestone
+// Like a backlog in an issue tracker: one row per change in roadmap order. With --agent, tickets that have not
+// started can be dragged (or moved with Alt+↑/↓) within their milestone; the server rewrites openspec/roadmap.md,
+// renumbers and keeps every "Depends on" reference right, and refuses moves past a prerequisite.
+const BL_MOVABLE = new Set(['proposed', 'missing']);
+function backlogHtml(s, shown, picked) {
+  const focus = ui.boardFocus;
+  const groups = s.milestones.map((m) => ({ id: m.id, title: m.title, cs: shown.filter((c) => c.milestone === m.id) }));
+  const loose = shown.filter((c) => !c.milestone && c.status !== 'parking');
+  if (loose.length) groups.push({ id: '', title: 'Not in a milestone', cs: loose });
+  const row = (c) => {
+    const done = isDone(c);
+    const movable = !!AGENT_TOKEN && c.inRoadmap && !!c.milestone && BL_MOVABLE.has(c.status);
+    const t = c.tasks;
+    const deps = c.dependsOn?.length ? `after ${c.dependsOn.map((o) => '#' + o).join(', ')}` : '';
+    return `<li class="bl-row ${done ? 'done' : ''} ${movable ? 'movable' : ''} ${c.name === picked ? 'picked' : ''}" ${c.name === picked ? 'aria-current="true"' : ''} data-pick="${esc(c.name)}" data-bl="${esc(c.name)}" data-blms="${esc(c.milestone ?? '')}" ${movable ? 'draggable="true" tabindex="0" aria-roledescription="movable ticket"' : ''} title="${esc(c.goal)}">
+      <span class="bl-grip" aria-hidden="true">${movable ? '⠿' : ''}</span>
+      <span class="bl-o num">${c.inRoadmap ? '#' + c.order : '—'}</span>
+      <span class="bl-name">${esc(title(c.name))}<span class="slug">${esc(c.name)}</span></span>
+      <span class="bl-area">${esc(c.context)}</span>
+      <span class="bl-deps ${c.blockedBy?.length && !done ? 'wait' : ''}">${c.blockedBy?.length && !done ? `waits for ${c.blockedBy.map((o) => '#' + o).join(', ')}` : deps}</span>
+      <span class="bl-prog">${t && t.total ? `<span class="bar"><span style="width:${pct(t.done, t.total)}%;background:var(--st-complete)"></span></span><span class="num">${t.done}/${t.total}</span>` : ''}</span>
+      <span class="pill" style="--st:${stVar(c.status)}">${esc(columnLabel(c))}</span>
+    </li>`;
+  };
+  return `<div class="backlog" data-col="backlog">
+    <div class="bl-hint">${AGENT_TOKEN ? 'Drag a ticket that has not started (⠿) to reorder it within its milestone, or use Alt+↑/↓. It rewrites <code>openspec/roadmap.md</code> and keeps the "Depends on" numbers right.' : 'Read-only: start the dashboard with <code>--agent</code> to reorder by drag and drop.'}<span class="bl-note" id="bl-note"></span></div>
+    ${groups.map((g) => {
+      const cs = g.cs.filter((c) => !(focus && c.status === 'archived')).sort((a, b) => a.seq - b.seq);
+      const doneN = g.cs.filter(isDone).length;
+      return `<section class="bl-group">
+        <div class="bl-head"><b>${esc(g.id)}</b> ${esc(g.title)}<span class="muted num">${doneN}/${g.cs.length} done${focus && g.cs.some((c) => c.status === 'archived') ? ` · ${g.cs.filter((c) => c.status === 'archived').length} archived hidden` : ''}</span></div>
+        <ol class="bl-list" data-blms="${esc(g.id)}">${cs.map(row).join('') || '<li class="bl-empty">Nothing open here.</li>'}</ol>
+      </section>`;
+    }).join('')}
+  </div>`;
+}
+async function blMove(change, before) {
+  const note = $('bl-note');
+  if (note) { note.textContent = 'Moving…'; note.classList.remove('warn'); }
+  try {
+    const r = await fetch(withProject('/api/roadmap/move'), { method: 'POST', headers: { 'content-type': 'application/json', 'x-osd-token': AGENT_TOKEN }, body: JSON.stringify({ change, before }) });
+    const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+    ui.blMoved = change;
+    if ($('bl-note')) $('bl-note').textContent = d.moved ? '' : 'Already there.';
+  } catch (e) {
+    if ($('bl-note')) { $('bl-note').textContent = '✕ ' + e.message; $('bl-note').classList.add('warn'); }
+  }
+}
+const blRows = (ms) => [...document.querySelectorAll(`.bl-list[data-blms="${CSS.escape(ms)}"] > .bl-row`)];
+const clearDrop = () => document.querySelectorAll('.drop-before, .drop-after').forEach((el) => el.classList.remove('drop-before', 'drop-after'));
+document.addEventListener('dragstart', (e) => {
+  const row = e.target.closest?.('.bl-row.movable');
+  if (!row) return;
+  ui.drag = { name: row.dataset.bl, ms: row.dataset.blms };
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', row.dataset.bl);
+  requestAnimationFrame(() => row.classList.add('dragging'));
+});
+document.addEventListener('dragover', (e) => {
+  const row = e.target.closest?.('.bl-row');
+  if (!ui.drag || !row || row.dataset.blms !== ui.drag.ms) return;
+  e.preventDefault();
+  const r = row.getBoundingClientRect();
+  clearDrop();
+  row.classList.add(e.clientY < r.top + r.height / 2 ? 'drop-before' : 'drop-after');
+});
+document.addEventListener('drop', (e) => {
+  const row = e.target.closest?.('.bl-row');
+  if (!ui.drag || !row) return;
+  e.preventDefault();
+  const rows = blRows(ui.drag.ms);
+  const i = rows.indexOf(row);
+  const before = row.classList.contains('drop-before') ? row.dataset.bl : rows[i + 1]?.dataset.bl ?? null;
+  const name = ui.drag.name;
+  clearDrop();
+  if (before !== name) blMove(name, before);
+});
+document.addEventListener('dragend', () => {
+  clearDrop();
+  document.querySelectorAll('.dragging').forEach((el) => el.classList.remove('dragging'));
+  ui.drag = null;
+  if (ui.pendingBoard) { ui.pendingBoard = false; renderBoard(ui.state); }
+});
+document.addEventListener('keydown', (e) => {
+  const row = e.target.closest?.('.bl-row.movable');
+  if (!row || !e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+  e.preventDefault();
+  const rows = blRows(row.dataset.blms);
+  const i = rows.indexOf(row);
+  if (e.key === 'ArrowUp' && i > 0) blMove(row.dataset.bl, rows[i - 1].dataset.bl);
+  if (e.key === 'ArrowDown' && i < rows.length - 1) blMove(row.dataset.bl, rows[i + 2]?.dataset.bl ?? null);
+});
 
 function renderHeader(s) {
   $('title').innerHTML = `${esc(s.project)} <span>· OpenSpec</span>`;
@@ -1667,6 +2382,7 @@ function setMax(on) {
   if (!on) $('board').scrollIntoView({ block: 'start' });
 }
 function pick(name) {
+  if (name) ui.lastPick = name; // stays highlighted in the backlog, so the row is easy to find again
   if (ui.boardMax) {
     ui.drawer = name || null;
     ui.drawerScroll = 0;
@@ -1683,6 +2399,9 @@ document.addEventListener('click', (e) => {
   const ms = e.target.closest('[data-ms]');
   if (ms) { ui.ms = ms.dataset.ms; try { localStorage.setItem('osd-ms', ui.ms); } catch {} return renderBoard(ui.state); }
   if (e.target.closest('[data-max]')) return setMax(!ui.boardMax);
+  const bv = e.target.closest('[data-board-view]');
+  if (bv) { ui.boardView = bv.dataset.boardView; try { localStorage.setItem('osd-board-view', ui.boardView); } catch {} return renderBoard(ui.state); }
+  if (e.target.closest('[data-board-focus]')) { ui.boardFocus = !ui.boardFocus; try { localStorage.setItem('osd-board-focus', ui.boardFocus ? '1' : '0'); } catch {} return renderBoard(ui.state); }
   if (e.target.closest('[data-close-drawer]')) { ui.drawer = null; history.replaceState(null, '', '#board'); return renderBoard(ui.state); }
   const p = e.target.closest('[data-pick]');
   if (p) return pick(p.dataset.pick);
@@ -1823,10 +2542,10 @@ function buildChat(s) {
     ${ag.max ? '' : chips}
     <div class="ag-bar" id="ag-bar"></div>
     <div class="ag-thread" id="ag-thread" aria-live="polite"></div>
+    <div class="ag-suggest-wrap" id="ag-suggest">${suggestHtml()}</div>
     <div class="ag-compose">
       <textarea id="ag-text" rows="2" placeholder="${esc(ph)}">${esc(ag.drafts['chat-' + ag.convo] ?? '')}</textarea>
-      ${micHtml()}
-      <button class="btn primary" type="button" data-ag-send>Send</button>
+      <div class="ag-tools">${micHtml()}${rephraseBtnHtml()}<button class="btn primary" type="button" data-ag-send>Send</button></div>
     </div>
     <div class="ag-note ag-route" id="ag-route"></div>`;
 }
@@ -1838,7 +2557,8 @@ function buildTicket(s) {
   let form;
   if (ag.mode === 'ask') {
     form = `<textarea id="ag-text" rows="3" placeholder="Ask about ${esc(title(c.name))}, e.g. What is left to do? Which scenario covers …?">${esc(ag.drafts['ticket-ask'] ?? '')}</textarea>
-      <div class="ag-row">${micHtml()}<button class="btn primary" type="button" data-ag-send>Ask</button><span class="ag-note">Claude reads this ticket's files read-only and answers here. ⌘/Ctrl+Enter sends.</span></div>`;
+      <div class="ag-suggest-wrap" id="ag-suggest">${suggestHtml()}</div>
+      <div class="ag-row">${micHtml()}${rephraseBtnHtml()}<button class="btn primary" type="button" data-ag-send>Ask</button><span class="ag-note">Claude reads this ticket's files read-only and answers here. ⌘/Ctrl+Enter sends.</span></div>`;
   } else {
     form = `<div class="ag-note">Starts a new Claude Code session that works on <b>${esc(title(c.name))}</b> with the ticket workflow. You follow and talk to it in the <b>Chat</b>.</div>
       ${ag.view?.trusted === false ? `<div class="ag-note warn">Claude Code does not trust this folder yet, so it ignores the project's permission rules and the session will be stuck at the first command. Run <code>claude</code> in ${esc(s.project)} once and accept the trust dialog.</div>` : ''}
@@ -1917,6 +2637,7 @@ function renderAgentLive() {
   updateAgentBtn();
   if (!ag.open || !ag.view) return;
   for (const el of document.querySelectorAll('[data-ag-voice]')) el.hidden = !ag.view.stt?.available;
+  for (const b of document.querySelectorAll('[data-ag-rephrase]')) b.hidden = !ag.view.rephrase?.available;
   if (ag.panel === 'chat') {
     if (!$('ag-thread')) return;
     const list = conversations();
@@ -2185,6 +2906,68 @@ document.addEventListener('change', (e) => {
   refreshMic();
 });
 
+// ---- rephrasing: a local model rewrites the draft into a clear prompt; the result is only a suggestion that
+// replaces the text in the box once it is accepted
+const rps = { state: 'idle', text: null, ms: 0, key: null, ctl: null, error: null, started: 0 };
+const RP_SVG = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M10 2.5l1.6 4.4 4.4 1.6-4.4 1.6L10 14.5l-1.6-4.4L4 8.5l4.4-1.6L10 2.5Zm7.5 9l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9.9-2.6ZM6 15l.7 1.8 1.8.7-1.8.7L6 20l-.7-1.8-1.8-.7 1.8-.7L6 15Z"/></svg>';
+const draftKey = () => (ag.panel === 'chat' ? 'chat-' + ag.convo : 'ticket-' + ag.mode);
+function rephraseBtnHtml() {
+  const on = !!ag.view?.rephrase?.available;
+  return `<button class="btn ag-rp" type="button" data-ag-rephrase ${on ? '' : 'hidden'} ${rps.state === 'busy' ? 'disabled' : ''}
+    title="Rephrase the text into a clear prompt with the local model${ag.view?.rephrase?.model ? ` (${esc(ag.view.rephrase.model)})` : ''}; you accept or reject the suggestion">${RP_SVG}<span>Rephrase</span></button>`;
+}
+function suggestHtml() {
+  if (rps.key !== draftKey() || rps.state === 'idle' && !rps.text && !rps.error) return '';
+  if (rps.state === 'busy') {
+    const loading = ag.view?.rephrase?.state !== 'ready';
+    return `<div class="ag-suggest busy"><div class="h"><span class="ag-spin"></span>${loading ? 'Loading the local model and rephrasing… (loading takes up to two minutes the first time)' : 'Rephrasing locally…'}
+      <span class="num" data-rp-elapsed>${fmtSecs((Date.now() - rps.started) / 1000)}</span><button class="link" type="button" data-ag-rp-cancel style="margin-left:auto">Cancel</button></div></div>`;
+  }
+  if (rps.error) return `<div class="ag-suggest"><div class="h warn">✕ ${esc(rps.error)}<button class="link" type="button" data-ag-reject style="margin-left:auto">Dismiss</button></div></div>`;
+  return `<div class="ag-suggest" role="group" aria-label="Suggestion">
+    <div class="h"><b>Suggestion</b><span>rephrased locally in ${(rps.ms / 1000).toFixed(0)} s</span></div>
+    <div class="txt">${esc(rps.text)}</div>
+    <div class="ag-actions"><button class="btn primary" type="button" data-ag-accept>Accept</button><button class="btn" type="button" data-ag-reject>Reject</button>
+      <span class="ag-note">Accept replaces the text in the box; you can still edit it before sending.</span></div></div>`;
+}
+function refreshSuggest() {
+  const el = $('ag-suggest');
+  if (el) el.innerHTML = suggestHtml();
+  for (const b of document.querySelectorAll('[data-ag-rephrase]')) { b.hidden = !ag.view?.rephrase?.available; b.disabled = rps.state === 'busy'; }
+}
+async function rephraseDraft() {
+  const ta = $('ag-text');
+  const text = ta?.value.trim();
+  if (!text) { voiceNote('Write or dictate something first, then rephrase it.', true); return ta?.focus(); }
+  rps.ctl?.abort();
+  Object.assign(rps, { state: 'busy', text: null, error: null, key: draftKey(), ctl: new AbortController(), started: Date.now() });
+  refreshSuggest();
+  const tick = setInterval(() => { const e = document.querySelector('[data-rp-elapsed]'); if (e) e.textContent = fmtSecs((Date.now() - rps.started) / 1000); }, 1000);
+  try {
+    const r = await fetch('/api/rephrase', { method: 'POST', headers: { 'content-type': 'application/json', 'x-osd-token': AGENT_TOKEN }, body: JSON.stringify({ text }), signal: rps.ctl.signal });
+    const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+    Object.assign(rps, { state: 'idle', text: d.text, ms: d.ms });
+  } catch (e) {
+    Object.assign(rps, { state: 'idle', text: null, error: e.name === 'AbortError' ? null : e.message });
+  } finally {
+    clearInterval(tick);
+    refreshSuggest();
+  }
+}
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  if (t.closest('[data-ag-rephrase]')) return rephraseDraft();
+  if (t.closest('[data-ag-rp-cancel]')) { rps.ctl?.abort(); return; }
+  if (t.closest('[data-ag-accept]')) {
+    const ta = $('ag-text');
+    if (ta && rps.text) { ta.value = rps.text; ta.dispatchEvent(new Event('input', { bubbles: true })); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    Object.assign(rps, { text: null, error: null });
+    return refreshSuggest();
+  }
+  if (t.closest('[data-ag-reject]')) { Object.assign(rps, { text: null, error: null }); refreshSuggest(); $('ag-text')?.focus(); }
+});
+
 // ------------------------------------------------------------ several projects
 // ?project=<id> shows one project; with several projects and no ?project= the overview is the start page.
 const PARAMS = new URLSearchParams(location.search);
@@ -2234,6 +3017,8 @@ function renderOverview(o) {
 }
 
 function startProject() {
+  if (PARAMS.has('focus')) ui.boardFocus = PARAMS.get('focus') !== '0'; // ?focus: the board in focus mode
+  if (['board', 'backlog', 'charts'].includes(PARAMS.get('view'))) ui.boardView = PARAMS.get('view'); // ?view=backlog|charts
   if (AGENT_TOKEN && PARAMS.get('panel')?.startsWith('ticket:')) { // ?panel=ticket:<change> opens a ticket's panel
     Object.assign(ag, { open: true, panel: 'ticket', target: PARAMS.get('panel').slice(7), max: ag.max || PARAMS.has('max') }); $('agent').hidden = false; document.body.classList.add('ag-open');
   }
