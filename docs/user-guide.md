@@ -284,7 +284,8 @@ or **Skip → next candidate** to move on to the next one.
 ### Start a new project
 
 **＋ Start a new project** (on the right of the "Onboard more projects" heading in the screenshot above) brainstorms a
-project that does not exist yet. Choose the folder it
+project that does not exist yet. It opens full screen; **⤡ Restore** (or `Esc`) shrinks it to a side panel, and the
+choice is remembered. Choose the folder it
 goes into and describe the idea; Claude asks about the problem, the users, the scope of a first version, the stack
 and the quality gate, and proposes a first milestone of tickets. Once you agree it shows the project as a card.
 **Create project…** asks for the folder name; **Create and set up** creates the folder and lets Claude write

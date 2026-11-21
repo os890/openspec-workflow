@@ -1473,6 +1473,10 @@ body.board-max { overflow: hidden; }
 .agent-panel.max .ag-thread { padding-block: 16px; gap: 10px; }
 .agent-panel.max .msg, .agent-panel.max .steps { max-width: 80%; }
 .agent-panel.max .ag-compose { padding-block: 10px 2px; }
+.agent-panel.max .np-expert { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px; max-height: 46vh; }
+.agent-panel.max .np-expert > .ag-note { grid-column: 1 / -1; }
+.agent-panel.max .np-row { flex-wrap: nowrap; }
+.agent-panel.max .np-parent input { max-width: 520px; }
 .agent-panel.max .ag-route { padding-bottom: 8px; }
 .ag-head .ag-maxbtn { margin-left: auto; font-size: 13px; }
 .ag-head .ag-maxbtn + .link { margin-left: 14px; }
@@ -4073,11 +4077,18 @@ async function discPost(body) {
 }
 const candidate = (p) => ui.overview?.discovery?.candidates.find((c) => c.path === p);
 // the chat about one candidate, in the side panel; it ends with a decision: onboard it, or skip to the next one
-function scoutPanel(placeholder) {
+// full screen or side panel: a new project opens full screen (the last choice is remembered), a candidate's chat as a panel
+function scoutMax(on) {
+  sc.max = on;
+  $('agent').classList.toggle('max', on);
+  document.body.classList.toggle('ag-max', on);
+  const b = $('agent').querySelector('[data-sc-max]');
+  if (b) { b.setAttribute('aria-pressed', String(on)); b.textContent = on ? '⤡ Restore' : '⤢ Maximize'; b.title = on ? 'Back to the side panel (Esc)' : 'Use the whole window'; }
+}
+function scoutPanel(placeholder, max = false) {
   $('agent').hidden = false;
-  $('agent').classList.remove('max');
   document.body.classList.add('ag-open');
-  $('agent').innerHTML = `<div class="ag-head"><h2 id="sc-title"></h2><button class="link" type="button" data-sc-close>Close ✕</button></div>
+  $('agent').innerHTML = `<div class="ag-head"><h2 id="sc-title"></h2><button class="link ag-maxbtn" type="button" data-sc-max></button><button class="link" type="button" data-sc-close>Close ✕</button></div>
     <div class="ag-bar" id="sc-bar"></div>
     <div class="ag-thread" id="ag-thread" aria-live="polite"></div>
     <div class="ag-compose">
@@ -4086,13 +4097,16 @@ function scoutPanel(placeholder) {
       <div class="ag-tools"><button class="btn primary" type="button" data-sc-send style="margin-left:auto">Send</button></div>
     </div>
     <div class="ag-note ag-route" id="sc-route">Enter sends · Shift+Enter for a new line</div>`;
+  scoutMax(max);
 }
 // a new project: brainstormed in its parent folder, created and onboarded once the user agrees
 function openNewProject() {
   const d = ui.overview?.discovery;
   Object.assign(sc, { open: true, mode: 'new', path: null, note: '', create: null, fresh: false, parent: sc.parent ?? d?.path ?? null });
   sc.parentInput = sc.parent ? (d?.newChats.find((x) => x.parent === sc.parent)?.display ?? d?.display ?? '') : (d?.display ?? d?.home ?? '~');
-  scoutPanel('Describe the project you have in mind');
+  let max = true;
+  try { max = localStorage.getItem('osd-np-max') !== '0'; } catch {}
+  scoutPanel('Describe the project you have in mind', max);
   sc.stick = true;
   renderScout();
   $('sc-text').focus();
@@ -4192,7 +4206,7 @@ function openScout(p) {
   $('sc-text').focus();
   if (ui.overview) renderOverview(ui.overview);
 }
-function closeScout() { sc.open = false; $('agent').hidden = true; document.body.classList.remove('ag-open'); if (ui.overview) renderOverview(ui.overview); }
+function closeScout() { sc.open = false; scoutMax(false); $('agent').hidden = true; document.body.classList.remove('ag-open'); if (ui.overview) renderOverview(ui.overview); }
 function renderScout() {
   if (sc.mode === 'new') return $('sc-bar') && renderNewProject();
   const c = candidate(sc.path);
@@ -4253,10 +4267,15 @@ document.addEventListener('change', (e) => {
 });
 document.addEventListener('click', (e) => {
   const t = e.target;
-  const hit = t.closest?.('[data-disc], [data-sc-open], [data-sc-close], [data-sc-send], [data-sc-onboard], [data-sc-skip], [data-sc-next], [data-np-open], [data-np-fresh], [data-np-create], [data-np-go], [data-np-cancel]');
+  const hit = t.closest?.('[data-disc], [data-sc-open], [data-sc-close], [data-sc-max], [data-sc-send], [data-sc-onboard], [data-sc-skip], [data-sc-next], [data-np-open], [data-np-fresh], [data-np-create], [data-np-go], [data-np-cancel]');
   if (!hit) return;
   e.stopPropagation();
   if (hit.matches('[data-np-open]')) return openNewProject();
+  if (hit.matches('[data-sc-max]')) {
+    scoutMax(!sc.max);
+    if (sc.mode === 'new') try { localStorage.setItem('osd-np-max', sc.max ? '1' : '0'); } catch {}
+    return $('sc-text')?.focus();
+  }
   if (hit.matches('[data-np-fresh]')) { Object.assign(sc, { fresh: true, create: null, note: '' }); return renderScout(); }
   if (hit.matches('[data-np-cancel]')) { sc.create = null; return renderScout(); }
   if (hit.matches('[data-np-create]')) {
@@ -4286,6 +4305,7 @@ document.addEventListener('click', (e) => {
   }
 }, true);
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && sc.open && !document.querySelector('dialog[open]')) { e.preventDefault(); return sc.max ? scoutMax(false) : closeScout(); }
   if (e.target.id !== 'sc-text' || e.key !== 'Enter' || e.isComposing || e.shiftKey) return;
   e.preventDefault(); scoutSend();
 });

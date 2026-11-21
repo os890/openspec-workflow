@@ -44,7 +44,8 @@ markers, the first line of its README, and when it was last committed; the most 
 - **Skip** hides a candidate; **show skipped** brings them back. A folder that has `openspec/` already gets
   **Follow** instead.
 
-**＋ Start a new project** brainstorms a project that does not exist yet. Pick the parent folder (e.g. `~/code`) and
+**＋ Start a new project** brainstorms a project that does not exist yet, full screen (**⤡ Restore** or `Esc` makes it
+a side panel; remembered). Pick the parent folder (e.g. `~/code`) and
 describe the idea: Claude asks about the problem and the users, the scope of a first version and what is out, the
 stack and the quality gate, and proposes a first milestone of tickets (the first sets up the skeleton, the second is
 the first vertical slice). It works read-only in the parent folder. Once you agree, it shows the project as a card;
