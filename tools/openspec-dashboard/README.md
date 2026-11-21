@@ -53,6 +53,12 @@ setup as an onboarding, with the agreed brief: `CLAUDE.md`, `README.md`, `opensp
 draft per ticket, no application code, nothing committed. When it is done the project is followed like an
 onboarded one.
 
+**⚙ Expert mode** in that panel sets the workflow the project starts with: quality gates, what every task is
+checked for, what every change is reviewed for, and the workflow steps, as toggle chips with defaults and your own
+entries (remembered in the browser). They are sent to the brainstorm with the next message when they change, and
+with **Create** as the brief's "Workflow" section; the setup makes them binding in `openspec/config.yaml` (quality
+gate, task rules, review rules, ticket workflow) and CLAUDE.md, and the first ticket sets up the chosen gates.
+
 The folder, the skipped candidates and the projects added this way are remembered
 (`$XDG_STATE_HOME/openspec-dashboard/discovery.json`), so added projects are followed again after a restart. With
 `--agent` the overview is reachable from the project picker (**All projects**) also when only one project is

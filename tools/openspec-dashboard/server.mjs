@@ -1041,6 +1041,7 @@ function createAgent(project) {
       '---',
       '<Markdown brief: purpose and users; scope of the first version; out of scope; conventions; milestone M1 "<title>" with the ordered tickets as `change-name`: goal (depends on …)>',
       '```',
+      'If the user sends workflow details from expert mode (quality gates, task checks, review topics, workflow steps), plan with them: the quality gate command and the first ticket set up those gates, and the brief gets a short "Workflow" section with them.',
       'Revise the block when the user asks for changes. If it does not converge, say so plainly and write no block. Answer like in a chat: short, in Markdown, in the language the user writes in.',
     ].join('\n');
   }
@@ -1054,6 +1055,7 @@ function createAgent(project) {
       `Then set up OpenSpec: ${skill}.`,
       USE_CLI ? `The OpenSpec CLI is available as \`${CLI}\`; use non-interactive options.` : 'Use the OpenSpec CLI if it is installed; otherwise write the files by hand.',
       'Write openspec/config.yaml (context, conventions, the quality gate), roadmap.md with the milestone and the tickets of the brief in their order and dependencies, and a backlog draft in openspec/backlog/ for every ticket. There are no specs yet.',
+      'If the brief has a "Workflow" section, make it binding: its quality gates are part of the quality gate command (and the first ticket sets them up), what every task is checked for goes into the rules for tasks, what every change is reviewed for into the rules and guidance for the review of every change, and the workflow steps into the ticket workflow in openspec/config.yaml; repeat them briefly in CLAUDE.md.',
       'Do not write application code: the skeleton is the first ticket. Do not commit: leave every change uncommitted for the user to review.',
       'Nobody can answer permission prompts: if a step needs a permission you do not have, skip it and say so at the end.',
       'End with a short summary: what you created, what the user should check first, and the first ticket to start.',
@@ -2105,7 +2107,10 @@ async function discoveryAction(body) {
     if (fs.existsSync(dir)) throw httpError(409, `${homeDisplay(dir)} exists already.`);
     await fsp.mkdir(dir);
     await git(dir, ['init', '-q']);
-    const brief = String(body.brief).slice(0, 20000);
+    let brief = String(body.brief).slice(0, 20000);
+    // expert mode: the chosen workflow details go with the brief, as its "Workflow" section
+    const wf = Array.isArray(body.workflow) ? body.workflow.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.replace(/\s+/g, ' ').slice(0, 1000)).slice(0, 8) : [];
+    if (wf.length) brief += `\n\n## Workflow (chosen in expert mode)\n\n${wf.map((x) => `- ${x}`).join('\n')}\n`;
     disc.candidates.unshift({ path: dir, real: dir, name, display: homeDisplay(dir), markers: [], about: brief.split('\n').find((l) => l.trim() && !/^(#|[a-z ]+:)/i.test(l.trim()))?.trim().slice(0, 200) ?? null, lastCommit: null, created: true });
     const job = await scoutFor(dir).agent.onboard({ brief, onDone: () => adopt(dir) });
     overviewChanged();

@@ -294,6 +294,23 @@ skeleton.
 
 ![Brainstorming a new project](images/dashboard-new-project.png)
 
+**⚙ Expert mode** (next to the folder) sets the workflow the new project starts with, as toggle chips with sensible
+defaults; **+ add** takes your own entries:
+
+- **Quality gates**: build and unit tests, linting, type checks, integration and end-to-end tests, coverage,
+  mutation testing, architecture rules, vulnerability and license scans, performance budgets;
+- **Checked for every task**: e.g. a test proves it, the quality gate is green, no TODOs;
+- **Reviewed for every change**: e.g. matches the specs, security, error handling, test quality, accessibility,
+  API compatibility, migrations;
+- **Workflow steps**: one commit per ticket, acceptance check, diff review with validated findings, docs and
+  diagram updates, parking lot.
+
+Claude gets them with your next message and plans with them (the first ticket sets up the chosen gates). **Create**
+makes them binding: they go into the project's `openspec/config.yaml` (the quality gate, the rules for tasks, what
+every review covers) and its CLAUDE.md. Your choices are remembered for the next project.
+
+![Expert mode for a new project](images/dashboard-new-project-expert.png)
+
 ## Styles
 
 The dashboard has ten styles:
