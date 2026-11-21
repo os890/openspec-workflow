@@ -437,7 +437,8 @@ write to a session (with reduced motion it is a still image).
 ![Writing to a session in terminal colors: the steps as in the CLI, and falling code while the answer is on its way](images/dashboard-terminal-rain.png)
 
 **⚙** below the input box opens the settings on the **Write mode** tab while you write to a session: turn the
-falling code off, or start it after another number of seconds (5 to 600; 30 by default), and choose the color of
+falling code off, start it after another number of seconds (5 to 600; 30 by default), set its **speed** (five steps
+from very slow to very fast; it changes at once, also while it runs), and choose the color of
 **your messages**: highlighted (the default: bright blue in terminal colors, the style's color otherwise), the color
 of the current style (in terminal colors too), or a color of your own (the text turns dark or light to stay
 readable), and the **context window** the gauge assumes when the session does not show it. All of the look

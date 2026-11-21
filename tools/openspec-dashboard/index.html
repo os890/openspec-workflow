@@ -322,6 +322,9 @@ span.ch-warn { color: var(--st-progress); }
 .cq-l { font-size: 12px; color: var(--muted); } .cq-v { font-size: 24px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
 .cq-s { font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
 .cq-spark { margin-top: 4px; }
+.wm-speed { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.wm-speed input[type="range"] { width: 140px; }
+#wm-speed-v { font-weight: 600; min-width: 5.5em; }
 .cq-largest { margin-top: 12px; font-size: 12.5px; }
 .cq-f { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); padding: 2px 0; border-bottom: 1px dashed var(--line); }
 .cq-f span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
@@ -1971,6 +1974,9 @@ function setRain(on) {
 // Write mode of a joined session: the same rain behind the conversation while an answer takes longer than 30 s,
 // so it is easy to see when it is done (≋ Matrix turns it off). It fades to transparent: works on light and dark.
 let wait = null;
+// the speed of the falling code (Settings › Write mode): ms per step, from very slow to very fast; 3 is the default
+const RAIN_MS = [null, 160, 100, 60, 40, 25], RAIN_SPEED = [null, 'very slow', 'slow', 'normal', 'fast', 'very fast'];
+const rainSpeed = () => Math.min(5, Math.max(1, Number(termView.rainSpeed) || 3));
 function setWaitRain(on) {
   if (!on) {
     if (wait) { cancelAnimationFrame(wait.raf); wait.canvas.remove(); $('agent')?.classList.remove('rain-on'); wait = null; }
@@ -2007,7 +2013,7 @@ function setWaitRain(on) {
   place();
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) { for (let k = 0; k < 60; k++) step(); return; }
   let last = 0;
-  const loop = (t) => { wait.raf = requestAnimationFrame(loop); if (t - last < 60) return; last = t; step(); };
+  const loop = (t) => { wait.raf = requestAnimationFrame(loop); if (t - last < RAIN_MS[rainSpeed()]) return; last = t; step(); }; // the speed is read every frame: a change applies at once
   wait.raf = requestAnimationFrame(loop);
 }
 const WAIT_RAIN_AFTER = 30e3;
@@ -4844,6 +4850,7 @@ function renderWriteSettings() {
     <p class="ag-note">For writing to a session that runs in a terminal (the terminal button › ✎ Write to it). Kept in this browser.</p>
     <label class="set-opt ${on ? 'sel' : ''}"><input type="checkbox" data-wm="matrix" ${on ? 'checked' : ''}><span><b>Falling code while you wait</b><span class="muted"> · green code runs behind the conversation while an answer takes long, and stops when the session is done</span></span></label>
     <label class="set-opt ${on ? '' : 'off'}"><span><b>Start it after</b> <input type="number" min="5" max="600" step="5" data-wm="after" value="${termView.rainAfter ?? 30}" ${on ? '' : 'disabled'} style="width:5em"> seconds</span></label>
+    <label class="set-opt ${on ? '' : 'off'}"><span class="wm-speed"><b>Speed</b> <span class="muted">slow</span><input type="range" min="1" max="5" step="1" data-wm="speed" value="${rainSpeed()}" ${on ? '' : 'disabled'} aria-label="Speed of the falling code" aria-valuetext="${RAIN_SPEED[rainSpeed()]}"><span class="muted">fast</span> <span id="wm-speed-v">${RAIN_SPEED[rainSpeed()]}</span></span></label>
     <div class="wm-head"><b>Context window</b> <span class="muted">· for the gauge that shows how full a session's context is, when the session does not show it (a session beyond 200k has 1M)</span></div>
     ${[[200000, '200k tokens', 'the default'], [1000000, '1M tokens', 'the long-context models']].map(([v, label, desc]) => `<label class="set-opt ${(termView.ctxWin ?? 200000) === v ? 'sel' : ''}"><input type="radio" name="wm-ctx" data-wm="ctxwin" value="${v}" ${(termView.ctxWin ?? 200000) === v ? 'checked' : ''}><span><b>${label}</b><span class="muted"> · ${desc}</span></span></label>`).join('')}
     <div class="wm-head"><b>Your messages</b> <span class="muted">· their background in the conversation</span></div>
@@ -4852,6 +4859,11 @@ function renderWriteSettings() {
       return `<label class="set-opt ${cur === v ? 'sel' : ''}"><input type="radio" name="wm-me" data-wm="me" value="${v}" ${cur === v ? 'checked' : ''}><span><b>${label}</b>${desc ? `<span class="muted"> · ${desc}</span>` : ''}${v === 'custom' ? ` <input type="color" data-wm="mecolor" value="${/^#/.test(me) ? me : termView.meLast ?? '#7c3aed'}" aria-label="Color of your messages" ${cur === 'custom' ? '' : 'disabled'}>` : ''}</span></label>`;
     }).join('')}`;
 }
+document.addEventListener('input', (e) => { // the speed while dragging: the label and a running rain follow at once
+  if (e.target.dataset?.wm !== 'speed') return;
+  termView.rainSpeed = Number(e.target.value) || 3; termViewSave();
+  $('wm-speed-v').textContent = RAIN_SPEED[rainSpeed()]; e.target.setAttribute('aria-valuetext', RAIN_SPEED[rainSpeed()]);
+});
 document.addEventListener('change', (e) => {
   const k = e.target.dataset?.wm;
   if (!k) return;
@@ -4859,6 +4871,7 @@ document.addEventListener('change', (e) => {
   else if (k === 'me') termView.me = e.target.value === 'custom' ? termView.meLast ?? '#7c3aed' : e.target.value;
   else if (k === 'mecolor') termView.me = termView.meLast = e.target.value;
   else if (k === 'ctxwin') termView.ctxWin = Number(e.target.value) || 200000;
+  else if (k === 'speed') termView.rainSpeed = Number(e.target.value) || 3;
   else termView.rainAfter = Math.min(600, Math.max(5, Number(e.target.value) || 30));
   termViewSave(); renderWriteSettings();
   if (ag.open) renderAgentLive(); // the open panel follows at once

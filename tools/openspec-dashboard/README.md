@@ -339,9 +339,9 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     `tool_result`), for the whole panel, and back; **A− / A / A+** set the text size. While the session has been working
     for more than 30 s since your message, a rain canvas (the Matrix style's falling code, fading to transparent)
     runs behind the conversation and is removed when it is done (a still image with reduced motion); the **Write
-    mode** tab of the settings (⚙ below the input box opens it there) turns it off, sets the delay (5–600 s) and the
+    mode** tab of the settings (⚙ below the input box opens it there) turns it off, sets the delay (5–600 s), the speed (one step every 160, 100, 60, 40 or 25 ms; 60 by default) and the
     color of your messages (highlighted, the style's accent, or an own color with a readable text color). Both only apply in write mode
-    and are kept in `localStorage` (`osd-term-view`: `look`, `fs`, `matrix`, `rainAfter`, `me`, `ctxWin`). **Set up the hook** is
+    and are kept in `localStorage` (`osd-term-view`: `look`, `fs`, `matrix`, `rainAfter`, `rainSpeed`, `me`, `ctxWin`). **Set up the hook** is
     only offered for a picked session that cannot be typed into. The drop-down lists the project's sessions of the last 12 hours: the ones the
     hook below reports, and also those it has not seen (no hook, or started before it), found in Claude Code's own
     records: `~/.claude/sessions/<pid>.json` (session id, folder, idle or busy; the process must still run) for the
