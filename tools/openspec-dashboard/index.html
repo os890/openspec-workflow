@@ -1400,6 +1400,8 @@ body.board-max { overflow: hidden; }
 .ag-modes { display: flex; gap: 4px; flex-wrap: wrap; margin: 0 -6px; }
 .ag-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .ag-target select { flex: 1; min-width: 0; max-width: 100%; }
+.term-pick { font: inherit; font-size: 13px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.msg.me.term-user { opacity: .92; }
 .ag-form textarea { width: 100%; min-height: 76px; resize: vertical; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--ink); padding: 9px 12px; font: inherit; font-size: 13.5px; }
 .ag-note { font-size: 12px; color: var(--muted); min-width: 0; }
 .ag-note:empty { display: none; }
@@ -2894,6 +2896,7 @@ document.addEventListener('input', (e) => {
   if (f.dataset.nt === 'name' || f.dataset.nt === 'goal') { clearTimeout(ntTimer); ntTimer = setTimeout(() => ui.state && renderBoard(ui.state), 250); }
 });
 document.addEventListener('change', (e) => {
+  if (e.target.matches?.('[data-ag-term]')) { ag.term = e.target.value; ag.termWrite = false; ag.stick = true; renderAgentLive(); termPoll(true); return; }
   const f = e.target.closest?.('select[data-nt]');
   if (f) ui.nt[f.dataset.nt] = f.value;
 });
@@ -3133,7 +3136,7 @@ setInterval(() => ui.state && (renderHeader(ui.state), renderFeed(ui.state)), 30
 const AGENT_TOKEN = document.querySelector('meta[name="osd-agent"]')?.content || '';
 let chatMax = false;
 try { chatMax = localStorage.getItem('osd-chat-max') === '1'; } catch {}
-const ag = { tickets: new Map(), max: chatMax, open: false, panel: 'chat', view: null, convo: 'assistant', target: null, mode: 'ask', note: '', force: null, busy: false, expanded: new Map(), drafts: {} };
+const ag = { tickets: new Map(), max: chatMax, open: false, panel: 'chat', view: null, convo: 'assistant', target: null, mode: 'ask', note: '', force: null, busy: false, expanded: new Map(), drafts: {}, term: '', termWrite: false };
 const JOB_LABEL = { starting: 'starting', running: 'working', idle: 'waiting for you', done: 'ended', stopped: 'stopped', failed: 'failed' };
 const JOB_ST = { starting: 'in-progress', running: 'in-progress', idle: 'specified', done: 'complete', stopped: 'proposed', failed: 'missing' };
 const alive = (j) => ['starting', 'running', 'idle'].includes(j?.status);
@@ -3147,6 +3150,45 @@ async function agentPost(action, body) {
   return d;
 }
 const recentExternal = () => (ag.view?.sessions ?? []).filter((x) => !x.ended && !x.dashboardJob && Date.now() - x.t < 15 * 60e3);
+// ---- joining a session that runs in a terminal (or an IDE): pick it, see its transcript live (read-only), write to it
+const termLog = new Map(); // session id -> { entries, next (byte offset), cut, err }
+const termSessions = () => (ag.view?.sessions ?? []).filter((x) => !x.dashboardJob && x.transcript).sort((a, b) => (a.ended - b.ended) || b.t - a.t); // running first, ended ones stay readable
+const termLabel = (x) => `${x.ended ? '' : x.listening || x.listen ? '👂 ' : x.waiting ? '' : '● '}${x.prompt ? `“${x.prompt.replace(/\s+/g, ' ').slice(0, 48)}${x.prompt.length > 48 ? '…' : ''}”` : 'session'} · ${x.ended ? 'ended' : x.waiting ? 'waiting' : 'working'} · ${ago(x.t)} · ${x.sessionId.slice(0, 8)}`;
+function termThreadHtml(sid) {
+  const T = termLog.get(sid);
+  if (!T) return '<div class="ag-empty">Loading the session…</div>';
+  const mine = (ag.view?.messages ?? []).filter((m) => m.session === sid).map((m) => ({ t: m.t, kind: 'mine', m }));
+  const items = [...T.entries.filter((e) => !(e.kind === 'user' && /from the OpenSpec dashboard/.test(e.text))), ...mine].sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
+  const out = T.cut ? ['<div class="ag-note" style="text-align:center">Earlier parts of this session are not shown.</div>'] : [];
+  let steps = [];
+  const flush = () => { if (!steps.length) return; out.push(`<details class="steps"><summary>${steps.length === 1 ? esc(steps[0].text) : `${steps.length} steps · ${esc(steps.at(-1).text)}`}</summary>${steps.map((x) => `<div class="${x.kind}">${esc(x.text)}</div>`).join('')}</details>`); steps = []; };
+  for (const e of items) {
+    if (e.kind === 'tool' || e.kind === 'error') { steps.push(e); continue; }
+    flush();
+    if (e.kind === 'mine') out.push(`<div class="msg me"><span class="ic-chip">from the dashboard</span>${esc(e.m.text)}<span class="meta">${hhmm(e.m.t)} · ${e.m.state === 'queued' ? `queued${e.m.state === 'queued' ? ` · <button class="link" type="button" data-ag-cancel="${esc(e.m.id)}">cancel</button>` : ''}` : 'delivered ' + hhmm(e.m.deliveredAt)}</span></div>`);
+    else if (e.kind === 'user') out.push(`<div class="msg me term-user">${esc(e.text)}<span class="meta">${e.t ? hhmm(e.t) : ''} · in the terminal</span></div>`);
+    else out.push(`<div class="msg them ${e.sub ? 'sub' : ''}"><div class="md">${md(e.text)}</div><span class="meta">${e.t ? hhmm(e.t) : ''}</span></div>`);
+  }
+  flush();
+  return out.join('') || '<div class="ag-empty">Nothing in this session yet.</div>';
+}
+let termPolling = false;
+async function termPoll(force) {
+  if (termPolling || !ag.open || ag.panel !== 'chat' || ag.convo !== 'terminal' || !ag.term) return;
+  termPolling = true;
+  const sid = ag.term;
+  const T = termLog.get(sid) ?? { entries: [], next: 0, cut: false, err: '' };
+  try {
+    const r = await agentPost('transcript', { session: sid, from: T.next });
+    const fresh = !termLog.has(sid) || r.entries.length || T.err;
+    T.entries.push(...r.entries); if (T.entries.length > 4000) T.entries.splice(0, T.entries.length - 4000);
+    T.next = r.next; T.cut ||= r.cut; T.err = '';
+    termLog.set(sid, T);
+    if (fresh || force) renderAgentLive();
+  } catch (e) { T.err = e.message; termLog.set(sid, T); renderAgentLive(); }
+  finally { termPolling = false; }
+}
+setInterval(() => termPoll(false), 2000);
 const groupBySession = (jobs) => {
   const m = new Map();
   for (const j of jobs) { const k = j.sessionId || j.id; if (!m.has(k)) m.set(k, []); m.get(k).push(j); }
@@ -3428,8 +3470,9 @@ document.addEventListener('click', async (e) => {
 // ---- live parts
 function threadHtml(c) {
   if (!c) return '';
+  if (c.terminal && ag.term) return termThreadHtml(ag.term);
   if (c.terminal) {
-    const msgs = (ag.view?.messages ?? []).filter((m) => m.state === 'queued' || String(m.via ?? '').startsWith('hook')).slice().reverse();
+    const msgs = (ag.view?.messages ?? []).filter((m) => !m.session && (m.state === 'queued' || String(m.via ?? '').startsWith('hook'))).slice().reverse();
     return msgs.map((m) => `<div class="msg me">${esc(m.text)}<span class="meta">${hhmm(m.t)} · ${m.state === 'queued' ? 'queued' : 'delivered ' + hhmm(m.deliveredAt)}${m.state === 'queued' ? ` · <button class="link" type="button" data-ag-cancel="${esc(m.id)}">cancel</button>` : ''}</span></div>`).join('')
       || '<div class="ag-empty">Messages you send here reach the Claude Code session running in a terminal (or IDE) at its next step. Its replies appear there.</div>';
   }
@@ -3499,8 +3542,20 @@ function barHtml(c) {
   if (!c) return '';
   if (c.terminal) {
     const ext = recentExternal()[0];
-    if (!ag.view?.hooks) return `<div class="ag-note warn">The hook is not installed, so a session in a terminal cannot receive messages: <code>${esc(ag.view?.hookInstall ?? '')}</code></div>`;
-    return `<div class="ag-note">${ext ? `<span class="dot on"></span>Active · last step ${ago(ext.t)}${ext.tool ? ` (${esc(ext.tool)})` : ''}` : '<span class="dot"></span>No session seen in the last 15 minutes; messages wait until one takes a step.'}</div>`;
+    if (!ag.view?.hooks) return `<div class="ag-note warn">The hook is not installed, so the dashboard cannot see or reach a session in a terminal: <code>${esc(ag.view?.hookInstall ?? '')}</code> (a running session picks it up after a restart)</div>`;
+    const ss = termSessions(), x = ss.find((y) => y.sessionId === ag.term);
+    const pick = `<select class="term-pick" data-ag-term aria-label="Session to join" title="Sessions running in a terminal or an IDE (seen by the hook in the last 12 hours)">
+      <option value="" ${ag.term ? '' : 'selected'}>Any session (the next one that takes a step)</option>
+      ${ss.map((y) => `<option value="${esc(y.sessionId)}" ${y.sessionId === ag.term ? 'selected' : ''}>${esc(termLabel(y))}</option>`).join('')}</select>`;
+    if (!x) return `<div class="ag-row ag-target">${pick}</div><div class="ag-note">${ss.length ? 'Pick a session to join it: you see what it does, live, and can write to it.' : ''} ${ext ? `<span class="dot on"></span>Active · last step ${ago(ext.t)}${ext.tool ? ` (${esc(ext.tool)})` : ''}` : '<span class="dot"></span>No session seen in the last 15 minutes; messages wait until one takes a step.'}</div>`;
+    if (x.ended) return `<div class="ag-row ag-target">${pick}</div><div class="ag-note"><span class="dot"></span>Ended ${ago(x.t)}. Continue it in a terminal: <code>claude --resume ${esc(x.sessionId)}</code></div>`;
+    const state = x.listening ? '<span class="dot on"></span>Listening: waiting for your message' : x.waiting ? '<span class="dot"></span>Waiting for input in the terminal' : '<span class="dot on"></span>Working';
+    return `<div class="ag-row ag-target">${pick}</div>
+      <div class="ag-row"><span class="ag-note">${state} · last step ${ago(x.t)}${x.tool && !x.waiting ? ` (${esc(x.tool)})` : ''}</span>
+        <button class="btn" type="button" data-ag-term-write aria-pressed="${ag.termWrite}" style="margin-left:auto" title="${ag.termWrite ? 'Back to read-only' : 'Write to this session as if you typed it there'}">${ag.termWrite ? 'Read only' : '✎ Write to it'}</button>
+        ${ag.termWrite && ag.view.hooksCurrent ? `<button class="btn" type="button" data-ag-term-listen aria-pressed="${!!x.listen}" title="When it is about to stop, it waits for your message instead (the terminal shows the hook running; Esc there takes the session back)">${x.listen ? '👂 Listening · stop' : '👂 Keep it listening'}</button>` : ''}</div>
+      ${ag.termWrite ? `<div class="ag-note">Your message reaches it at its next step, as if you typed it there. ${x.listen ? 'While it listens, a message also continues it when it is done.' : 'When it waits for input, the message arrives once you type there, or turn on <b>Keep it listening</b>.'}${ag.view.hooksCurrent ? '' : ` To let it listen, install the hook again: <code>${esc(ag.view.hookInstall)}</code>`}</div>` : '<div class="ag-note">Read-only: you see what the session does, live.</div>'}
+      ${termLog.get(x.sessionId)?.err ? `<div class="ag-note warn">✕ ${esc(termLog.get(x.sessionId).err)}</div>` : ''}`;
   }
   if (c.brainstorm) {
     const idea = c.jobs.find((j) => j.idea)?.idea;
@@ -3533,7 +3588,9 @@ function renderAgentLive() {
     const list = conversations();
     const c = list.find((x) => x.id === ag.convo) ?? list[0];
     $('ag-chips').innerHTML = list.map((x) => `<button type="button" class="chip" role="tab" data-ag-convo="${esc(x.id)}" aria-selected="${x.id === c?.id}">${x.live ? '<span class="dot on"></span>' : ''}${x.session ? 'Session · ' : ''}${esc(x.label)}</button>`).join('');
-    $('ag-bar').innerHTML = barHtml(c);
+    morphHtml($('ag-bar'), barHtml(c)); // morph: an open session picker stays open
+    const ro = c?.terminal && ag.term && (!ag.termWrite || termSessions().find((y) => y.sessionId === ag.term)?.ended); // a joined session is read-only until "Write to it"; an ended one stays so
+    for (const el of document.querySelectorAll('#agent .ag-compose, #agent #ag-suggest')) el.hidden = !!ro;
     const th = $('ag-thread');
     const atEnd = th.scrollHeight - th.scrollTop - th.clientHeight < 60;
     th.innerHTML = threadHtml(c);
@@ -3572,7 +3629,7 @@ async function agentSend(force = false, direct = null) {
     if (ag.panel === 'chat') {
       if (!text) return;
       const c = conversations().find((x) => x.id === ag.convo);
-      if (c?.terminal) await agentPost('message', { text, to: 'inbox' });
+      if (c?.terminal) await agentPost('message', { text, to: 'inbox', session: ag.term || undefined });
       else if (c?.session) await agentPost('message', { change: c.last.change, text, job: c.last.id });
       else await agentPost('chat', { text, mode: c?.brainstorm ? 'brainstorm' : 'assistant' });
       if (!direct) { ag.drafts['chat-' + ag.convo] = ''; ta.value = ''; rx.quote = null; showQuoteChip(); }
@@ -3624,6 +3681,8 @@ document.addEventListener('click', (e) => {
     buildAgent();
     return $('ag-text')?.focus();
   }
+  if (t.closest('[data-ag-term-write]')) { ag.termWrite = !ag.termWrite; renderAgentLive(); if (ag.termWrite) $('ag-text')?.focus(); return; }
+  if (t.closest('[data-ag-term-listen]')) { const x = termSessions().find((y) => y.sessionId === ag.term); return agentPost('listen', { session: ag.term, on: !x?.listen }).catch((err) => { ag.note = '✕ ' + err.message; renderAgentLive(); }); }
   const convo = t.closest('[data-ag-convo]');
   if (convo) { if ($('ag-text')) ag.drafts['chat-' + ag.convo] = $('ag-text').value; ag.convo = convo.dataset.agConvo; ag.stick = true; buildAgent(); return $('ag-text')?.focus(); }
   const mode = t.closest('[data-ag-mode]');

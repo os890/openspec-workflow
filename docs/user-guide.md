@@ -201,7 +201,7 @@ node tools/openspec-dashboard/server.mjs --agent examples/todo-app
 **Chat** (in the header and on the full-screen board) is a messenger, independent of any ticket. The
 **Assistant** reads the project but never changes it, knows its status and remembers the conversation; **New chat**
 starts over. Every session started from the dashboard becomes a conversation of its own, and **Terminal session**
-sends messages to a session running elsewhere. Enter sends, Shift+Enter starts a new line.
+lets you join a session running elsewhere (see below). Enter sends, Shift+Enter starts a new line.
 
 ![Chat next to the full-screen board](images/dashboard-chat.png)
 
@@ -236,8 +236,20 @@ Before the first session:
   `.claude/settings.json`: nobody can answer permission prompts in a started session, so they are declined.
 - Run `claude` in the project folder once and accept the trust dialog; until then Claude Code ignores the
   project's permission rules (the panel warns about it).
-- For a session running in a terminal, install the hook once so it receives messages:
-  `node tools/openspec-dashboard/agent-hook.mjs install <project>`.
+- For a session running in a terminal, install the hook once so the dashboard can see it and reach it:
+  `node tools/openspec-dashboard/agent-hook.mjs install <project>` (a running session picks it up after a restart).
+
+**Join a session running in a terminal.** In **Chat › Terminal session**, the drop-down lists the Claude Code
+sessions running in the project (in a terminal or an IDE), with the last prompt you typed there, whether it is
+working or waiting for input, and when it last did something; ended ones stay in the list for a while. Pick one to
+join it: you see what it does, live (your prompts, Claude's replies and its steps). It is read-only until you press
+**✎ Write to it**: then your message reaches the session as if you typed it there, at its next step. A session that
+waits for input in the terminal only takes it once you type there, unless you turn on **👂 Keep it listening**:
+then, when it is done, it waits for your message (the terminal shows the hook running; `Esc` there takes it back),
+and each of your messages continues it. **👂 Listening · stop** lets it finish. **Any session** sends to whichever
+session takes the next step.
+
+![Joined a session running in a terminal: its prompt, steps and answer, and a question sent from the dashboard](images/dashboard-terminal-session.png)
 
 **Voice input**: if Podman has a speech-to-text image (whisper.cpp's `whisper-cli` with a model), the text boxes get
 a microphone. Click it, speak, click **Stop**: the recording is transcribed locally in that container, and the text

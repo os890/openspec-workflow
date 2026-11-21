@@ -39,7 +39,7 @@ import { fileURLToPath } from 'node:url';
 import { execFile, spawn } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import os from 'node:os';
-import { inboxDir, readInbox, queueMessage, recordDelivered, cancelMessage, formatMessages } from './agent-hook.mjs';
+import { inboxDir, readInbox, queueMessage, recordDelivered, cancelMessage, formatMessages, setListening, listenFile, STOP_TIMEOUT } from './agent-hook.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -883,17 +883,22 @@ function createAgent(project) {
   let lastJson = '';
   const hookFile = path.join(HERE, 'agent-hook.mjs');
   const hooksInstalled = () => ['settings.local.json', 'settings.json'].some((f) => readSync(path.join(root, '.claude', f)).includes('agent-hook.mjs'));
+  // installed before joining existed: the Stop hook's timeout is too short to wait for a message while listening
+  const hooksCurrent = () => ['settings.local.json', 'settings.json'].some((f) => {
+    const stop = (jsonOf(readSync(path.join(root, '.claude', f)), {})?.hooks?.Stop ?? []).flatMap((h) => h.hooks ?? []).find((x) => String(x.command ?? '').includes('agent-hook.mjs'));
+    return (stop?.timeout ?? 0) >= STOP_TIMEOUT;
+  });
   const liveSession = () => jobs.find((j) => j.kind === 'session' && j.child && (j.status === 'running' || j.status === 'idle'));
   const rel = (s) => String(s).split(root + path.sep).join('');
 
   function view() {
     const now = Date.now();
     return {
-      permissionMode: AGENT_MODE, model: AGENT_MODEL, claude: CLAUDE, hooks: hooksInstalled(), trusted: trusted(root),
+      permissionMode: AGENT_MODE, model: AGENT_MODEL, claude: CLAUDE, hooks: hooksInstalled(), hooksCurrent: hooksCurrent(), trusted: trusted(root),
       stt: { available: stt.available, image: stt.image, language: STT_LANGUAGE },
       rephrase: rephraseState(),
       hookInstall: `node ${displayPath(hookFile)} install ${displayPath(root)}`,
-      sessions: inbox.sessions.filter((x) => now - x.t < 12 * 3600e3).slice(0, 6),
+      sessions: inbox.sessions.filter((x) => now - x.t < 12 * 3600e3).slice(0, 12).map((x) => ({ ...x, transcript: !!x.transcript, listen: fs.existsSync(listenFile(root, x.sessionId)) && (jsonOf(readSync(listenFile(root, x.sessionId)), {})?.until ?? 0) > now })),
       messages: inbox.messages,
       jobs: jobs.slice(-25).map(({ child, planIds, ...j }) => ({ ...j, log: j.log.slice(-250) })),
     };
@@ -1261,7 +1266,7 @@ function createAgent(project) {
     for (const j of jobs) if (j.kind === 'chat' && j.child && j.status === 'idle' && Date.now() - (j.lastActivity ?? 0) > 20 * 60e3) j.child.stdin.end();
   }, 60e3);
 
-  function message({ change, text, job: jobId, to }) {
+  function message({ change, text, job: jobId, to, session }) {
     text = String(text ?? '').trim();
     if (!text) throw httpError(400, 'The message is empty.');
     const msg = { id: `${Date.now()}-${randomBytes(3).toString('hex')}`, change: change || null, text, t: Date.now() };
@@ -1288,9 +1293,66 @@ function createAgent(project) {
       reloadInbox();
       return { delivered: true, job: live.id };
     }
-    queueMessage(root, msg);
+    const sid = to === 'inbox' && session ? String(session) : null;
+    if (sid && !inbox.sessions.some((x) => x.sessionId === sid)) throw httpError(404, 'No such session.');
+    queueMessage(root, { ...msg, session: sid });
     reloadInbox();
     return { queued: true };
+  }
+  // ---- joining a session running in a terminal: its transcript (read-only) and listening
+  const sessionOf = (sid) => inbox.sessions.find((x) => x.sessionId === String(sid ?? ''));
+  function listen({ session, on }) {
+    const x = sessionOf(session);
+    if (!x || x.dashboardJob) throw httpError(404, 'No such session.');
+    setListening(root, x.sessionId, !!on);
+    reloadInbox();
+    return { listening: !!on };
+  }
+  const CLAUDE_PROJECTS = path.join(os.homedir(), '.claude', 'projects');
+  const cleanUser = (t) => {
+    t = String(t ?? '').replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
+    if (/^<(local-command-stdout|local-command-caveat|local-command-stderr|task-notification|bash-stdout|bash-stderr)>/.test(t)) return ''; // Claude Code's own, not typed
+    const cmd = t.match(/<command-name>([^<]*)<\/command-name>/);
+    if (cmd) return `${cmd[1]} ${t.match(/<command-args>([^<]*)<\/command-args>/)?.[1] ?? ''}`.trim();
+    return t.slice(0, 6000);
+  };
+  function transcriptEntries(line) {
+    let m; try { m = JSON.parse(line); } catch { return []; }
+    if (m.isMeta || !m.message) return [];
+    const t = Date.parse(m.timestamp) || null, sub = !!m.isSidechain;
+    const c = m.message.content;
+    if (m.type === 'user') {
+      if (typeof c === 'string') { const x = cleanUser(c); return x ? [{ t, kind: 'user', text: x, sub }] : []; }
+      return (Array.isArray(c) ? c : []).flatMap((b) => {
+        if (b.type === 'text') { const x = cleanUser(b.text); return x ? [{ t, kind: 'user', text: x, sub }] : []; }
+        if (b.type === 'tool_result' && b.is_error) return [{ t, kind: 'error', text: (Array.isArray(b.content) ? b.content.map((y) => y.text ?? '').join(' ') : String(b.content ?? '')).slice(0, 400), sub }];
+        return [];
+      });
+    }
+    if (m.type === 'assistant') return (Array.isArray(c) ? c : []).flatMap((b) => b.type === 'text' && b.text?.trim() ? [{ t, kind: 'text', text: b.text.slice(0, 20000), sub }] : b.type === 'tool_use' ? [{ t, kind: 'tool', text: toolLine(b), sub }] : []);
+    return [];
+  }
+  // the transcript grows; the page asks for what came after `from` (a byte offset). Only files in Claude Code's own
+  // folder are read; a long one starts with its last 2 MB.
+  function transcript({ session, from }) {
+    const x = sessionOf(session);
+    if (!x?.transcript) throw httpError(404, 'No transcript known for this session (the hook records it with its next step).');
+    let file, base = CLAUDE_PROJECTS;
+    try { file = fs.realpathSync(x.transcript); base = fs.realpathSync(CLAUDE_PROJECTS); } catch { throw httpError(404, 'The transcript is gone.'); }
+    if (!file.startsWith(base + path.sep) || !file.endsWith('.jsonl')) throw httpError(403, 'Not a Claude Code transcript.');
+    const size = fs.statSync(file).size, MAX = 2 << 20;
+    let start = Math.max(0, Number(from) || 0), cut = false;
+    if (start > size) start = 0;
+    if (start === 0 && size > MAX) { start = size - MAX; cut = true; }
+    const len = Math.min(size - start, MAX);
+    const buf = Buffer.alloc(len);
+    const fd = fs.openSync(file, 'r');
+    try { fs.readSync(fd, buf, 0, len, start); } finally { fs.closeSync(fd); }
+    let from0 = 0;
+    if (cut) from0 = buf.indexOf(10) + 1; // start at a whole line
+    const end = buf.lastIndexOf(10) + 1;    // up to the last whole line
+    const entries = end > from0 ? buf.subarray(from0, end).toString('utf8').split('\n').filter(Boolean).flatMap(transcriptEntries) : [];
+    return { entries, next: start + Math.max(end, from0), cut, size };
   }
 
   function control({ job: jobId, action }) {
@@ -1336,7 +1398,7 @@ function createAgent(project) {
   const busy = () => jobs.some((j) => j.child && ['starting', 'running'].includes(j.status) && j.kind !== 'chat');
   sttListeners.add(() => changed(0));
   rpListeners.add(() => changed(0));
-  return { view, ask, chat, start, message, control, cancel, brief, startWatching, stopWatching, busy, onboard };
+  return { view, ask, chat, start, message, control, cancel, brief, startWatching, stopWatching, busy, onboard, listen, transcript };
 }
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => { for (const c of children) { try { c.kill('SIGTERM'); } catch { /* gone */ } } process.exit(0); });
@@ -2395,7 +2457,7 @@ async function readBody(req) {
   for await (const chunk of req) { raw += chunk; if (raw.length > 100_000) throw httpError(413, 'Too large.'); }
   try { return JSON.parse(raw || '{}'); } catch { throw httpError(400, 'Expected JSON.'); }
 }
-const AGENT_ACTIONS = { ask: 'ask', chat: 'chat', start: 'start', message: 'message', control: 'control', cancel: 'cancel' };
+const AGENT_ACTIONS = { ask: 'ask', chat: 'chat', start: 'start', message: 'message', control: 'control', cancel: 'cancel', listen: 'listen', transcript: 'transcript' };
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);

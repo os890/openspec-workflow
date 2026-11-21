@@ -213,6 +213,8 @@ What makes it more than a status page:
   and lets Claude check your local containers for a service to reuse (e.g. a running Postgres) before anything is
   installed on the host. Projects you are done with can be **archived** or **unfollowed**, so they cost nothing
   while they rest.
+- **Join a session running in a terminal**: pick it from a list, follow what it does live (read-only by default),
+  and write to it as if you typed there; it can even wait for your next message when it is done.
 - **Git history** of the project: the commits with a graph of branches, tags and remote branches, and each commit's
   message, files and diff, read-only; **openspec/ only** shows just the commits that changed the specs.
 - **Ten styles**, from Flat and Glass to Clay, Paper, Blackboard or a green-screen Terminal.

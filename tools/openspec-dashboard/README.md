@@ -238,8 +238,11 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
   - **Session · <ticket>**: every session started from the dashboard is a conversation with its steps and replies.
     Your messages go straight to it; you can end it after the current turn or stop it, and a message to an ended
     session continues it. `claude --resume <session-id>` takes it over in a terminal.
-  - **Terminal session**: messages for a session running elsewhere (a terminal, an IDE), delivered at its next
-    step through the hook below; its replies appear there.
+  - **Terminal session**: join a session running elsewhere (a terminal, an IDE): a drop-down lists the sessions the
+    hook below has seen in the last 12 hours (running ones first, with the last prompt typed there, working or
+    waiting, last step); a joined session shows its transcript live, read-only, until **✎ Write to it**; then
+    messages go to that session only, as if typed there. **👂 Keep it listening** makes the session wait for a
+    message when it is done instead of stopping. **Any session** sends to the next session that takes a step.
   - **⤢ Maximize** gives the chat the whole window (`Esc` restores it, a second `Esc` closes it).
   - **Reactions and quotes**: each of Claude's answers has a faint ⋯; hovering the answer (or tapping ⋯) shows a
     row where 👍 ✅ 🙏 🎉 💡 send a short answer at once ("I agree
@@ -331,8 +334,15 @@ node <path-to>/tools/openspec-dashboard/agent-hook.mjs install <project>     # u
 
 Messages wait in an inbox outside the project (`$XDG_STATE_HOME/openspec-dashboard/inbox/`). The hook hands them
 to the session after its next tool call, with your next prompt, or, when the session is about to stop, as the
-reason to continue. It also records a heartbeat, so the panel shows that a session is active and what it did
-last. Queued messages can be cancelled until they are delivered.
+reason to continue. A message for a joined session only goes to that session and reads like what you type there.
+It also records a heartbeat (the session's state, its last tool, the last prompt typed there, its working folder
+and the path of its transcript), so the panel shows that a session is active and can show it live: the server
+reads the transcript (only files below `~/.claude/projects`, a long one from its last 2 MB on) as it grows and
+shows prompts, replies, steps and errors; Claude Code's own messages (`<task-notification>` and the like) are left
+out. **Keep it listening** writes `listen/<session>.json` in the inbox; while it exists, the Stop hook waits (up to
+its timeout of 30 minutes, which `install` sets) for a message for that session and hands it over as the reason to
+continue. A hook installed before this has a 10-second Stop timeout; the panel asks to run `install` again. Queued
+messages can be cancelled until they are delivered.
 
 **Sessions started from the dashboard** run without anyone to answer permission prompts, so prompts are declined.
 Allow what the ticket workflow needs (the quality gate, `openspec`, `git add`/`git commit`) in the project's
