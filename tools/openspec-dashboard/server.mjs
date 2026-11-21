@@ -972,14 +972,21 @@ function typeableOf(pid) {
   }
   return termApps.get(pid) === 'Terminal';
 }
+// modes: check (the tab's visible text), type (the text, followed by Return), enter (Return alone). Tabs by index:
+// in "repeat with t in tabs", "contents of t" would be the loop reference, not the tab's text
 const TYPE_SCRIPT = `on run argv
   set theTty to item 1 of argv
+  set theMode to item 2 of argv
   tell application "Terminal"
     repeat with w in windows
-      repeat with t in tabs of w
-        if tty of t is theTty then
-          if item 2 of argv is "check" then return contents of t
-          do script (item 3 of argv) in t
+      repeat with i from 1 to count of tabs of w
+        if tty of tab i of w is theTty then
+          if theMode is "check" then return contents of tab i of w
+          if theMode is "enter" then
+            do script "" in tab i of w
+          else
+            do script (item 3 of argv) in tab i of w
+          end if
           return "typed"
         end if
       end repeat
@@ -987,6 +994,10 @@ const TYPE_SCRIPT = `on run argv
   end tell
   return "no tab"
 end run`;
+const squash = (t) => t.replace(/\s+/g, ' ').trim();
+// the input box of Claude Code: the lines between the last two horizontal rules
+const inputBox = (contents) => { const ls = contents.replace(/\s+$/, '').split('\n'); const rules = ls.map((l, i) => (/^─{10,}/.test(l.trim()) ? i : -1)).filter((i) => i >= 0); return rules.length >= 2 ? squash(ls.slice(rules.at(-2) + 1, rules.at(-1)).join(' ')).replace(/^❯\s*/, '') : ''; };
+const ASKING = /Do you want to|\b1\. Yes\b|❯ 1\./;
 async function typeInto(pid, text) {
   if (!typeableOf(pid)) throw httpError(409, 'This session does not run in macOS Terminal; the message can only go through the hook.');
   const ps = (await runCmd('ps', ['-o', 'tty=,stat=', '-p', String(pid)])).out.trim().split(/\s+/);
@@ -996,10 +1007,18 @@ async function typeInto(pid, text) {
   const check = await runCmd('osascript', ['-e', TYPE_SCRIPT, tty, 'check', '']);
   if (check.err) throw httpError(502, `Terminal cannot be scripted: ${(check.errOut || check.err.message).trim().slice(0, 200)}`);
   if (check.out.trim() === 'no tab') throw httpError(409, 'Its Terminal tab was not found.');
-  const tail = check.out.replace(/\s+$/, '').split('\n').slice(-30).join('\n');
-  if (/Do you want to|\b1\. Yes\b|❯ 1\./.test(tail)) throw httpError(409, 'The session is asking something in its terminal (e.g. a permission); answer it there first.');
+  const tail = (c) => c.replace(/\s+$/, '').split('\n').slice(-30).join('\n');
+  if (ASKING.test(tail(check.out))) throw httpError(409, 'The session is asking something in its terminal (e.g. a permission); answer it there first.');
   const r = await runCmd('osascript', ['-e', TYPE_SCRIPT, tty, 'type', text]);
   if (r.err || r.out.trim() !== 'typed') throw httpError(502, `Typing failed: ${(r.errOut || r.out || r.err?.message || '').trim().slice(0, 200)}`);
+  // a long text arrives as a paste, where the Return becomes part of it: if it still sits in the input box, send Return
+  for (let i = 0; i < 3; i++) {
+    await new Promise((res) => setTimeout(res, 400));
+    const now = (await runCmd('osascript', ['-e', TYPE_SCRIPT, tty, 'check', ''])).out;
+    if (!inputBox(now).includes(squash(text).slice(0, 40))) return; // submitted
+    if (ASKING.test(tail(now))) return;
+    await runCmd('osascript', ['-e', TYPE_SCRIPT, tty, 'enter', '']);
+  }
 }
 // the followed project a folder belongs to (the deepest one)
 const ownerOf = (d) => { const x = realOf(d); return projects.filter((p) => { const r = realOf(p.root); return x === r || x.startsWith(r + path.sep); }).sort((a, b) => b.root.length - a.root.length)[0] ?? null; };

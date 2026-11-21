@@ -257,7 +257,10 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     elsewhere (a terminal, an IDE). On macOS, a session running in Terminal is written to by typing: the server finds
     its tty (`ps`), checks that Claude Code is the foreground process there and that it is not asking something (a
     permission prompt in the tab's contents), and types the message with AppleScript (`do script … in` the tab with
-    that tty), one line, sent with Return; no hook needed, and it works while the session waits at its prompt. The drop-down lists the project's sessions of the last 12 hours: the ones the
+    that tty), one line, sent with Return; no hook needed, and it works while the session waits at its prompt. A long
+    text arrives in Claude Code as a paste, where the Return becomes part of it; the server then reads the tab and,
+    while the text still sits in the input box (between the last two rules) and nothing is being asked, sends Return
+    on its own. The drop-down lists the project's sessions of the last 12 hours: the ones the
     hook below reports, and also those it has not seen (no hook, or started before it), found in Claude Code's own
     records: `~/.claude/sessions/<pid>.json` (session id, folder, idle or busy; the process must still run) for the
     running ones and the interactive transcripts in `~/.claude/projects/<folder>/` for the ended ones (`claude -p`
