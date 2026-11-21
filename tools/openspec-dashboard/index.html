@@ -223,7 +223,12 @@ svg text { fill: var(--muted); font-family: var(--font-sans); font-size: 10.5px;
 .kc-flag.muted { color: var(--muted); font-weight: 500; }
 
 /* full-screen board */
-.board-toggle { white-space: nowrap; }
+.board-toggle { white-space: nowrap; flex: none; }
+/* the milestone filters take the free space and wrap inside it, so the Full screen button never drops to a new line */
+.board-head .ms-filter { flex: 1 1 0; min-width: 220px; justify-content: flex-end; }
+/* the monospace styles are wider: milestone filters show only id and count, the name is in the tooltip */
+:root[data-style="matrix"] .ms-filter .ms-name,
+:root[data-style="terminal"] .ms-filter .ms-name { display: none; }
 .board-live { font-size: 12.5px; color: var(--muted); background: var(--surface); box-shadow: var(--shadow); border-radius: 999px; padding: 3px 12px; }
 .board-now { margin: -4px 0 14px; font-size: 13.5px; background: color-mix(in srgb, var(--st-progress) 10%, var(--surface)); border-radius: var(--radius-sm); padding: 9px 14px; display: flex; gap: 4px 10px; flex-wrap: wrap; align-items: baseline; }
 .board-now .k { font-weight: 800; color: var(--st-progress); }
@@ -1429,7 +1434,7 @@ function renderBoard(s) {
     if (ui.prevCol.has(c.name) && ui.prevCol.get(c.name) !== col) moved.add(c.name);
     ui.prevCol.set(c.name, col);
   }
-  const msBtn = (id, label, cs) => `<button type="button" data-ms="${esc(id)}" aria-pressed="${ui.ms === id}">${label} <span class="num">${cs.filter(isDone).length}/${cs.length}</span></button>`;
+  const msBtn = (id, label, cs, name = '') => `<button type="button" data-ms="${esc(id)}" aria-pressed="${ui.ms === id}"${name ? ` title="${esc(id)} ${esc(name)}"` : ''}>${label} <span class="num">${cs.filter(isDone).length}/${cs.length}</span></button>`;
   const card = (c) => {
     const t = c.tasks;
     const flags = [];
@@ -1457,7 +1462,7 @@ function renderBoard(s) {
       ${max ? `<span class="board-live">${$('conn').innerHTML}</span>` : ''}
       <span class="muted num" style="font-size:12.5px">${s.changes.filter(isDone).length} of ${s.changes.filter((c) => c.status !== 'parking').length} changes done · ${s.totals.done}/${s.totals.total} tasks</span>
       ${s.changes.filter((c) => c.status === 'parking').map((c) => `<button type="button" class="btn" data-pick="${esc(c.name)}" title="Parking lot: deferred items, never archived">Parking lot · ${c.tasks ? `${c.tasks.total - c.tasks.done} open` : esc(c.name)}</button>`).join('')}
-      <span class="ms-filter">${msBtn('', '<b>All</b>', s.changes.filter((c) => c.status !== 'parking'))}${s.milestones.map((m) => msBtn(m.id, `<b>${esc(m.id)}</b>${esc(m.title)}`, s.changes.filter((c) => c.milestone === m.id))).join('')}</span>
+      <span class="ms-filter">${msBtn('', '<b>All</b>', s.changes.filter((c) => c.status !== 'parking'))}${s.milestones.map((m) => msBtn(m.id, `<b>${esc(m.id)}</b><span class="ms-name">${esc(m.title)}</span>`, s.changes.filter((c) => c.milestone === m.id), m.title)).join('')}</span>
       <button class="btn board-toggle" type="button" data-max aria-pressed="${max}" title="${max ? 'Back to the dashboard (Esc)' : 'Show the board across the whole window'}">${max ? 'Exit full screen ✕' : '⤢ Full screen'}</button>
     </div>
     ${now}
