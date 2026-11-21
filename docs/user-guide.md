@@ -108,6 +108,8 @@ in a terminal and answer it from the sofa. **New key** unpairs every device. The
 buttons in the header, panels on the whole screen. The connection is plain HTTP, so use it in a network you trust;
 the link is a key. Only the computer itself can change these settings.
 
+![Settings › Phone & tablet: on, read only, with the QR code to pair a device](images/dashboard-settings-lan.png)
+
 - **Working on** shows the change in progress and the **current task**, the first unchecked one, with its
   `verify:` criterion. Below it: when the last task was checked off and when a project file was last written, so
   you can tell whether the agent is still busy.
@@ -215,6 +217,8 @@ Below them, **Code** is about the code itself:
   per code line, docs and specs per 100 code lines, TODO and FIXME markers, and the largest files.
 
 Lock files, minified files and build output are left out; config files (JSON, YAML, XML, …) are counted apart.
+
+![The code charts of the demo project: lines over time, languages and quality](images/dashboard-code.png)
 
 To try the charts with some history, generate the demo project (a team wiki built up over four weeks, see
 [examples/demo-history](../examples/demo-history), with code, tests, docs and a coverage report) and start the
@@ -397,6 +401,8 @@ panel of its own, with its own session picker, write mode, input box and look; t
 you have joined, the right one with the most recent other one. **⇄ Swap** swaps the halves, **Close ✕** (or `Esc`)
 goes back to the single panel.
 
+![Two sessions side by side, each with its own input box](images/dashboard-side-by-side.png)
+
 **Send it to the background.** For a longer task, **⤓ Background** (next to **Read only**) closes the panel and
 keeps the session in a list; a button with the number of sessions appears in the header, on every page of the
 dashboard. Its dot is amber while one still works, green when all are done, red when one needs you or has an issue;
@@ -514,6 +520,8 @@ It comes from the same history as the charts (the git log of `openspec/` and wha
 ran), so it costs nothing and is there at once; the project names lead to their pages. With `--agent`, **✨ Write it
 up** has Claude turn it into a short briefing of a few sentences, which stays until the next day (or the next
 period). Only the digest's numbers and change names go to Claude; it reads nothing else and uses no tools.
+
+![The daily digest below the projects, with Claude's briefing](images/dashboard-digest.png)
 
 ### Archive and unfollow
 

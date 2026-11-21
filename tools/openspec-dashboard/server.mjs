@@ -1230,19 +1230,28 @@ function setupHook(dir, remove) {
 // exactly like a prompt typed there, also while the session waits at its prompt (where no hook runs)
 const runCmd = (cmd, args) => new Promise((resolve) => execFile(cmd, args, { timeout: 15000 }, (err, out, errOut) => resolve({ err, out: String(out ?? ''), errOut: String(errOut ?? '') })));
 const termApps = new Map(); // pid -> 'Terminal' | null (the app its terminal belongs to), filled in the background
-function typeableOf(pid) {
-  if (process.platform !== 'darwin') return false;
-  if (!termApps.has(pid)) {
+const termLookups = new Map(); // pid -> the lookup still running
+function termAppOf(pid) {
+  if (termApps.has(pid) && !termLookups.has(pid)) return Promise.resolve(termApps.get(pid));
+  if (!termLookups.has(pid)) {
     termApps.set(pid, null);
-    (async () => {
+    termLookups.set(pid, (async () => {
       for (let p = pid, i = 0; i < 12 && p > 1; i++) {
         const r = (await runCmd('ps', ['-o', 'ppid=,comm=', '-p', String(p)])).out.trim().match(/^(\d+)\s+(.*)$/);
         if (!r) break;
-        if (/(^|\/)Terminal$/.test(r[2]) && i > 0) { termApps.set(pid, 'Terminal'); runningCache.t = 0; return; }
+        if (/(^|\/)Terminal$/.test(r[2]) && i > 0) { termApps.set(pid, 'Terminal'); runningCache.t = 0; break; }
         p = Number(r[1]);
       }
-    })();
+      termLookups.delete(pid);
+      return termApps.get(pid);
+    })());
   }
+  return termLookups.get(pid);
+}
+// known right away for a session seen before; a new one is looked up in the background (the list says so a moment later)
+function typeableOf(pid) {
+  if (process.platform !== 'darwin') return false;
+  if (!termApps.has(pid)) termAppOf(pid);
   return termApps.get(pid) === 'Terminal';
 }
 // modes: check (the tab's visible text), type (the text, followed by Return), enter (Return alone). Tabs by index:
@@ -1287,6 +1296,7 @@ const squash = (t) => t.replace(/\s+/g, ' ').trim();
 const inputBox = (contents) => { const ls = contents.replace(/\s+$/, '').split('\n'); const rules = ls.map((l, i) => (/^─{10,}/.test(l.trim()) ? i : -1)).filter((i) => i >= 0); return rules.length >= 2 ? squash(ls.slice(rules.at(-2) + 1, rules.at(-1)).join(' ')).replace(/^❯\s*/, '') : ''; };
 const ASKING = /Do you want to|\b1\. Yes\b|❯ 1\.|Enter to confirm|Enter to select|Esc to cancel/; // a question or menu of Claude Code (permission, trust, choice)
 async function typeInto(pid, text) {
+  if (process.platform === 'darwin') await termAppOf(pid); // a session that just started: wait for the lookup
   if (!typeableOf(pid)) throw httpError(409, 'This session does not run in macOS Terminal; the message can only go through the hook.');
   const ps = (await runCmd('ps', ['-o', 'tty=,stat=', '-p', String(pid)])).out.trim().split(/\s+/);
   if (!ps[0] || ps[0] === '??') throw httpError(409, 'The session has ended.');
@@ -2903,8 +2913,8 @@ const parkedList = (m) => [...m.entries()].map(([root, x]) => ({ root, ...x, lab
 // From the timeline the charts use (git log of openspec/ and the recorded history), nothing is asked of Claude;
 // "Write it up" (with --agent) has Claude turn it into a few sentences.
 function digestSince(days) {
-  if (days > 1) return Date.now() - days * 86400e3;
   const d = new Date(); d.setHours(0, 0, 0, 0);
+  if (days > 1) { d.setDate(d.getDate() - days); return d.getTime(); } // from midnight: the same window all day (and the briefing with it)
   do d.setDate(d.getDate() - 1); while (d.getDay() === 0 || d.getDay() === 6);
   return d.getTime();
 }

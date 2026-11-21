@@ -4278,7 +4278,8 @@ function ticketItem(j) {
 // after "New session": join the session that started since then, in write mode (or give up after a minute)
 function termAutoJoin() {
   if (!ag.newAt) return;
-  const x = termSessions().find((y) => !y.ended && (y.startedAt ?? 0) >= ag.newAt - 3000);
+  // joined once the server knows it can type into it (a moment after it shows up), so the first message is typed
+  const x = termSessions().find((y) => !y.ended && (y.startedAt ?? 0) >= ag.newAt - 3000 && (y.typeable || Date.now() - ag.newAt > 15e3));
   if (x) { Object.assign(ag, { newAt: 0, note: '', term: x.sessionId, termWrite: true, termDetails: false, stick: true }); termPoll(true); }
   else if (Date.now() - ag.newAt > (ag.note ? 180e3 : 60e3)) { ag.newAt = 0; ag.note = '✕ The new session did not show up within a minute: is the terminal window asking something (e.g. whether you trust the folder)?'; }
 }
