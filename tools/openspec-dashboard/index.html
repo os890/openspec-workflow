@@ -1426,6 +1426,11 @@ body.board-max { overflow: hidden; }
 .agent-panel.term-look #ag-thread details.steps, .agent-panel.term-look #ag-thread details.steps summary { color: #8b949e; }
 .agent-panel.term-look #ag-thread .term-done, .agent-panel.term-look #ag-thread .msg.typing { background: #161b22; color: #8b949e; border-color: #30363d; }
 .agent-panel.term-look #ag-thread .rx { filter: none; }
+/* the wait rain sits behind the conversation; the conversation's own background moves onto the canvas */
+.agent-panel .wait-rain { position: absolute; z-index: 0; pointer-events: none; opacity: .32; }
+.agent-panel.term-look .wait-rain { opacity: 1; background: #0d1117; }
+.agent-panel.rain-on #ag-thread { position: relative; z-index: 1; }
+.agent-panel.term-look.rain-on #ag-thread { background: rgba(13, 17, 23, .62); }
 .cli-step { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: calc(var(--term-fs, 13.5px) - 1px); line-height: 1.45; align-self: stretch; }
 .cli-step.sub { margin-left: 16px; opacity: .8; }
 .cli-call { color: #d6dde6; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -1787,6 +1792,56 @@ function setRain(on) {
   const loop = (t) => { rain.raf = requestAnimationFrame(loop); if (t - last < 55) return; last = t; step(); };
   rain.raf = requestAnimationFrame(loop);
 }
+// Write mode of a joined session: the same rain behind the conversation while an answer takes longer than 30 s,
+// so it is easy to see when it is done (≋ Matrix turns it off). It fades to transparent: works on light and dark.
+let wait = null;
+function setWaitRain(on) {
+  if (!on) {
+    if (wait) { cancelAnimationFrame(wait.raf); wait.canvas.remove(); $('agent')?.classList.remove('rain-on'); wait = null; }
+    return;
+  }
+  const th = $('ag-thread'), panel = $('agent');
+  if (wait || !th || !panel) return;
+  const canvas = document.createElement('canvas');
+  canvas.className = 'wait-rain'; canvas.setAttribute('aria-hidden', 'true');
+  panel.appendChild(canvas); panel.classList.add('rain-on');
+  const ctx = canvas.getContext('2d');
+  const glyphs = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワ0123456789<>{}=+*';
+  const size = 15;
+  let w = 0, h = 0, drops = [];
+  const place = () => {
+    const t = $('ag-thread');
+    if (!t) return;
+    Object.assign(canvas.style, { top: `${t.offsetTop}px`, left: `${t.offsetLeft}px`, width: `${t.clientWidth}px`, height: `${t.clientHeight}px` });
+    if (canvas.width !== t.clientWidth || canvas.height !== t.clientHeight) {
+      w = canvas.width = t.clientWidth; h = canvas.height = t.clientHeight;
+      drops = Array.from({ length: Math.ceil(w / size) }, () => Math.floor(Math.random() * h / size));
+    }
+  };
+  const step = () => {
+    place();
+    ctx.globalCompositeOperation = 'destination-out'; ctx.fillStyle = 'rgba(0, 0, 0, 0.09)'; ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = '#00d65a'; ctx.font = size + 'px monospace';
+    drops.forEach((y, i) => {
+      ctx.fillText(glyphs[Math.floor(Math.random() * glyphs.length)], i * size, y * size);
+      drops[i] = y * size > h && Math.random() > 0.975 ? 0 : y + 1;
+    });
+  };
+  wait = { canvas, raf: 0 };
+  place();
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { for (let k = 0; k < 60; k++) step(); return; }
+  let last = 0;
+  const loop = (t) => { wait.raf = requestAnimationFrame(loop); if (t - last < 60) return; last = t; step(); };
+  wait.raf = requestAnimationFrame(loop);
+}
+const WAIT_RAIN_AFTER = 30e3;
+setInterval(() => {
+  const T = ag.term ? termLog.get(ag.term) : null;
+  const since = T?.waitStart;
+  const on = !!(ag.open && ag.panel === 'chat' && ag.convo === 'terminal' && ag.termWrite && termView.matrix !== false && $('ag-thread')
+    && T && (T.state === 'working' || (T.sentAt && Date.now() - T.sentAt < 20000)) && since && Date.now() - since > WAIT_RAIN_AFTER);
+  setWaitRain(on);
+}, 1000);
 function applyStyle(name) {
   const st = STYLES.includes(name) ? name : 'flat';
   setRain(st === 'matrix');
@@ -3225,10 +3280,11 @@ function termViewApply(on) {
   a.style.setProperty('--term-fs', `${termView.fs}px`);
 }
 document.addEventListener('click', (e) => {
-  const lk = e.target.closest?.('[data-term-look]'), fs = e.target.closest?.('[data-term-fs]');
-  if (!lk && !fs) return;
+  const lk = e.target.closest?.('[data-term-look]'), fs = e.target.closest?.('[data-term-fs]'), mx = e.target.closest?.('[data-term-matrix]');
+  if (!lk && !fs && !mx) return;
   e.stopPropagation();
-  if (lk) termView.look = (termView.look + 1) % 3;
+  if (mx) termView.matrix = termView.matrix === false;
+  else if (lk) termView.look = (termView.look + 1) % 3;
   else termView.fs = fs.dataset.termFs === '0' ? TERM_FS : Math.min(22, Math.max(10.5, termView.fs + Number(fs.dataset.termFs)));
   termViewSave(); renderAgentLive();
 }, true);
@@ -3307,7 +3363,8 @@ async function termPoll(force) {
     T.entries.push(...r.entries); if (T.entries.length > 4000) T.entries.splice(0, T.entries.length - 4000);
     const stateChanged = T.state !== r.state;
     T.next = r.next; T.cut ||= r.cut; T.err = ''; T.state = r.state;
-    if (r.state === 'working') T.sentAt = 0;
+    if (r.state === 'working') { T.waitStart ||= T.sentAt || Date.now(); T.sentAt = 0; }
+    else if (!T.sentAt) T.waitStart = 0; // done (or not started yet): the wait is over
     termLog.set(sid, T);
     if (fresh || force || stateChanged || T.sentAt) renderAgentLive();
   } catch (e) { T.err = e.message; termLog.set(sid, T); renderAgentLive(); }
@@ -3712,7 +3769,7 @@ function barHtml(c) {
       ${ag.view?.hooks ? `<div class="ag-note">The hook is set up, but this session started before it: restart it to write to it (<code>/exit</code>, then <code>claude --resume ${esc(x.sessionId)}</code>).</div>` : setup('To write to it, set up the hook')}`;
     const state = x2.listening ? '<span class="dot on"></span>Listening: waiting for your message' : x2.waiting ? '<span class="dot"></span>Waiting for input in the terminal' : '<span class="dot on"></span>Working';
     // writing: the details fold into one line, so the conversation gets the panel ("Details" brings them back)
-    const look = `<button class="link term-v" type="button" data-term-look aria-pressed="${termView.look > 0}" title="${['Terminal colors for the conversation (your messages stay highlighted)', 'Terminal colors for the whole panel', 'Back to the normal colors'][termView.look]}">${['▣ Terminal', '▣ Terminal: conversation', '▣ Terminal: all'][termView.look]}</button><button class="link term-v" type="button" data-term-fs="-1" title="Smaller text" aria-label="Smaller text">A−</button>${termView.fs !== TERM_FS ? `<button class="link term-v" type="button" data-term-fs="0" title="Default text size (${TERM_FS}px)" aria-label="Default text size">A</button>` : ''}<button class="link term-v" type="button" data-term-fs="1" title="Larger text" aria-label="Larger text">A+</button>`;
+    const look = `<button class="link term-v" type="button" data-term-look aria-pressed="${termView.look > 0}" title="${['Terminal colors for the conversation (your messages stay highlighted)', 'Terminal colors for the whole panel', 'Back to the normal colors'][termView.look]}">${['▣ Terminal', '▣ Terminal: conversation', '▣ Terminal: all'][termView.look]}</button><button class="link term-v" type="button" data-term-matrix aria-pressed="${termView.matrix !== false}" title="${termView.matrix !== false ? 'On: falling code behind the conversation while an answer takes longer than 30 s (click to turn it off)' : 'Off: click to show falling code while an answer takes longer than 30 s'}">≋ Matrix</button><button class="link term-v" type="button" data-term-fs="-1" title="Smaller text" aria-label="Smaller text">A−</button>${termView.fs !== TERM_FS ? `<button class="link term-v" type="button" data-term-fs="0" title="Default text size (${TERM_FS}px)" aria-label="Default text size">A</button>` : ''}<button class="link term-v" type="button" data-term-fs="1" title="Larger text" aria-label="Larger text">A+</button>`;
     if (ag.termWrite && !ag.termDetails) return `<div class="ag-row term-compact"><span class="ag-note">✎ Writing to <b>${esc(xo ? xo.display : x2.prompt ? `“${x2.prompt.replace(/\s+/g, ' ').slice(0, 40)}${x2.prompt.length > 40 ? '…' : ''}”` : x2.sessionId.slice(0, 8))}</b> · ${state}</span>
         <span class="term-vs" style="margin-left:auto">${look}</span><button class="link" type="button" data-ag-term-details aria-expanded="false" title="Show the session picker and the details again">Details ▾</button>
         <button class="btn" type="button" data-ag-term-write aria-pressed="true" title="Back to read-only">Read only</button></div>${termLog.get(x2.sessionId)?.err ? `<div class="ag-note warn">✕ ${esc(termLog.get(x2.sessionId).err)}</div>` : ''}`;
@@ -3806,7 +3863,7 @@ async function agentSend(force = false, direct = null) {
       if (c?.terminal) {
         const xo = (ag.view?.elsewhere ?? []).find((y) => y.sessionId === ag.term && !y.projectId);
         const tx = termSessions().find((y) => y.sessionId === ag.term) ?? xo;
-        if (tx?.typeable) { await agentPost('type', { session: ag.term, text }); typedHere.add(text.replace(/\s*\n\s*/g, ' ').trim()); const L = termLog.get(ag.term); if (L) L.sentAt = Date.now(); ag.stick = true; termPoll(true); }
+        if (tx?.typeable) { await agentPost('type', { session: ag.term, text }); typedHere.add(text.replace(/\s*\n\s*/g, ' ').trim()); const L = termLog.get(ag.term); if (L) { L.sentAt = Date.now(); L.waitStart = L.sentAt; } ag.stick = true; termPoll(true); }
         else await agentPost('message', { text, to: 'inbox', session: ag.term || undefined, ...(xo ? { folder: xo.folder } : {}) });
       }
       else if (c?.session) await agentPost('message', { change: c.last.change, text, job: c.last.id });

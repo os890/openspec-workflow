@@ -267,7 +267,9 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     quotes of the chat; a quote typed into a terminal is one line, so the dashboard reads `[Replying to …] text`
     with a space as well as with a line break. **▣ Terminal** cycles terminal colors for the conversation (with the
     steps CLI-style: `⏺ Tool(argument)` and `⎿` the first four lines of its result, taken from the transcript's
-    `tool_result`), for the whole panel, and back; **A− / A / A+** set the text size. Both only apply in write mode
+    `tool_result`), for the whole panel, and back; **A− / A / A+** set the text size; **≋ Matrix** (on by default)
+    shows a rain canvas behind the conversation while the session has been working for more than 30 s since your
+    message, and removes it when it is done (a still image with reduced motion). Both only apply in write mode
     and are kept in `localStorage` (`osd-term-view`). The drop-down lists the project's sessions of the last 12 hours: the ones the
     hook below reports, and also those it has not seen (no hook, or started before it), found in Claude Code's own
     records: `~/.claude/sessions/<pid>.json` (session id, folder, idle or busy; the process must still run) for the

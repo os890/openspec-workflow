@@ -256,7 +256,9 @@ and the thread shows them as reactions and quotes. Also only while writing: **�
 terminal colors (dark, monospaced; your own messages keep a bright blue background, so they stand out), with the
 steps as the CLI shows them (`⏺ Bash(git log --oneline -3)`, then `⎿` and the first lines of the result); a second
 click colors the whole panel, including the input area, and a third brings the normal colors back. **A−** / **A+**
-change the text size, **A** resets it. Both are remembered in the browser. The CLI's own rendering of some tools
+change the text size, **A** resets it. When an answer takes longer than 30 seconds, falling green code (as in the
+Matrix style) runs behind the conversation until the session is done, so you see at a glance when it has
+finished; **≋ Matrix** turns it off (and on again). All of these are remembered in the browser. The CLI's own rendering of some tools
 (e.g. the colored diff of an edit) and live output while a command runs are not shown.
 
 Following a session works without any setup: the dashboard finds the running sessions in Claude Code's own records
