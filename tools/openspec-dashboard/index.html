@@ -1551,7 +1551,7 @@ body.board-max { overflow: hidden; }
 .ag-tools { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .ag-tools [data-ag-send] { margin-left: auto; }
 .qk { display: inline-flex; align-items: center; gap: 4px; }
-.qk-bar { display: inline-flex; gap: 3px; }
+.qk-bar { display: inline-flex; gap: 3px; align-items: center; flex-wrap: wrap; }
 .qk-bar[hidden] { display: none; }
 .qk-more { opacity: .9; font-size: 17px; }
 .ag-voice { display: inline-flex; align-items: center; gap: 4px; flex: none; }
@@ -3530,15 +3530,27 @@ const REQUESTS = [['🔁', 'Please say this again in other words, simpler and cl
   ['🔄', 'Please try this again: run it once more, I changed something in the meantime. If it fails again, tell me what is different this time.', 'Try again']];
 const rx = { msgs: new Map(), quote: null, openId: null };
 // quick messages under the input box (⋯): a whole message with one click, about no answer in particular
-const QUICK = [['👀', 'What is the current status of your work? Briefly: what is done, what you are doing right now, and what comes next.', 'Status']];
+// in groups: find out where it stands · steer the work · quality (null marks a gap between groups)
+const QUICK = [
+  ['👀', 'What is the current status of your work? Briefly: what is done, what you are doing right now, and what comes next.', 'Status'],
+  ['❓', 'Is anything blocking you, or do you need a decision from me? If not, just say so and continue.', 'Blockers'],
+  ['🔍', 'Summarize the changes so far: which files and why, in a few bullet points. Do not commit.', 'Changes so far'],
+  ['📍', 'Which task of the current change are you on, and how many are left?', 'Ticket progress'],
+  null,
+  ['⏸', 'Finish the current step, then stop and wait for my next message.', 'Pause'],
+  ['🎯', 'Stay within the current ticket; put anything else in the parking lot instead of doing it now.', 'Stay on track'],
+  ['🧹', 'Wrap up: finish the current task, update tasks.md, and summarize what is done and what is left.', 'Wrap up'],
+  null,
+  ['🧪', 'Run the quality gate now and tell me the result; fix nothing yet.', 'Quality gate'],
+];
 const quick = { open: false };
-const quickHtml = () => `<span class="qk"><button type="button" class="rx-more qk-more" data-qk-more aria-expanded="${quick.open}" title="Quick messages" aria-label="Quick messages">⋯</button><span class="qk-bar" ${quick.open ? '' : 'hidden'}>${QUICK.map(([e, say, label]) => `<button type="button" class="rx" data-qk="${e}" title="${esc(`${label}: sends "${e} ${say}"`)}" aria-label="${esc(label)}">${e}</button>`).join('')}</span></span>`;
+const quickHtml = () => `<span class="qk"><button type="button" class="rx-more qk-more" data-qk-more aria-expanded="${quick.open}" title="Quick messages" aria-label="Quick messages">⋯</button><span class="qk-bar" ${quick.open ? '' : 'hidden'}>${QUICK.map((q) => (q ? `<button type="button" class="rx" data-qk="${q[0]}" title="${esc(`${q[2]}: sends "${q[0]} ${q[1]}"`)}" aria-label="${esc(q[2])}">${q[0]}</button>` : '<span class="rx-sep"></span>')).join('')}</span></span>`;
 document.addEventListener('click', (e) => {
   const more = e.target.closest?.('[data-qk-more]'), qk = e.target.closest?.('[data-qk]');
   if (!more && !qk) return;
   e.stopPropagation();
   if (more) { quick.open = !quick.open; for (const el of document.querySelectorAll('.qk')) el.outerHTML = quickHtml(); return; }
-  const q = QUICK.find(([x]) => x === qk.dataset.qk);
+  const q = QUICK.find((y) => y?.[0] === qk.dataset.qk);
   if (q) agentSend(false, `${q[0]} ${q[1]}`);
 }, true);
 const plainOf = (md) => String(md).replace(/```[\s\S]*?```/g, ' ').replace(/`([^`]*)`/g, '$1').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[#>*_|]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -3558,7 +3570,7 @@ function reactionsIn(jobs) {
   }
   return m;
 }
-const quickOf = (text) => QUICK.find(([e, say]) => String(text).trim() === `${e} ${say}`);
+const quickOf = (text) => QUICK.find((q) => q && String(text).trim() === `${q[0]} ${q[1]}`);
 function userMsgHtml(l) {
   const qk = quickOf(l.text); // a quick message (⋯ under the input box): short, the whole text as its tooltip
   if (qk) return `<div class="msg me rx-sent" title="${esc(l.text)}"><span>${qk[0]} ${esc(qk[2])}</span><span class="meta">${hhmm(l.t)}</span></div>`;

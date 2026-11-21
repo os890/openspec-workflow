@@ -302,8 +302,9 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     to quote just that part). Claude sees no timestamps of the dashboard, so the reference it gets is the answer's
     first sentence, or the selected part, in a fixed form (`[Reaction 👍 to your message: "…"]`,
     `[Request 📝 about your message: "…"]`, `[Replying to your message: "…"]`), which it finds in its own conversation; the whole answer is not sent again. **⋯ under the input box** holds
-    quick messages about no answer in particular (👀 asks for the current status), sent as they are and shown short
-    in the thread. A message typed into a working terminal session is absorbed mid-turn; Claude Code keeps it as a
+    quick messages about no answer in particular, in groups (👀 status, ❓ blockers, 🔍 changes so far, 📍 ticket
+    progress · ⏸ pause after this step, 🎯 stay on the ticket, 🧹 wrap up · 🧪 run the quality gate), sent as they
+    are and shown short in the thread. A message typed into a working terminal session is absorbed mid-turn; Claude Code keeps it as a
     `queued_command` attachment in the transcript, which the thread shows like a prompt.
     Reactions show as small badges on the answer they belong to.
 - **A question box under each tab** of a change (Tasks, Proposal, Design, Spec deltas, Validation): the question

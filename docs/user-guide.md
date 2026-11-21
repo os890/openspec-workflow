@@ -220,10 +220,18 @@ tap ⋯) and a row of buttons appears:
   and 🔄 has it tried again (e.g. a failed run, after you changed something);
 - ↩ quotes the answer in your next message; select a part of it first to quote just that part.
 
-**⋯ under the input box** opens quick messages that are not about one answer but sent with one click as they are:
-👀 asks for the current status of the work (what is done, what is being done right now, what comes next). It is
-handy while a session works: the message reaches it mid-turn, and it answers before it continues. The thread shows
-it as **👀 Status**.
+**⋯ under the input box** opens quick messages that are not about one answer but sent with one click as they are.
+They are handy while a session works: the message reaches it mid-turn, and it answers before it continues. The
+thread shows each one short, e.g. **👀 Status**.
+
+- find out where it stands: 👀 the current status (done, now, next), ❓ whether anything blocks it or it needs a
+  decision, 🔍 a summary of the changes so far (files and why, nothing committed), 📍 which task of the current
+  change it is on and how many are left;
+- steer the work: ⏸ finish the current step, then stop and wait, 🎯 stay within the current ticket and put anything
+  else in the parking lot, 🧹 wrap up (finish the task, update tasks.md, summarize);
+- quality: 🧪 run the quality gate now and report the result, without fixing anything yet.
+
+![Quick messages under the input box](images/dashboard-quick-messages.png)
 
 Claude gets the answer's first sentence (or the part you selected) as the reference, so it knows which answer you
 mean even when the conversation has moved on, without the whole answer being sent again. Reactions show as small
