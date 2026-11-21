@@ -542,6 +542,116 @@ function parseJsonOutput(s) {
 }
 
 // ---------------------------------------------------------------- one followed project
+// ---------------------------------------------------------------- code statistics (Charts › Code)
+// Non-empty lines per language and per kind (code, tests, docs, specs under openspec/, config), counted by git grep
+// in the working tree (tracked and untracked, not ignored) and at up to 12 earlier commits (cached per commit); TODO
+// and FIXME markers; the largest files; the test coverage from a report the build left (Istanbul/Jest/Vitest
+// summary, lcov, JaCoCo, Cobertura or coverage.py XML). Lock files, minified and generated files are left out.
+const LANGS = {
+  js: 'JavaScript', mjs: 'JavaScript', cjs: 'JavaScript', jsx: 'JavaScript', ts: 'TypeScript', tsx: 'TypeScript', mts: 'TypeScript', cts: 'TypeScript',
+  java: 'Java', kt: 'Kotlin', kts: 'Kotlin', scala: 'Scala', groovy: 'Groovy', gradle: 'Groovy', py: 'Python', go: 'Go', rs: 'Rust',
+  c: 'C', h: 'C', cc: 'C++', cpp: 'C++', cxx: 'C++', hpp: 'C++', cs: 'C#', rb: 'Ruby', php: 'PHP', swift: 'Swift', m: 'Objective-C',
+  dart: 'Dart', lua: 'Lua', r: 'R', sh: 'Shell', bash: 'Shell', zsh: 'Shell', ps1: 'PowerShell', sql: 'SQL', html: 'HTML', htm: 'HTML',
+  vue: 'Vue', svelte: 'Svelte', css: 'CSS', scss: 'CSS', sass: 'CSS', less: 'CSS', ex: 'Elixir', exs: 'Elixir', erl: 'Erlang',
+  hs: 'Haskell', clj: 'Clojure', fs: 'F#', zig: 'Zig', nim: 'Nim', jl: 'Julia', pl: 'Perl', tf: 'Terraform',
+  md: 'Markdown', mdx: 'Markdown', adoc: 'AsciiDoc', rst: 'reStructuredText', txt: 'Text',
+  json: 'JSON', yaml: 'YAML', yml: 'YAML', toml: 'TOML', xml: 'XML', properties: 'Properties', ini: 'INI',
+};
+const DOC_LANGS = new Set(['Markdown', 'AsciiDoc', 'reStructuredText', 'Text']);
+const CONF_LANGS = new Set(['JSON', 'YAML', 'TOML', 'XML', 'Properties', 'INI']);
+const SKIP_FILE = /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|Cargo\.lock|go\.sum|poetry\.lock|Gemfile\.lock|composer\.lock|.*\.min\.(js|css)|.*\.map|.*\.snap)$|(^|\/)(node_modules|vendor|dist|build|target|coverage|\.next|out)\//;
+const TEST_FILE = /(^|\/)(tests?|__tests__|specs?|e2e|src\/test)\/|\.(test|spec|e2e)\.[^./]+$|_test\.(go|py|rb|exs?)$|(^|\/)test_[^/]*\.py$|Tests?\.(java|kt|cs|swift|scala)$|IT\.java$/;
+function langOf(f) {
+  const base = f.split('/').pop();
+  if (base === 'Dockerfile' || /^Dockerfile\./.test(base) || /^Containerfile/.test(base)) return 'Dockerfile';
+  if (base === 'Makefile') return 'Makefile';
+  return LANGS[(base.match(/\.([^.]+)$/)?.[1] ?? '').toLowerCase()] ?? null;
+}
+function kindOf(f, lang) {
+  if (f.startsWith('openspec/')) return 'specs';
+  if (DOC_LANGS.has(lang)) return 'docs';
+  if (CONF_LANGS.has(lang)) return 'config';
+  return TEST_FILE.test(f) ? 'tests' : 'code';
+}
+// `git grep -c` output (path:count, or rev:path:count) into totals per language and kind
+function tallyLines(out, rev) {
+  const langs = {}, kinds = { code: 0, tests: 0, docs: 0, specs: 0, config: 0 }, files = [];
+  for (const l of out.split('\n')) {
+    const m = l.match(/^(.*):(\d+)$/);
+    if (!m) continue;
+    const f = rev ? m[1].slice(rev.length + 1) : m[1], n = Number(m[2]);
+    if (SKIP_FILE.test(f)) continue;
+    const lang = langOf(f);
+    if (!lang) continue;
+    const k = kindOf(f, lang);
+    kinds[k] += n;
+    if (k === 'code' || k === 'tests') { langs[lang] = (langs[lang] ?? 0) + n; files.push({ f, n, k }); }
+  }
+  return { langs, kinds, files };
+}
+const NONBLANK = ['grep', '-c', '-I', '-e', '[^[:space:]]'];
+const codeAtCache = new Map(); // commit -> tally (a commit never changes)
+async function coverageOf(root) {
+  const found = [];
+  let seen = 0;
+  const NAMES = new Set(['coverage-summary.json', 'lcov.info', 'jacoco.xml', 'jacocoTestReport.xml', 'coverage.xml', 'cobertura-coverage.xml', 'cobertura.xml']);
+  async function go(d, depth) {
+    let es; try { es = await fsp.readdir(d, { withFileTypes: true }); } catch { return; }
+    if ((seen += es.length) > 30000) return; // a huge tree: what was found so far
+    for (const e of es) {
+      if (e.isDirectory() && depth < 6 && !['node_modules', '.git', 'vendor', '.venv', 'src'].includes(e.name)) await go(path.join(d, e.name), depth + 1);
+      else if (e.isFile() && NAMES.has(e.name)) found.push(path.join(d, e.name));
+    }
+  }
+  await go(root, 0);
+  let best = null;
+  for (const f of found) {
+    const st = await statOf(f); if (!st || st.size > 64 << 20) continue;
+    const text = await readText(f); if (!text) continue;
+    let covered = null, total = null;
+    const name = path.basename(f);
+    if (name === 'coverage-summary.json') { const t = jsonOf(text, null)?.total?.lines; if (t) { covered = t.covered; total = t.total; } }
+    else if (name === 'lcov.info') { covered = 0; total = 0; for (const m of text.matchAll(/^LH:(\d+)$/gm)) covered += Number(m[1]); for (const m of text.matchAll(/^LF:(\d+)$/gm)) total += Number(m[1]); }
+    else if (/jacoco/i.test(name)) { const all = [...text.matchAll(/<counter type="LINE" missed="(\d+)" covered="(\d+)"\/>/g)]; const m = all.at(-1); if (m) { covered = Number(m[2]); total = Number(m[1]) + Number(m[2]); } }
+    else { const head = text.slice(0, 2000); const lv = head.match(/lines-valid="(\d+)"/), lc = head.match(/lines-covered="(\d+)"/), lr = head.match(/<coverage[^>]*line-rate="([\d.]+)"/);
+      if (lv && lc) { covered = Number(lc[1]); total = Number(lv[1]); } else if (lr) { covered = Number(lr[1]) * 1000; total = 1000; } }
+    if (!total) continue;
+    const x = { pct: Math.round((covered / total) * 1000) / 10, covered, total, file: relTo(root, f), t: st.mtimeMs };
+    if (!best || x.t > best.t) best = x; // the newest report
+  }
+  return best;
+}
+async function codeStats(root, project) {
+  const inGit = (await gitRead(root, ['rev-parse', '--is-inside-work-tree'], 100))?.out.trim() === 'true';
+  if (!inGit) return { git: false };
+  const [now, todo, coverage] = await Promise.all([
+    gitRead(root, [...NONBLANK, '--untracked', '--', '.'], 16 << 20),
+    gitRead(root, ['grep', '-c', '-I', '-w', '--untracked', '-e', 'TODO', '-e', 'FIXME', '-e', 'XXX', '-e', 'HACK', '--', '.'], 4 << 20),
+    coverageOf(root),
+  ]);
+  const cur = tallyLines(now?.out ?? '');
+  let todos = 0;
+  for (const l of (todo?.out ?? '').split('\n')) { const m = l.match(/^(.*):(\d+)$/); if (m && !SKIP_FILE.test(m[1]) && !m[1].startsWith('openspec/') && ['code', 'tests'].includes(kindOf(m[1], langOf(m[1]) ?? ''))) todos += Number(m[2]); }
+  // earlier: up to 12 commits of the first-parent history, evenly spread over its time
+  const log = ((await gitRead(root, ['log', '--first-parent', '--format=%H %ct', 'HEAD', '--'], 4 << 20))?.out ?? '').trim().split('\n').filter(Boolean).map((l) => { const [h, t] = l.split(' '); return { h, t: Number(t) * 1000 }; }).reverse();
+  const picks = [];
+  if (log.length) {
+    const t0 = log[0].t, t1 = log.at(-1).t, N = Math.min(12, log.length);
+    for (let i = 0; i < N; i++) { const at = t0 + ((t1 - t0) * i) / Math.max(1, N - 1); const c = [...log].reverse().find((x) => x.t <= at + 1) ?? log[0]; if (!picks.includes(c)) picks.push(c); }
+  }
+  const history = [];
+  for (const c of picks) {
+    if (!codeAtCache.has(c.h)) { const r = await gitRead(root, [...NONBLANK, c.h, '--', '.'], 16 << 20); codeAtCache.set(c.h, r ? tallyLines(r.out, c.h) : null); if (codeAtCache.size > 400) codeAtCache.delete(codeAtCache.keys().next().value); }
+    const x = codeAtCache.get(c.h);
+    if (x) history.push({ t: c.t, h: c.h.slice(0, 8), kinds: x.kinds, langs: x.langs });
+  }
+  if (coverage) project.recordCoverage(coverage);
+  return {
+    git: true, at: Date.now(), langs: cur.langs, kinds: cur.kinds, todos,
+    largest: cur.files.filter((x) => x.k === 'code').sort((a, b) => b.n - a.n).slice(0, 6).map(({ f, n }) => ({ file: f, lines: n })),
+    history, coverage, coverageHistory: project.coverageHistory(),
+  };
+}
 // a tree of a commit into a folder: git archive | tar -x (both without a shell)
 function extractTree(root, treeish, dest) {
   return new Promise((resolve, reject) => {
@@ -916,7 +1026,22 @@ function createProject(root, id, historyFile, onChange) {
   }
 
   const atDir = (h) => { const d = atDirs.get(String(h ?? '')); return d && fs.existsSync(path.join(d, 'ok')) ? d : null; };
-  return Object.assign(project, { stop, timeline, stateAt, atDir, gitLog: (q) => gitLog(root, q), gitShow: (h) => gitShow(root, h), publish, schedule, cliDebounced, cliRetry, refreshCli, scanWorkspace, summary, start, openspecDir: OPENSPEC });
+  // the coverage each time the report changed (recorded while the dashboard runs; reports are rarely committed)
+  function recordCoverage(c) {
+    const cv = (history.coverage ??= []), last = cv.at(-1);
+    if (last && last.t === c.t) return;
+    cv.push({ t: c.t, pct: c.pct }); if (cv.length > 500) cv.splice(0, cv.length - 500);
+    saveHistory();
+  }
+  let codeCache = null;
+  async function code() {
+    const sig = `${(await gitRead(root, ['rev-parse', 'HEAD'], 100))?.out.trim()}:${workspace.scannedAt}:${workspace.recent?.[0]?.mtime ?? 0}`;
+    if (codeCache?.sig === sig && Date.now() - codeCache.at < 10 * 60e3) return codeCache.v;
+    const v = await codeStats(root, project);
+    codeCache = { sig, at: Date.now(), v };
+    return v;
+  }
+  return Object.assign(project, { stop, timeline, stateAt, atDir, code, recordCoverage, coverageHistory: () => (history.coverage ?? []).slice(-200), gitLog: (q) => gitLog(root, q), gitShow: (h) => gitShow(root, h), publish, schedule, cliDebounced, cliRetry, refreshCli, scanWorkspace, summary, start, openspecDir: OPENSPEC });
 }
 
 // ---------------------------------------------------------------- agent (opt-in with --agent)
@@ -3184,7 +3309,7 @@ const isLoopback = (a) => /^(127\.|::1$|::ffff:127\.)/.test(String(a ?? ''));
 const cookieOf = (req, name) => (String(req.headers.cookie ?? '').split(/;\s*/).find((c) => c.startsWith(name + '=')) ?? '').slice(name.length + 1);
 const sameSecret = (a, b) => { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && x.length > 0 && timingSafeEqual(x, y); };
 // what a read-only device may ask for (GET only)
-const LAN_READ = new Set(['/', '/index.html', '/events', '/api/projects', '/api/state', '/api/state-at', '/api/file', '/api/timeline', '/api/git/log', '/api/git/commit', '/api/digest', '/manifest.webmanifest', '/logo.svg', '/icon-192.png', '/icon-512.png']);
+const LAN_READ = new Set(['/', '/index.html', '/events', '/api/projects', '/api/state', '/api/state-at', '/api/file', '/api/timeline', '/api/code', '/api/git/log', '/api/git/commit', '/api/digest', '/manifest.webmanifest', '/logo.svg', '/icon-192.png', '/icon-512.png']);
 const lanPage = (title, text) => `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><body style="font:16px/1.5 system-ui,sans-serif;max-width:30em;margin:12vh auto;padding:0 20px;color:#222"><img src="/logo.svg" width="48" height="48" alt=""><h1 style="font-size:22px">${title}</h1><p>${text}</p></body>`;
 // a request from another device: paired? read-only? (null: answered here)
 function lanGate(req, res, url) {
@@ -3329,6 +3454,7 @@ const handle = async (req, res) => {
       if (!AGENT || req.headers['x-osd-token'] !== TOKEN) { res.writeHead(403); return res.end('forbidden'); }
       return json(res, await sessionsStatus(String(url.searchParams.get('ids') ?? '').split(',').filter(Boolean)));
     }
+    if (url.pathname === '/api/code') return json(res, await projectFor(url).code());
     if (url.pathname === '/api/timeline') return json(res, await projectFor(url).timeline());
     if (url.pathname === '/api/git/log') return json(res, await projectFor(url).gitLog({ skip: url.searchParams.get('skip'), only: url.searchParams.get('only') === '1' }));
     if (url.pathname === '/api/git/commit') {

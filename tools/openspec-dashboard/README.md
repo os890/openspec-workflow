@@ -253,6 +253,18 @@ whole history, but only as finely as the commits: a ticket committed once shows 
 dashboard's own history**, recorded within seconds while it runs. Per change and status (and per task) the earlier
 time wins. Hover a chart for the values; **Data** under a chart shows them as a table.
 
+**Code** (below, from `GET /api/code`): non-empty lines counted by `git grep -c -I -e '[^[:space:]]'` in the working
+tree (`--untracked`: tracked and new files, not ignored ones) and at up to 12 commits of the first-parent history,
+evenly spread over its time (cached per commit). Files are sorted by extension into languages and by path into
+code, tests (`test/`, `tests/`, `__tests__/`, `src/test/`, `*.test.*`, `*.spec.*`, `*_test.go`, `*Test.java`, …),
+docs (Markdown, AsciiDoc, reStructuredText, text), specs (`openspec/`) and config (JSON, YAML, TOML, XML, …); lock
+files, `*.min.*`, source maps, snapshots and `node_modules/`, `vendor/`, `dist/`, `build/`, `target/`, `coverage/`
+are left out. TODO, FIXME, XXX and HACK are counted as words in code and tests. The coverage comes from the newest
+report found up to six levels deep: `coverage-summary.json` (Istanbul: `total.lines`), `lcov.info` (sum of `LH` and
+`LF`), `jacoco.xml`/`jacocoTestReport.xml` (the report's last `LINE` counter), `coverage.xml`/`cobertura*.xml`
+(`lines-covered`/`lines-valid`, else `line-rate`); each new report's value is recorded in the project's history for
+the trend. The result is cached until HEAD or the working tree changes (at most 10 minutes).
+
 ## Git history
 
 **⎇** in the header (on a project's page) opens a read-only history of the project's repository, like a file

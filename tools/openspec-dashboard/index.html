@@ -310,6 +310,21 @@ span.ch-warn { color: var(--st-progress); }
 .ch-legend i.dash { height: 0; width: 16px; border-top: 2px dashed var(--cf-complete); border-radius: 0; }
 .ch-legend i.tick { width: 2px; height: 14px; background: var(--ink); border-radius: 0; }
 .ch-scroll { overflow-x: auto; }
+.ch-section { grid-column: 1 / -1; margin: 10px 0 -6px; font-size: 17px; font-weight: 800; letter-spacing: -.01em; }
+.cl-bars { display: flex; flex-direction: column; gap: 7px; }
+.cl-row { display: grid; grid-template-columns: minmax(70px, 120px) 1fr 44px 44px; gap: 10px; align-items: center; font-size: 13px; }
+.cl-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.cl-track { height: 10px; border-radius: 5px; background: color-mix(in srgb, var(--ink) 8%, transparent); overflow: hidden; }
+.cl-track i { display: block; height: 100%; border-radius: 5px; background: var(--cf-specified); }
+.cl-val { text-align: right; font-weight: 600; } .cl-n { text-align: right; color: var(--muted); font-size: 12px; }
+.cq-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.cq-tile { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cq-l { font-size: 12px; color: var(--muted); } .cq-v { font-size: 24px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
+.cq-s { font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+.cq-spark { margin-top: 4px; }
+.cq-largest { margin-top: 12px; font-size: 12.5px; }
+.cq-f { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); padding: 2px 0; border-bottom: 1px dashed var(--line); }
+.cq-f span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .ch-edge { stroke: var(--faint); stroke-width: 1.2; }
 .ch-edge.crit { stroke: var(--ink); stroke-width: 2.2; }
 .ch-edge.settled { opacity: .35; }
@@ -2602,7 +2617,17 @@ const RANK = { proposed: 0, specified: 1, 'in-progress': 2, complete: 3, archive
 const tl = { data: null, at: 0, rev: -1, loading: false, project: null, error: null };
 const chartGeo = new Map();
 
+// the code statistics (/api/code): asked for with the charts, again after a minute
+const cs = { data: null, at: 0, loading: false, project: null, error: null };
+async function loadCode() {
+  if (cs.loading || (cs.data && cs.project === PROJECT && Date.now() - cs.at < 60000)) return;
+  cs.loading = true;
+  try { const r = await fetch(withProject('/api/code')); if (!r.ok) throw new Error(`HTTP ${r.status}`); cs.data = await r.json(); cs.error = null; } catch (e) { cs.error = e.message; }
+  cs.at = Date.now(); cs.project = PROJECT; cs.loading = false;
+  if (ui.boardView === 'charts' && ui.state) drawCharts(ui.state);
+}
 async function loadTimeline() {
+  loadCode();
   if (tl.loading) return;
   const s = ui.state;
   if (tl.data && tl.project === PROJECT && tl.rev === s?.rev && Date.now() - tl.at < 60000) return;
@@ -2677,6 +2702,10 @@ function chartsHtml(s, shown) {
     ${card('gantt', 'Cycle time per change', 'Each change from specified to archived, split into its phases.', true)}
     ${card('deps', 'Dependencies and critical path', 'The roadmap as a graph. The highlighted chain is the longest one still open.', true)}
     ${card('heat', 'When tasks get checked off', 'Check-offs per hour of the day.', true)}
+    <h3 class="ch-section">Code</h3>
+    ${card('codeLines', 'Lines over time', 'Non-empty lines of code, tests, docs and specs, at up to 12 commits and now (the working tree).', true)}
+    ${card('codeLangs', 'Languages', 'Code and tests by language, non-empty lines.', false)}
+    ${card('codeQuality', 'Quality', 'Test coverage from the last report the build wrote, and a few ratios.', false)}
   </div>`;
 }
 
@@ -2688,7 +2717,7 @@ function drawCharts(s) {
     const W = Math.max(280, Math.floor(el.clientWidth));
     const id = el.dataset.chart;
     try {
-      morphHtml(el, { cfd: cfdChart, burn: burnChart, aging: agingChart, gantt: ganttChart, heat: heatChart, deps: depsChart }[id](s, shownNames, times, W));
+      morphHtml(el, { cfd: cfdChart, burn: burnChart, aging: agingChart, gantt: ganttChart, heat: heatChart, deps: depsChart, codeLines: codeLinesChart, codeLangs: codeLangsChart, codeQuality: codeQualityChart }[id](s, shownNames, times, W));
     } catch (e) { el.innerHTML = `<div class="empty">✕ ${esc(e.message)}</div>`; console.error(e); }
   }
 }
@@ -2698,7 +2727,8 @@ const chartShown = (s) => s.changes.filter((c) => isTicket(c) && c.status !== 'm
 function timeFrame(W, H, t0, t1, maxY, { L = 34, R = 16, T = 10, B = 24 } = {}) {
   const x = (t) => L + ((t - t0) / Math.max(1, t1 - t0)) * (W - L - R);
   const y = (v) => T + (1 - v / Math.max(1, maxY)) * (H - T - B);
-  const yStep = maxY <= 6 ? 1 : maxY <= 12 ? 2 : maxY <= 30 ? 5 : maxY <= 60 ? 10 : Math.ceil(maxY / 50) * 10;
+  const mag = 10 ** Math.floor(Math.log10(Math.max(1, maxY / 5)));
+  const yStep = maxY <= 6 ? 1 : maxY <= 12 ? 2 : maxY <= 30 ? 5 : maxY <= 60 ? 10 : [1, 2, 2.5, 5, 10].map((m) => m * mag).find((x) => maxY / x <= 6); // round steps
   let grid = '';
   for (let v = 0; v <= maxY; v += yStep) grid += `<line class="ch-grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="ch-ax" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
   for (const k of timeTicks(t0, t1, Math.max(2, Math.floor((W - L - R) / 80)))) grid += `<text class="ch-ax" x="${x(k.t)}" y="${H - 6}" text-anchor="middle">${k.label}</text>`;
@@ -2803,6 +2833,73 @@ function burnChart(s, shownNames, times, W) {
   <p class="ch-note">${esc(note)} The pace counts changes, not tasks: tasks only exist once a change is specified.</p>`;
 }
 
+// ---- code: lines over time per kind (stacked), languages (bars), quality (coverage and ratios)
+const CODE_KINDS = [['code', 'Code', '--cf-specified'], ['tests', 'Tests', '--cf-complete'], ['docs', 'Docs', '--cf-archived'], ['specs', 'Specs (openspec/)', '--cf-draft']];
+const kNum = (n) => (n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k` : String(n));
+const codeEmpty = () => (cs.error ? `<div class="empty">✕ ${esc(cs.error)}</div>` : !cs.data ? '<div class="empty">Counting the lines…</div>' : cs.data.git === false ? '<div class="empty">The code statistics need a git repository.</div>' : null);
+function codeLinesChart(s, shownNames, times, W) {
+  const e = codeEmpty(); if (e) return e;
+  const d = cs.data, pts = [...d.history, { t: Date.now(), h: 'now', kinds: d.kinds }];
+  if (pts.length < 2 || pts[0].t === pts.at(-1).t) pts.unshift({ ...pts[0], t: pts[0].t - 3600e3 });
+  const tot = (p) => CODE_KINDS.reduce((a, [k]) => a + (p.kinds[k] ?? 0), 0);
+  const H = 230, maxY = Math.max(10, ...pts.map(tot));
+  const f = timeFrame(W, H, pts[0].t, pts.at(-1).t, maxY, { L: 44, R: 124 });
+  f.grid = f.grid.replace(/(<text class="ch-ax" x="[\d.]+" y="[\d.]+" text-anchor="end">)(\d+)(<\/text>)/g, (m, a, v, b) => a + kNum(Number(v)) + b);
+  let bands = '', labels = '';
+  const cum = pts.map(() => 0), lastY = [];
+  for (const [k, label, v] of CODE_KINDS) {
+    const lo = cum.slice();
+    pts.forEach((p, i) => { cum[i] += p.kinds[k] ?? 0; });
+    if (!pts.some((p) => p.kinds[k])) continue;
+    const top = pts.map((p, i) => `${i ? 'L' : 'M'}${f.x(p.t)},${f.y(cum[i])}`).join('');
+    const bottom = pts.map((p, i) => `L${f.x(p.t)},${f.y(lo[i])}`).reverse().join('');
+    bands += `<path d="${top}${bottom}Z" fill="var(${v})" fill-opacity=".85"/><path d="${top}" fill="none" stroke="var(--surface)" stroke-width="2"/>`;
+    const yMid = (f.y(cum.at(-1)) + f.y(lo.at(-1))) / 2;
+    if (f.y(lo.at(-1)) - f.y(cum.at(-1)) >= 2) lastY.push({ v, label, y: yMid, n: pts.at(-1).kinds[k] });
+  }
+  lastY.sort((a, b) => a.y - b.y);
+  for (let i = 1; i < lastY.length; i++) if (lastY[i].y - lastY[i - 1].y < 15) lastY[i].y = lastY[i - 1].y + 15;
+  for (const l of lastY) labels += `<rect x="${W - f.R + 8}" y="${l.y - 5}" width="8" height="8" rx="2" fill="var(${l.v})"/><text class="ch-lbl" x="${W - f.R + 20}" y="${l.y + 3.5}">${esc(l.label.replace(/ \(.*/, ''))} <tspan class="ch-num">${kNum(l.n)}</tspan></text>`;
+  const row = (p) => [p.h === 'now' ? 'Now (working tree)' : `${whenFmt(p.t)} · ${p.h}`, ...CODE_KINDS.slice().reverse().map(([k, l]) => `${l}: ${(p.kinds[k] ?? 0).toLocaleString()}`)];
+  chartGeo.set('codeLines', { x: f.x, t0: pts[0].t, t1: pts.at(-1).t, rows: pts.map((p) => ({ t: p.t, lines: row(p) })) });
+  const legend = `<div class="ch-legend">${CODE_KINDS.slice().reverse().map(([, l, v]) => `<span><i style="background:var(${v})"></i>${l}</span>`).join('')}</div>`;
+  const table = `<details class="ch-data"><summary>Data</summary><table><thead><tr><th>Commit</th>${CODE_KINDS.map(([, l]) => `<th>${l}</th>`).join('')}<th>Config</th></tr></thead><tbody>${pts.slice().reverse().map((p) => `<tr><td>${p.h === 'now' ? 'now' : `${whenFmt(p.t)} · ${p.h}`}</td>${CODE_KINDS.map(([k]) => `<td>${(p.kinds[k] ?? 0).toLocaleString()}</td>`).join('')}<td>${(p.kinds.config ?? 0).toLocaleString()}</td></tr>`).join('')}</tbody></table></details>`;
+  return `${legend}<svg class="ch-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Lines now: ${lastY.map((l) => `${l.label} ${l.n}`).join(', ')}">${f.grid}${bands}${labels}
+    <line class="ch-cross" x1="0" x2="0" y1="${f.T}" y2="${H - f.B}" visibility="hidden"/>
+    <rect class="ch-hit" data-xhover="codeLines" x="${f.L}" y="0" width="${W - f.L - f.R}" height="${H - f.B}"/></svg>${table}
+    <p class="ch-note">Config files (JSON, YAML, XML, …) are counted apart (${kNum(d.kinds.config ?? 0)} lines, in the data); lock files, minified and build output are left out.</p>`;
+}
+function codeLangsChart(s, shownNames, times, W) {
+  const e = codeEmpty(); if (e) return e;
+  const all = Object.entries(cs.data.langs).sort((a, b) => b[1] - a[1]), sum = all.reduce((a, [, n]) => a + n, 0);
+  if (!sum) return '<div class="empty">No code yet.</div>';
+  const top = all.slice(0, 7), rest = all.slice(7).reduce((a, [, n]) => a + n, 0);
+  if (rest) top.push([`Other (${all.length - 7})`, rest]);
+  const max = top[0][1];
+  return `<div class="cl-bars" role="list">${top.map(([lang, n]) => {
+    const pct = (n / sum) * 100;
+    return `<div class="cl-row" role="listitem" ${tipAttr([lang, `${n.toLocaleString()} lines`, `${pct.toFixed(1)} %`])}><span class="cl-name">${esc(lang)}</span><span class="cl-track"><i style="width:${Math.max(1.5, (n / max) * 100)}%"></i></span><span class="cl-val ch-num">${pct < 0.1 ? '< 0.1' : pct < 1 ? pct.toFixed(1) : Math.round(pct)} %</span><span class="cl-n ch-num">${kNum(n)}</span></div>`;
+  }).join('')}</div><p class="ch-note">${sum.toLocaleString()} lines of code and tests in ${all.length} language${all.length === 1 ? '' : 's'}.</p>`;
+}
+function codeQualityChart(s, shownNames, times, W) {
+  const e = codeEmpty(); if (e) return e;
+  const d = cs.data, k = d.kinds, cov = d.coverage, hist = d.coverageHistory ?? [];
+  const ratio = (a, b) => (b ? (a / b).toFixed(2).replace(/0$/, '') : '—');
+  let spark = '';
+  if (hist.length >= 2) {
+    const w = 120, h = 28, t0 = hist[0].t, t1 = hist.at(-1).t, lo = Math.min(...hist.map((x) => x.pct)), hi = Math.max(...hist.map((x) => x.pct));
+    const x = (t) => ((t - t0) / Math.max(1, t1 - t0)) * w, y = (v) => h - 3 - ((v - lo) / Math.max(1, hi - lo)) * (h - 6);
+    spark = `<svg class="cq-spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-label="Coverage from ${hist[0].pct} % to ${hist.at(-1).pct} %"><path d="${hist.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.pct).toFixed(1)}`).join('')}" fill="none" stroke="var(--cf-complete)" stroke-width="2"/><circle cx="${x(t1)}" cy="${y(hist.at(-1).pct)}" r="3" fill="var(--cf-complete)"/></svg>`;
+  }
+  const tile = (label, value, sub) => `<div class="cq-tile"><span class="cq-l">${label}</span><span class="cq-v ch-num">${value}</span>${sub ? `<span class="cq-s">${sub}</span>` : ''}</div>`;
+  return `<div class="cq-grid">
+    ${tile('Test coverage', cov ? `${cov.pct} %` : '—', cov ? `${cov.covered.toLocaleString()} of ${cov.total.toLocaleString()} lines · <span title="${esc(cov.file)}">${esc(cov.file.split('/').slice(-3).join('/'))}</span>, ${ago(cov.t)}${spark ? `<br>${spark}` : ''}` : 'no report found (lcov, JaCoCo, Cobertura, Istanbul summary)')}
+    ${tile('Test lines per code line', ratio(k.tests, k.code), `${kNum(k.tests)} test lines, ${kNum(k.code)} code lines`)}
+    ${tile('Docs and specs per 100 code lines', k.code ? Math.round(((k.docs + k.specs) / k.code) * 100) : '—', `${kNum(k.docs)} docs, ${kNum(k.specs)} specs`)}
+    ${tile('TODO / FIXME', d.todos, 'markers in code and tests')}
+    </div>
+    ${d.largest?.length ? `<div class="cq-largest"><b>Largest files</b>${d.largest.map((x) => `<div class="cq-f" title="${esc(x.file)}"><span>${esc(x.file.split('/').slice(-2).join('/'))}</span><span class="ch-num">${x.lines}</span></div>`).join('')}</div>` : ''}`;
+}
 // Phases of each change: specified → in progress → tasks done → archived.
 const PHASES = [['specified', 'in-progress'], ['in-progress', 'complete'], ['complete', 'archived']];
 function phasesOf(t, now) {

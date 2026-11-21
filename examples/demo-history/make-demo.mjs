@@ -88,11 +88,49 @@ const tasksMd = (c, done) => `# Tasks\n\n${c.tasks.map(([group, ...items], g) =>
 const roadmap = () => `# Roadmap — Team wiki\n\nOne OpenSpec change per row, in implementation order. A change exists only as a draft in \`openspec/backlog/\`\nuntil its work starts. "Depends on" lists hard prerequisites (row numbers).\n\n| Order | Change | Area | Depends on | Goal |\n|---|---|---|---|---|\n${CHANGES.map((c, i) => `| ${i + 1} | \`${c.name}\` | ${c.area} | ${c.deps} | ${c.goal} |`).join('\n')}\n\n## Milestones\n\n${MILESTONES.map(([id, t, rows, what]) => `- **${id} "${t}"** (${rows}): ${what}.`).join('\n')}\n\n## Candidates (not yet planned)\n\n- Page templates (found while specifying \`add-pages\`).\n- Export a space as static HTML.\n`;
 const config = `schema: spec-driven\n\ncontext: |\n  Product: "Team wiki" - a small wiki for one team: Markdown pages, links, search and history.\n\n  Stack: TypeScript, Node.js 22, Fastify, SQLite, React 19 with Vite. pnpm only.\n  Tests: Vitest (unit, component, API), Playwright (E2E).\n\n  Quality gate: \`pnpm verify\` runs lint, type check, tests with coverage thresholds, the build and the E2E suite.\n\n  Delivery: one OpenSpec change = one ticket = one commit. Deferred findings go to the change \`parking-lot\`.\n`;
 
+// ---- the code a ticked task leaves behind (for Charts › Code): a module, its tests, a migration, a component with
+// styles, or docs, of a size that comes from the task (the same every run); a coverage report at the end
+const STOP = new Set(['and', 'the', 'a', 'an', 'with', 'on', 'of', 'by', 'to', 'in', 'per', 'from', 'for', 'each', 'without', 'kept', 'api', 'v1']);
+const camel = (t) => t.replace(/[^A-Za-z0-9 ]/g, ' ').split(/\s+/).filter((w) => /^[a-z]/i.test(w) && !STOP.has(w.toLowerCase())).slice(0, 3)
+  .map((w, i) => (i ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())).join('') || 'step';
+const size = (t, lo, hi) => lo + ([...t].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 9973, 7) % (hi - lo));
+function tsModule(name, n, area) {
+  const T = name[0].toUpperCase() + name.slice(1), out = [`// ${T}: part of the ${area} feature`, `import { db, type Row } from '../db.js';`, '', `export interface ${T} {`, '  id: number;', '  slug: string;', '  updatedAt: string;', '}', ''];
+  if (n > 60) out.push('// TODO: paginate once a space has more than a few hundred pages', '');
+  for (let i = 0; out.length < n; i++) out.push(`export function ${name}${i ? i + 1 : ''}(input: Partial<${T}>): ${T} {`, `  const row = db.prepare('SELECT * FROM ${area} WHERE slug = ?').get(input.slug) as Row | undefined;`, `  if (!row) throw new Error('not found: ' + input.slug);`, `  return { id: row.id, slug: row.slug, updatedAt: new Date().toISOString() };`, '}', '');
+  return out.join('\n') + '\n';
+}
+function tsTest(name, n) {
+  const out = [`import { describe, expect, it } from 'vitest';`, `import { ${name} } from '../src/${name}.js';`, '', `describe('${name}', () => {`];
+  for (let i = 0; out.length < n - 1; i++) out.push(`  it('case ${i + 1}', () => {`, `    const r = ${name}({ slug: 'page-${i + 1}' });`, `    expect(r.slug).toBe('page-${i + 1}');`, '  });', '');
+  out.push('});');
+  return out.join('\n') + '\n';
+}
+function tsxComponent(name, n) {
+  const C = name[0].toUpperCase() + name.slice(1), out = [`import { useState } from 'react';`, `import './${name}.css';`, '', `export function ${C}({ slug }: { slug: string }) {`, '  const [open, setOpen] = useState(false);', '  return ('];
+  for (let i = 0; out.length < n - 3; i++) out.push(`    <section className="${name}-${i}" onClick={() => setOpen(!open)}>`, `      <h2>{slug} {open ? '▾' : '▸'}</h2>`, '    </section>');
+  out.push('  );', '}');
+  return out.join('\n') + '\n';
+}
+const css = (name, n) => Array.from({ length: Math.ceil(n / 4) }, (_, i) => `.${name}-${i} {\n  padding: ${4 + i}px;\n  border-bottom: 1px solid #e5e7eb;\n}`).join('\n') + '\n';
+const doc = (title, n) => `# ${title}\n\n` + Array.from({ length: n }, (_, i) => (i % 5 === 4 ? '' : `Step ${i + 1}: how the wiki handles ${title.toLowerCase()}, with an example.`)).join('\n') + '\n';
+function codeFor(c, task) {
+  const group = c.tasks.find(([, ...items]) => items.some(([t]) => t === task.t))?.[0] ?? '', name = camel(task.t), n = (lo, hi) => size(task.t, lo, hi);
+  if (/^Docs/.test(group) || /README/.test(task.t)) W(`docs/${c.area}-${name}.md`, doc(task.t.replace(/`/g, ''), n(14, 34)));
+  else if (/Migration/.test(task.t)) W(`packages/api/migrations/${c.area}-${name}.sql`, `-- ${task.t.replace(/`/g, '')}\nCREATE TABLE IF NOT EXISTS ${c.area} (\n  id INTEGER PRIMARY KEY,\n  slug TEXT NOT NULL UNIQUE,\n  body TEXT NOT NULL,\n  updated_at TEXT NOT NULL\n);\nCREATE INDEX IF NOT EXISTS ${c.area}_slug ON ${c.area}(slug);\n`);
+  else if (/^Web/.test(group)) { W(`packages/web/src/${c.area}/${name}.tsx`, tsxComponent(name, n(30, 80))); W(`packages/web/src/${c.area}/${name}.css`, css(name, n(8, 24))); W(`packages/web/test/${name}.test.tsx`, tsTest(name, n(16, 40))); }
+  else if (/^Tests/.test(group)) W(/Playwright/.test(task.t) ? `e2e/${name}.spec.ts` : `packages/api/test/${name}.test.ts`, tsTest(name, n(20, 50)));
+  else if (/^(Build|Lint|Gate)/.test(group) || /verify/.test(task.t)) W(`scripts/${name}.sh`, `#!/bin/sh\n# ${task.t.replace(/`/g, '')}\nset -e\npnpm -r lint\npnpm -r typecheck\npnpm -r test -- --coverage\npnpm -r build\n`);
+  else { W(`packages/api/src/${c.area}/${name}.ts`, tsModule(name, n(25, 75), c.area)); W(`packages/api/test/${name}.test.ts`, tsTest(name, n(18, 48))); }
+}
+
 // ---- the history
 fs.mkdirSync(DST, { recursive: true });
 git(['init', '-q']); git(['config', 'user.name', 'Demo']); git(['config', 'user.email', 'demo@example.invalid']);
 W('README.md', '# Team wiki (demo)\n\nA demo project for the OpenSpec dashboard: four weeks of history in `openspec/`.\n');
 W('openspec/config.yaml', config); W('openspec/roadmap.md', roadmap());
+W('.gitignore', 'node_modules/\ncoverage/\ndist/\n');
+W('package.json', JSON.stringify({ name: 'team-wiki', private: true, scripts: { verify: 'sh scripts/verify.sh' }, devDependencies: { typescript: '5.8.3', vitest: '3.2.4' } }, null, 2) + '\n');
 for (const c of CHANGES) W(`openspec/backlog/${c.name}.md`, proposal(c));
 W('openspec/changes/parking-lot/proposal.md', '# Proposal\n\n## Why\n\nA place for deferred findings, known issues and trade-offs, so they are not lost between tickets.\n\n## What Changes\n\n- Collects deferred items as tasks; it is never archived.\n');
 W('openspec/changes/parking-lot/.openspec.yaml', `schema: spec-driven\ncreated: ${ymd(days[0])}\nskip_specs: true\n`);
@@ -117,7 +155,7 @@ for (const [i, sday, ticks, aday] of PLAN) {
     const times = tickTimes(i, j, k);
     for (let t = 0; t < k && done < n; t++) {
       const upto = ++done;
-      steps.push([at(sday + j, times[t]), `feat(${c.area}): ${taskLines(c)[upto - 1].t.replace(/`/g, '')}`, () => W(`openspec/changes/${c.name}/tasks.md`, tasksMd(c, upto))]);
+      steps.push([at(sday + j, times[t]), `feat(${c.area}): ${taskLines(c)[upto - 1].t.replace(/`/g, '')}`, () => { W(`openspec/changes/${c.name}/tasks.md`, tasksMd(c, upto)); codeFor(c, taskLines(c)[upto - 1]); }]);
     }
   });
   if (aday != null) {
@@ -129,6 +167,7 @@ for (const [i, sday, ticks, aday] of PLAN) {
       W(`${dir}/proposal.md`, proposal(c)); W(`${dir}/tasks.md`, tasksMd(c, Math.max(finish, n)));
       W(`${dir}/specs/${c.area}/${c.cap}/spec.md`, delta(c));
       W(`openspec/specs/${c.area}/${c.cap}/spec.md`, mainSpec(c));
+      W(`docs/${c.cap}.md`, doc(c.goal.replace(/[`.;].*$/, ''), size(c.name, 18, 44))); // the user docs of the feature
     }]);
   }
 }
@@ -146,4 +185,6 @@ for (const i of SPECIFIED_ONLY) {
 steps.sort((a, b) => a[0] - b[0]);
 const now = Date.now();
 for (const [when, msg, run] of steps) { if (when.getTime() > now) continue; run(); commit(msg, when); }
+// what the last test run left (not committed: coverage/ is ignored)
+W('coverage/coverage-summary.json', JSON.stringify({ total: { lines: { total: 2140, covered: 1871, skipped: 0, pct: 87.43 } } }) + '\n');
 console.log(`Created ${DST}: ${steps.length + 1} commits over ${days.length} working days.\nTry: node <path-to>/tools/openspec-dashboard/server.mjs ${DST}`);

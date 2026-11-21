@@ -205,8 +205,20 @@ They are built from the git history of `openspec/` and from what the dashboard r
 cover the time before you first started it; hover for values, **Data** shows a table. **○ Focus** shows open work
 only: no archived band in the flow, no archived changes in the cycle times and the dependency graph.
 
+Below them, **Code** is about the code itself:
+
+- **Lines over time**: the non-empty lines of code, tests, docs and specs (`openspec/`), at up to 12 commits spread
+  over the history and now (with what is not committed yet);
+- **Languages**: the share of each language in the code and tests;
+- **Quality**: the test coverage from the last report the build wrote (an lcov file, a JaCoCo, Cobertura or
+  coverage.py XML, or an Istanbul/Jest/Vitest `coverage-summary.json`), with its trend once it changed; test lines
+  per code line, docs and specs per 100 code lines, TODO and FIXME markers, and the largest files.
+
+Lock files, minified files and build output are left out; config files (JSON, YAML, XML, …) are counted apart.
+
 To try the charts with some history, generate the demo project (a team wiki built up over four weeks, see
-[examples/demo-history](../examples/demo-history)) and start the dashboard on it; the screenshot shows it:
+[examples/demo-history](../examples/demo-history), with code, tests, docs and a coverage report) and start the
+dashboard on it; the screenshots show it:
 
 ```sh
 node examples/demo-history/make-demo.mjs ~/team-wiki-demo
