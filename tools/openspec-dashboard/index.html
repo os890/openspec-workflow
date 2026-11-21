@@ -3743,7 +3743,7 @@ const bgState = new Map(); // session id -> { state, t, last, cwd }
 let bgOpen = false;
 function bgAdd(x) {
   const label = x.prompt ? x.prompt.replace(/\s+/g, ' ').slice(0, 70) : x.sessionId.slice(0, 8);
-  const e = { sessionId: x.sessionId, label, projectId: x.elsewhere ? x.projectId ?? null : PROJECT, projectLabel: x.elsewhere ? x.projectLabel ?? x.display ?? null : (ui.state?.projectLabel ?? ui.state?.project ?? null), at: Date.now(), seen: true }; // a change (done, an issue) makes it new
+  const e = { sessionId: x.sessionId, kind: x.kind ?? 'term', convo: x.convo ?? null, label, projectId: x.elsewhere ? x.projectId ?? null : PROJECT, projectLabel: x.elsewhere ? x.projectLabel ?? x.display ?? null : (ui.state?.projectLabel ?? ui.state?.project ?? null), at: Date.now(), seen: true }; // a change (done, an issue) makes it new
   const i = bgList.findIndex((y) => y.sessionId === x.sessionId);
   if (i >= 0) bgList.splice(i, 1);
   bgList.unshift(e); bgSave(); bgPoll();
@@ -3767,8 +3767,8 @@ function bgRender() {
   pop.innerHTML = `<div class="bg-head"><b>In the background</b><button class="link" type="button" data-bg-clear title="Remove the finished ones from the list">Clear finished</button></div>
     <ul>${bgList.map((e, i) => {
       const st = bgState.get(e.sessionId), [cls, ico, what] = BG_ICON[st?.state ?? 'working'];
-      const label = st?.prompt && /^[0-9a-f]{8}$/.test(e.label) ? st.prompt.replace(/\s+/g, ' ').slice(0, 70) : e.label;
-      return `<li><button type="button" class="bg-item" data-bg-open="${esc(e.sessionId)}" title="${esc(what)} · open it"><span class="bg-ico ${cls}" aria-label="${esc(what)}">${ico}</span><span class="bg-txt"><b>${esc(label)}</b><span class="muted">${esc([e.projectLabel ?? st?.cwd ?? '', what, st?.t ? ago(st.t) : ''].filter(Boolean).join(' · '))}</span>${st?.last ? `<span class="bg-last">${esc(st.last)}</span>` : ''}${st?.ctx ? `<span class="bg-ctx">${ctxHtml(st.ctx)}</span>` : ''}</span></button><button type="button" class="link bg-x" data-bg-remove="${esc(e.sessionId)}" title="Remove from the list (the session keeps running)" aria-label="Remove">✕</button></li>`;
+      const label = st?.prompt && (e.kind === 'chat' || /^[0-9a-f]{8}$/.test(e.label)) ? `${e.kind === 'chat' ? '💬 ' : ''}${st.prompt.replace(/\s+/g, ' ').slice(0, 70)}` : e.label;
+      return `<li><button type="button" class="bg-item" data-bg-open="${esc(e.sessionId)}" title="${esc(what)} · open it"><span class="bg-ico ${cls}" aria-label="${esc(what)}">${ico}</span><span class="bg-txt"><b>${esc(label)}</b><span class="muted">${esc([e.projectLabel ?? st?.cwd ?? '', e.kind === 'chat' ? (e.convo === 'brainstorm' ? 'Brainstorm' : e.convo?.startsWith('session:') ? 'session on a ticket' : 'Assistant') : '', what, st?.t ? ago(st.t) : ''].filter(Boolean).join(' · '))}</span>${st?.last ? `<span class="bg-last">${esc(st.last)}</span>` : ''}${st?.ctx ? `<span class="bg-ctx">${ctxHtml(st.ctx)}</span>` : ''}</span></button><button type="button" class="link bg-x" data-bg-remove="${esc(e.sessionId)}" title="Remove from the list (the session keeps running)" aria-label="Remove">✕</button></li>`;
     }).join('')}</ul>`;
 }
 async function bgPoll() {
@@ -3797,6 +3797,13 @@ document.addEventListener('click', (e) => {
     const en = bgList.find((y) => y.sessionId === op.dataset.bgOpen);
     if (!en) return;
     en.seen = true; bgSave(); bgOpen = false; bgRender();
+    if (en.kind === 'chat') { // a conversation of the panel: on its project's page
+      if (en.projectId === PROJECT) return openChat(en.convo);
+      const u = new URL(location.href);
+      for (const k of ['project', 'overview', 'panel', 'term', 'write', 'onboard', 'convo']) u.searchParams.delete(k);
+      u.searchParams.set('project', en.projectId); u.searchParams.set('panel', 'chat'); u.searchParams.set('convo', en.convo); u.hash = '';
+      location.href = u.toString(); return;
+    }
     // here already (its project's page, or the overview for a session only): joined and in write mode in the panel
     if ((en.projectId && en.projectId === PROJECT) || (!en.projectId && !PROJECT)) {
       const join = () => { Object.assign(ag, { term: en.sessionId, termWrite: true, termDetails: false }); renderAgentLive(); termPoll(true); };
@@ -4256,14 +4263,14 @@ function barHtml(c) {
   }
   if (c.brainstorm) {
     const idea = c.jobs.find((j) => j.idea)?.idea;
-    return c.jobs.length ? `<div class="ag-row"><span class="ag-note">Brainstorming${idea ? ` on the idea <code>${esc(idea)}</code>` : ''} · read-only · nothing is saved until you save the ticket</span><button class="link" type="button" data-ag-new style="margin-left:auto">New brainstorm</button></div>` : '';
+    return c.jobs.length ? `<div class="ag-row"><span class="ag-note">Brainstorming${idea ? ` on the idea <code>${esc(idea)}</code>` : ''} · read-only · nothing is saved until you save the ticket</span><button class="link" type="button" data-ag-new style="margin-left:auto">New brainstorm</button><button class="btn" type="button" data-ag-chat-bg title="Keep it working in the background: the button with the number in the header shows how it is doing and when the answer is in">⤓ Background</button></div>` : '';
   }
-  if (!c.session) return c.jobs.length ? `<div class="ag-row"><span class="ag-note">Read-only assistant · remembers this conversation</span><button class="link" type="button" data-ag-new style="margin-left:auto">New chat</button></div>` : '';
+  if (!c.session) return c.jobs.length ? `<div class="ag-row"><span class="ag-note">Read-only assistant · remembers this conversation</span><button class="link" type="button" data-ag-new style="margin-left:auto">New chat</button><button class="btn" type="button" data-ag-chat-bg title="Keep it working in the background: the button with the number in the header shows how it is doing and when the answer is in">⤓ Background</button></div>` : '';
   const j = c.last;
   return `<div class="ag-row"><span class="pill" style="--st:${stVar(JOB_ST[j.status])}">${JOB_LABEL[j.status] ?? j.status}</span>
       ${j.status === 'running' ? `<button class="btn" type="button" data-ag-control="end" data-job="${esc(j.id)}" title="Finish the current turn, then end">End after this turn</button><button class="btn" type="button" data-ag-control="stop" data-job="${esc(j.id)}">Stop now</button>` : ''}
       ${j.status === 'idle' ? `<button class="btn" type="button" data-ag-control="end" data-job="${esc(j.id)}">End session</button>` : ''}
-      <button class="link" type="button" data-agent="${esc(j.change)}" style="margin-left:auto">Ticket →</button></div>
+      <button class="link" type="button" data-agent="${esc(j.change)}" style="margin-left:auto">Ticket →</button><button class="btn" type="button" data-ag-chat-bg title="Keep it working in the background: the button with the number in the header shows how it is doing and when the answer is in">⤓ Background</button></div>
     <div class="ag-note">${alive(j) ? 'Your messages go straight to this session.' : 'Ended. A message continues it.'} Take over in a terminal${alive(j) ? ' once it has ended' : ''}: <code>claude --resume ${esc(j.sessionId)}</code></div>`;
 }
 function ticketItem(j) {
@@ -4417,6 +4424,12 @@ document.addEventListener('click', (e) => {
       .catch((err) => { ag.note = '✕ ' + err.message; renderAgentLive(); });
   }
   if (t.closest('[data-ag-hook]')) { ag.note = ''; return agentPost('hook', t.closest('[data-ag-hook]').dataset.folder ? { folder: t.closest('[data-ag-hook]').dataset.folder } : {}).then(() => { termPoll(true); }).catch((err) => { ag.note = '✕ ' + err.message; renderAgentLive(); }); }
+  if (t.closest('[data-ag-chat-bg]')) { // a conversation of the panel: its session id says how it is doing
+    const c = conversations().find((x) => x.id === ag.convo);
+    const sid = c?.last?.sessionId;
+    if (sid) bgAdd({ sessionId: sid, kind: 'chat', convo: c.id, prompt: [...(c.jobs ?? [])].reverse().find((j) => j.text)?.text ?? c.label });
+    return closeAgent();
+  }
   if (t.closest('[data-ag-bg]')) {
     const x = termSessions().find((y) => y.sessionId === ag.term) ?? (ag.view?.elsewhere ?? []).find((y) => y.sessionId === ag.term);
     if (x) bgAdd(x);
@@ -5902,6 +5915,7 @@ function startProject() {
   }
   if (AGENT_TOKEN && (PARAMS.get('term') || EMBED)) { ag.convo = 'terminal'; ag.term = PARAMS.get('term') || null; ag.termWrite = PARAMS.get('write') === '1'; } // ?term=<session id> joins that session (&write=1: writing)
   if (EMBED) { ag.open = true; ag.panel = 'chat'; ag.stick = true; $('agent').hidden = false; document.body.classList.add('ag-open'); }
+  if (AGENT_TOKEN && PARAMS.get('convo')) ag.convo = PARAMS.get('convo'); // ?convo=assistant|brainstorm|session:<id> (from the background list)
   if (AGENT_TOKEN && PARAMS.get('panel') === 'chat') { ag.open = true; ag.panel = 'chat'; ag.stick = true; ag.max = ag.max || PARAMS.has('max'); $('agent').hidden = false; document.body.classList.add('ag-open'); } // ?panel=chat opens the chat, &max maximized
   if (SNAPSHOT && AGENT_TOKEN) fetch(withProject('/api/agent')).then((r) => r.json()).then((v) => { ag.view = v; renderAgentLive(); });
   if (SNAPSHOT) fetch(withProject('/api/state')).then((r) => r.json()).then((d) => { $('conn').innerHTML = `<span class="dot"></span>snapshot ${hhmm(d.scannedAt)}`; accept(d); });

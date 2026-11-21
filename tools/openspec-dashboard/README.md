@@ -323,7 +323,10 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     on its own. The end of a joined session's thread shows its state (working with the current step, done and
     waiting, listening, ended), polled with the transcript every 2 s from Claude Code's own idle/busy. In write mode
     the bar folds into one line (**Details ▾** unfolds it), and Claude's answers get the reactions, requests and
-    quotes of the chat; **⤓ Background** puts the session into the background list (`localStorage` `osd-bg`), a
+    quotes of the chat; **⤓ Background** puts the session into the background list (`localStorage` `osd-bg`; the
+    Assistant, a brainstorm and a session on a ticket have the button too, as `kind: 'chat'` entries with their
+    conversation, whose state comes from the dashboard's own last job of that session: running → `working`, idle or
+    done → `waiting`, failed → `error`; a click opens `?project=…&panel=chat&convo=…`), a
     header button with its states polled every 4 s from `GET /api/sessions/status?ids=…` (token in the header):
     `working`, `waiting` (done), `asking` (Claude Code's own status `waiting`: a permission or question is open; for a
     session in macOS Terminal also a menu in its tab), `ended` (the process is gone) or `error` (the last reply is an

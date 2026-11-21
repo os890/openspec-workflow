@@ -414,7 +414,10 @@ dashboard. Its dot is amber while one still works, green when all are done, red 
 - **!** red: an issue, the session has ended or its last reply is an error.
 
 A click on an entry opens the session in write mode (on its project's page), ✕ removes it from the list (the
-session keeps running), **Clear finished** removes the done ones. The list is kept in the browser. The joined
+session keeps running), **Clear finished** removes the done ones. The panel's own conversations go there too:
+**⤓ Background** in the bar of the Assistant, a 💡 brainstorm or a session on a ticket closes the panel while Claude
+works on the answer; the entry (💬 and your last message) turns ✓ once the answer is in, and a click opens that
+conversation again. The list is kept in the browser. The joined
 session's thread also says **Needs you** while it waits for an answer.
 
 ![The sessions in the background: one needs an answer, one is done, one has ended](images/dashboard-background.png)

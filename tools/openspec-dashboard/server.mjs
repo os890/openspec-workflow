@@ -1354,6 +1354,9 @@ async function sessionsStatus(ids) {
   const run = new Map(runningSessions().map((x) => [x.sessionId, x]));
   const out = [];
   for (const sid of [...new Set(ids)].filter((x) => /^[0-9a-f-]{8,64}$/i.test(x)).slice(0, 30)) {
+    // a conversation of the dashboard's own (chat, brainstorm, a session on a ticket): its last job says
+    const own = projects.map((p) => p.agent?.jobState(sid)).find(Boolean);
+    if (own) { out.push({ sessionId: sid, ...own }); continue; }
     const r = run.get(sid), file = transcriptFor(sid), last = file ? lastReplyOf(file) : null;
     let state = r ? (r.asking ? 'asking' : r.waiting ? 'waiting' : 'working') : file ? 'ended' : 'unknown';
     if (r?.waiting && r.typeable) { // a question in its tab needs the user
@@ -1981,6 +1984,14 @@ function createAgent(project) {
     reloadInbox();
     return { ok: true };
   }
+  // the background list: the state of a conversation started here (working, done, or an issue)
+  function jobState(sid) {
+    const j = jobs.filter((x) => x.sessionId === sid).at(-1);
+    if (!j) return null;
+    const state = ['starting', 'running'].includes(j.status) ? 'working' : j.status === 'failed' ? 'error' : ['idle', 'done'].includes(j.status) ? 'waiting' : 'ended';
+    const reply = [...j.log].reverse().find((l) => l.kind === 'text')?.text ?? j.answer ?? null;
+    return { state, t: j.endedAt ?? j.log.at(-1)?.t ?? j.startedAt, cwd: homeDisplay(root), last: reply ? String(reply).replace(/[*`#>]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 200) : (j.error ?? null), prompt: String([...j.log].reverse().find((l) => l.kind === 'user')?.text ?? j.text ?? '').replace(/\s+/g, ' ').slice(0, 200), dashboard: true }; // the last message sent
+  }
   function brief() {
     const now = Date.now();
     return {
@@ -2006,7 +2017,7 @@ function createAgent(project) {
   const busy = () => jobs.some((j) => j.child && ['starting', 'running'].includes(j.status) && j.kind !== 'chat');
   sttListeners.add(() => changed(0));
   rpListeners.add(() => changed(0));
-  return { view, ask, chat, start, message, control, cancel, brief, startWatching, stopWatching, busy, onboard, listen, transcript, hook, type, newSession };
+  return { view, ask, chat, start, message, control, cancel, brief, jobState, startWatching, stopWatching, busy, onboard, listen, transcript, hook, type, newSession };
 }
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => { for (const c of children) { try { c.kill('SIGTERM'); } catch { /* gone */ } } process.exit(0); });
