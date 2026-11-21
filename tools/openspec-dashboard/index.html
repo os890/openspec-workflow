@@ -320,7 +320,8 @@ span.ch-warn { color: var(--st-progress); }
 /* full-screen board */
 .board-toggle { white-space: nowrap; flex: none; }
 /* the milestone filters take the free space and wrap inside it, so the Full screen button never drops to a new line */
-.board-head .ms-filter { flex: 1 1 0; min-width: 220px; justify-content: flex-end; }
+.board-head .ms-filter { flex: 1 1 400px; min-width: 220px; justify-content: flex-end; }
+.board-actions { display: inline-flex; gap: 8px; flex: none; margin-left: auto; }
 /* the monospace styles are wider: milestone filters show only id and count, the name is in the tooltip */
 :root[data-style="matrix"] .ms-filter .ms-name,
 :root[data-style="terminal"] .ms-filter .ms-name { display: none; }
@@ -1769,16 +1770,20 @@ function renderBoard(s) {
     </div>`;
   const board = $('board');
   board.classList.toggle('max', max);
+  // Live updates rebuild the board; the charts are drawn only after it is in the page (they measure their width).
+  // Hold the old height meanwhile, so the page never gets shorter for a moment and the browser keeps the scroll position.
+  const keepY = window.scrollY;
+  if (!max) board.style.minHeight = `${board.offsetHeight}px`;
   board.innerHTML = `
     <div class="board-head">
       <span class="view-switch" role="tablist" aria-label="View"><button type="button" role="tab" data-board-view="board" aria-selected="${ui.boardView === 'board'}">Board</button><button type="button" role="tab" data-board-view="backlog" aria-selected="${ui.boardView === 'backlog'}">Backlog</button><button type="button" role="tab" data-board-view="charts" aria-selected="${ui.boardView === 'charts'}">Charts</button></span>
       ${max ? `<span class="board-live">${$('conn').innerHTML}</span>` : ''}
-      <span class="muted num" style="font-size:12.5px">${s.changes.filter(isDone).length} of ${s.changes.filter((c) => c.status !== 'parking').length} changes done · ${s.totals.done}/${s.totals.total} tasks${focus && byCol.archived.length ? ` · ${byCol.archived.length} archived hidden` : ''}</span>
+      <span class="muted num" style="font-size:12.5px">${s.changes.filter(isDone).length} of ${s.changes.filter((c) => c.status !== 'parking').length} changes done · ${s.totals.done}/${s.totals.total} tasks${focus && ui.boardView !== 'charts' && byCol.archived.length ? ` · ${byCol.archived.length} archived hidden` : ''}</span>
       ${s.changes.filter((c) => c.status === 'parking').map((c) => `<button type="button" class="btn" data-pick="${esc(c.name)}" title="Parking lot: deferred items, never archived">Parking lot · ${c.tasks ? `${c.tasks.total - c.tasks.done} open` : esc(c.name)}</button>`).join('')}
       <span class="ms-filter">${msBtn('', '<b>All</b>', s.changes.filter((c) => c.status !== 'parking'))}${s.milestones.map((m) => msBtn(m.id, `<b>${esc(m.id)}</b><span class="ms-name">${esc(m.title)}</span>`, s.changes.filter((c) => c.milestone === m.id), m.title)).join('')}</span>
-      ${AGENT_TOKEN ? '<button class="btn board-toggle" type="button" data-chat-btn aria-controls="agent">Chat</button>' : ''}
-      <button class="btn board-toggle" type="button" data-board-focus aria-pressed="${ui.boardFocus}" title="${ui.boardFocus ? 'Show all columns again' : 'Hide archived tickets and fold empty columns, so the open tickets get the space'}">${ui.boardFocus ? '◉ Focus' : '○ Focus'}</button>
-      <button class="btn board-toggle" type="button" data-max aria-pressed="${max}" title="${max ? 'Back to the dashboard (Esc)' : 'Show the board across the whole window'}">${max ? 'Exit full screen ✕' : '⤢ Full screen'}</button>
+      <span class="board-actions">${AGENT_TOKEN ? '<button class="btn board-toggle" type="button" data-chat-btn aria-controls="agent">Chat</button>' : ''}
+      ${ui.boardView === 'charts' ? '' : `<button class="btn board-toggle" type="button" data-board-focus aria-pressed="${ui.boardFocus}" title="${ui.boardFocus ? 'Show all columns again' : 'Hide archived tickets and fold empty columns, so the open tickets get the space'}">${ui.boardFocus ? '◉ Focus' : '○ Focus'}</button>`}
+      <button class="btn board-toggle" type="button" data-max aria-pressed="${max}" title="${max ? 'Back to the dashboard (Esc)' : 'Show the board across the whole window'}">${max ? 'Exit full screen ✕' : '⤢ Full screen'}</button></span>
     </div>
     ${now}
     <div class="board-body">
@@ -1792,10 +1797,13 @@ function renderBoard(s) {
     }).join('')}</div>`}
     ${max && ui.drawer ? '<aside class="drawer" id="drawer" aria-label="Change details"></aside>' : ''}
     </div>`;
+  if (ui.boardView === 'charts') drawCharts(s);
+  board.style.minHeight = '';
+  if (!max && window.scrollY !== keepY) window.scrollTo(0, keepY);
   for (const el of board.querySelectorAll('[data-col]')) el.scrollTop = ui.colScroll.get(el.dataset.col) ?? 0;
   if (ui.blMoved) { const r = board.querySelector(`.bl-row[data-bl="${CSS.escape(ui.blMoved)}"]`); if (r) { r.classList.add('moved'); r.focus({ preventScroll: true }); } ui.blMoved = null; }
   if (max && ui.drawer) renderFocus(s, $('drawer'), ui.drawer);
-  if (ui.boardView === 'charts') { drawCharts(s); loadTimeline(); }
+  if (ui.boardView === 'charts') loadTimeline();
 }
 
 // ------------------------------------------------------------ charts: how the work flows over time
