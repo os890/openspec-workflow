@@ -51,6 +51,8 @@ Sent as they are, about no answer in particular:
 | 🧹 | Wrap up: finish the current task, update `tasks.md`, summarize what is done and what is left. |
 | 🧪 | Run the quality gate now and report the result; fix nothing yet. |
 | ▶️ | Start the app in a clean way: stop whatever of it still runs (dev servers, containers, old processes), build it from a clean state, start it, and say whether it came up without errors. Use the project's own scripts for this (CLAUDE.md, README); if starting it needs something you cannot do, say what. End the answer with one line `App: <URL>` (e.g. `App: http://localhost:8080`), or `App: <command>` for an app that is not a web app: the dashboard shows it as an "Open the app" button. |
+| ⏹️ | Stop the app: everything of it that runs (dev servers, containers, background commands you started for it); check that nothing listens on its ports any more. Change no code. |
+| 🔃 | Restart the app: stop it, rebuild what changed, start it again, say whether it came up without errors, and end with the same `App: <URL or command>` line as for ▶️. |
 
 ## What the dashboard reads
 

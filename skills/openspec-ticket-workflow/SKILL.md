@@ -93,7 +93,7 @@ Work through the steps in order. Do not skip a step; if a step does not apply (n
 If the user follows the session in the OpenSpec dashboard, some messages come in a fixed form: reactions and
 requests about one of your answers (`[Reaction 👍 to your message: "…"]`, `[Request 📝 about your message: "…"]`),
 quotes (`[Replying to your message: "…"]`) and quick messages (👀 status, ⏸ pause after this step, 🧪 run the
-quality gate, ▶️ start the app cleanly, …). What each one means is in [references/dashboard-messages.md](references/dashboard-messages.md).
+quality gate, ▶️ / ⏹️ / 🔃 start, stop or restart the app, …). What each one means is in [references/dashboard-messages.md](references/dashboard-messages.md).
 Answer such a message briefly at the next sensible point and continue, unless it asks you to stop or wait.
 
 ## Report

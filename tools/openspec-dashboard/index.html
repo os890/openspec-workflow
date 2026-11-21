@@ -322,6 +322,8 @@ span.ch-warn { color: var(--st-progress); }
 .cq-l { font-size: 12px; color: var(--muted); } .cq-v { font-size: 24px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
 .cq-s { font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
 .cq-spark { margin-top: 4px; }
+/* the quick messages, open: a row of their own below the input row, so Send stays where it is */
+.qk:has(.qk-bar:not([hidden])) { flex-basis: 100%; order: 99; display: flex; align-items: center; flex-wrap: wrap; }
 .app-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0 2px; }
 .app-row code { font-size: 12px; overflow-wrap: anywhere; }
 .term-done-row { align-self: center; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
@@ -3958,7 +3960,10 @@ const QUICK = [
   ['🧹', 'Wrap up: finish the current task, update tasks.md, and summarize what is done and what is left.', 'Wrap up'],
   null,
   ['🧪', 'Run the quality gate now and tell me the result; fix nothing yet.', 'Quality gate'],
+  null,
   ['▶️', 'Start the app in a clean way: stop whatever of it still runs, build it from a clean state, start it, and tell me whether it came up without errors. End your answer with one line exactly like "App: http://localhost:8080" (its URL), or "App: <command>" when it is not a web app.', 'Start the app'],
+  ['⏹️', 'Stop the app: everything of it that runs (dev servers, containers, background commands you started for it), and check that nothing listens on its ports any more. Change no code.', 'Stop the app'],
+  ['🔃', 'Restart the app: stop it, rebuild what changed, start it again, and tell me whether it came up without errors. End your answer with one line exactly like "App: http://localhost:8080" (its URL), or "App: <command>" when it is not a web app.', 'Restart the app'],
 ];
 const quick = { open: false };
 // the app an answer started (▶️ asks for a last line "App: <URL or command>"; without it, the first local URL of the
@@ -3969,7 +3974,7 @@ function appOf(text, afterStart) {
   if (m && /^https?:\/\//.test(m)) m = m.split(/[\s`*]/)[0].replace(/[.,;:)]+$/, ''); // a URL: its first word; a command: the line
   return m || null;
 }
-const isStart = (t) => /^▶️?\s*Start the app/.test(String(t ?? '').trim());
+const isStart = (t) => /^(▶️?\s*Start|🔃\s*Restart) the app/.test(String(t ?? '').trim());
 function appHtml(app) {
   if (!app) return '';
   if (!/^https?:\/\//.test(app)) return `<div class="app-row">▶ App: <code>${esc(app)}</code></div>`;

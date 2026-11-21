@@ -314,6 +314,8 @@ thread shows each one short, e.g. **👀 Status**.
   ends that answer with a line `App: <URL>` (or `App: <command>`); the dashboard turns it into an **Open the app ↗**
   button, in the answer, next to **✓ Done** at the end of the thread and in the background list. Without that line
   it takes the first local URL of the answer (on a phone or tablet, `localhost` becomes the computer's address).
+  ⏹️ stops the app (everything it started, until nothing listens on its ports), 🔃 restarts it (stop, rebuild what
+  changed, start) and ends with the same `App:` line.
 
 ![Quick messages under the input box](images/dashboard-quick-messages.png)
 
