@@ -1363,12 +1363,16 @@ body.board-max { overflow: hidden; }
 .msg.them.sub { margin-left: 16px; opacity: .85; }
 .msg-foot { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
 .msg .msg-foot .meta { margin-left: auto; white-space: nowrap; }
-.rx-bar { display: flex; gap: 2px; opacity: 0; transition: opacity .15s; flex-wrap: wrap; }
-.msg.them:hover .rx-bar, .msg.them:focus-within .rx-bar, .ag-thread > .msg.them:last-of-type .rx-bar { opacity: 1; }
-@media (hover: none) { .rx-bar { opacity: 1; } }
+/* quiet by default: a light-grey ⋯ hints at the actions; hovering the answer (or tapping ⋯) shows them in its place */
+.rx-bar { display: none; gap: 2px; flex-wrap: nowrap; min-width: 0; }
+.rx-bar .rx { padding: 1px 5px; }
+.rx-more { border: 0; background: none; padding: 0 4px; font-size: 15px; line-height: 1.4; color: var(--faint); opacity: .7; cursor: pointer; border-radius: 6px; }
+.rx-more:hover { opacity: 1; color: var(--muted); }
+.msg.them:hover .rx-bar, .msg.them:focus-within .rx-bar, .msg.them.rx-open .rx-bar { display: flex; }
+.msg.them:hover .rx-more, .msg.them:focus-within .rx-more, .msg.them.rx-open .rx-more { display: none; }
 .rx { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 1px 7px; font-size: 13px; line-height: 1.5; cursor: pointer; color: var(--muted); }
 .rx:hover { border-color: var(--accent); background: var(--accent-soft); } .rx:disabled { opacity: .45; cursor: default; }
-.rx-q { font-size: 11.5px; font-weight: 600; }
+.rx-q { font-size: 13px; font-weight: 700; }
 .rx-sep { width: 1px; align-self: stretch; background: var(--line); margin: 2px 3px; }
 .rx-got { margin-right: 6px; letter-spacing: 1px; }
 .msg.me.rx-sent { padding: 4px 10px; font-size: 13px; background: var(--accent-soft); color: var(--ink); }
@@ -2927,7 +2931,7 @@ const REACTIONS = [['👍', 'I agree with this.'], ['✅', 'Yes, go ahead with t
 // requests about an answer: sent the same way, but asking Claude to do something with it
 const REQUESTS = [['🔁', 'Please say this again in other words, simpler and clearer.', 'Rephrase'], ['📝', 'Please summarize this in three to five short bullet points.', 'Summarize'],
   ['📊', 'Please turn this into an overview table (Markdown): one row per item or point, with the columns that fit the content, and nothing important left out.', 'Table']];
-const rx = { msgs: new Map(), quote: null };
+const rx = { msgs: new Map(), quote: null, openId: null };
 const plainOf = (md) => String(md).replace(/```[\s\S]*?```/g, ' ').replace(/`([^`]*)`/g, '$1').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[#>*_|]+/g, ' ').replace(/\s+/g, ' ').trim();
 const clip = (t, n) => (t.length > n ? t.slice(0, n - 1).replace(/\s+\S*$/, '') + '…' : t).replace(/"/g, '”');
 // the first sentence, at most 120 characters: short, and the same every time for the same message
@@ -2957,6 +2961,14 @@ document.addEventListener('click', (e) => {
   const react = t.closest?.('[data-react]');
   const quote = t.closest?.('[data-quote]');
   const unquote = t.closest?.('[data-unquote]');
+  const more = t.closest?.('[data-rx-more]');
+  if (more) { // touch: ⋯ opens the row (hover does it with a mouse)
+    e.stopPropagation();
+    rx.openId = rx.openId === more.dataset.rxMore ? null : more.dataset.rxMore;
+    for (const m of document.querySelectorAll('.msg.them.rx-open')) m.classList.remove('rx-open');
+    if (rx.openId) more.closest('.msg')?.classList.add('rx-open');
+    return;
+  }
   if (!react && !quote && !unquote) return;
   e.stopPropagation();
   if (unquote) { rx.quote = null; return showQuoteChip(); }
@@ -3005,8 +3017,8 @@ function threadHtml(c) {
         const id = `${j.id}:${l.t}`;
         rx.msgs.set(id, l.text);
         const got = reacted.get(excerptOf(l.text)) ?? [];
-        out.push(`<div class="msg them ${l.sub ? 'sub' : ''}" data-msg="${esc(id)}"><div class="md">${c.newproject ? projectMd(l.text, id) : c.brainstorm ? brainstormMd(l.text, id, j.idea ?? c.jobs.find((x) => x.idea)?.idea) : md(l.text)}</div>
-          <div class="msg-foot">${l.sub ? '' : `<span class="rx-bar">${REACTIONS.map(([e, say]) => `<button type="button" class="rx" data-react="${e}" data-msg="${esc(id)}" title="${esc(`Sends: ${say}`)}">${e}</button>`).join('')}<span class="rx-sep"></span>${REQUESTS.map(([e, say, label]) => `<button type="button" class="rx" data-react="${e}" data-msg="${esc(id)}" title="${esc(`${label}: sends "${say}"`)}" aria-label="${label}">${e}</button>`).join('')}<button type="button" class="rx rx-q" data-quote="${esc(id)}" title="Reply to this message (select a part of it first to quote just that)">↩ Quote</button></span>`}
+        out.push(`<div class="msg them ${l.sub ? 'sub' : ''} ${rx.openId === id ? 'rx-open' : ''}" data-msg="${esc(id)}"><div class="md">${c.newproject ? projectMd(l.text, id) : c.brainstorm ? brainstormMd(l.text, id, j.idea ?? c.jobs.find((x) => x.idea)?.idea) : md(l.text)}</div>
+          <div class="msg-foot">${l.sub ? '' : `<button type="button" class="rx-more" data-rx-more="${esc(id)}" aria-label="React, quote, rephrase, summarize" title="React, quote, rephrase, summarize">⋯</button><span class="rx-bar">${REACTIONS.map(([e, say]) => `<button type="button" class="rx" data-react="${e}" data-msg="${esc(id)}" title="${esc(`Sends: ${say}`)}">${e}</button>`).join('')}<span class="rx-sep"></span>${REQUESTS.map(([e, say, label]) => `<button type="button" class="rx" data-react="${e}" data-msg="${esc(id)}" title="${esc(`${label}: sends "${say}"`)}" aria-label="${label}">${e}</button>`).join('')}<button type="button" class="rx rx-q" data-quote="${esc(id)}" title="Quote: reply to this message (select a part of it first to quote just that)" aria-label="Quote">↩</button></span>`}
             <span class="meta">${got.length ? `<span class="rx-got" title="Your reactions">${[...new Set(got)].join('')}</span>` : ''}${hhmm(l.t)}</span></div>
         </div>`);
       }
