@@ -4155,6 +4155,7 @@ const EXPERT = [
   ['flow', 'Workflow steps', [['One commit per ticket', 1], ['Acceptance check by a fresh agent', 1], ['Diff review by a fresh agent, findings validated', 1], ['Docs update by a fresh agent', 1], ['Diagram update', 0], ['Parking lot for deferred findings', 1]]],
   ['docs', 'Documentation', [['README: setup, usage and the quality gate', 1], ['CLAUDE.md / AGENTS.md kept current', 1], ['Architecture overview', 0], ['Decision records (ADRs)', 1], ['API reference (e.g. OpenAPI)', 0], ['User guide', 0], ['Changelog', 0], ['Diagrams of the architecture and the main flows', 1]]],
   ['diagrams', 'Diagram format', [['Mermaid', 1], ['PlantUML', 0], ['Mermaid and PlantUML', 0]], ONE],
+  ['diagramTypes', 'Diagram types', [['System context (C4 level 1)', 1], ['Containers (C4 level 2)', 1], ['Components (C4 level 3)', 0], ['Sequence diagrams of the main flows', 1], ['Data model (ER)', 1], ['State machines', 0], ['Activity / flow charts', 0], ['Deployment', 0], ['Class diagrams', 0]]],
   ['engine', 'Container engine', [['Podman', 1], ['Docker', 0], ['None: install on the host', 0]], ONE],
   ['services', 'Tools and services', [['Tools not installed on the host run in a container', 1], [XP_CHECK, 1], ['Dev services (database, mail, …) in a compose file', 0], ['Pinned image versions', 1]]],
 ];
@@ -4215,7 +4216,7 @@ function renderNewProject() {
   $('sc-title').innerHTML = 'New project<span class="sc-path">brainstorm it, then create it</span>';
   const cr = sc.create;
   morphHtml($('sc-bar'), `<div class="ag-row np-row"><label class="np-parent">Create in <input id="np-parent" value="${esc(sc.parentInput ?? '')}" spellcheck="false" autocomplete="off" ${jobs.length ? 'readonly title="Start a new brainstorm to choose another folder"' : ''}></label>
-      <button class="link xp-toggle" type="button" data-xp-toggle aria-pressed="${xp.open}" title="Quality gates, task checks, review topics, workflow steps, documentation, diagram format and containers for the new project">⚙ Expert mode</button>
+      <button class="link xp-toggle" type="button" data-xp-toggle aria-pressed="${xp.open}" title="Quality gates, task checks, review topics, workflow steps, documentation, diagram format and types, and containers for the new project">⚙ Expert mode</button>
       ${jobs.length ? '<button class="link" type="button" data-np-fresh>New brainstorm</button>' : ''}</div>
     ${xpHtml()}
     ${cr ? `<div class="ag-row np-create"><span class="ag-note">Create</span><code>${esc((sc.parentInput ?? '').replace(/\/$/, ''))}/</code><input id="np-name" value="${esc(cr.name)}" spellcheck="false" autocomplete="off">

@@ -309,6 +309,9 @@ defaults; **+ add** takes your own entries:
   overview, decision records (ADRs), an API reference, a user guide, a changelog, diagrams of the architecture and
   the main flows;
 - **Diagram format** (choose one): Mermaid (the default; GitHub renders it), PlantUML, or both;
+- **Diagram types**: which diagrams the project draws and keeps current, e.g. system context and containers (C4),
+  components, sequence diagrams of the main flows, the data model (ER), state machines, activity or flow charts,
+  deployment, class diagrams;
 - **Container engine** (choose one): Podman (the default), Docker, or none (install on the host);
 - **Tools and services**: tools that are not installed on the host run in a container; check the local containers
   and images for services to reuse before installing anything; dev services in a compose file; pinned image
@@ -316,7 +319,7 @@ defaults; **+ add** takes your own entries:
 
 Claude gets them with your next message and plans with them (the first ticket sets up the chosen gates). **Create**
 makes them binding: they go into the project's `openspec/config.yaml` (the quality gate, the rules for tasks, what
-every review covers, the documentation and the diagram format) and its CLAUDE.md. Your choices are remembered for the
+every review covers, the documentation, the diagram format and types) and its CLAUDE.md. Your choices are remembered for the
 next project.
 
 With the container check on, the dashboard adds the list of your local containers and images to the message (it

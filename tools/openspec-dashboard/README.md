@@ -56,7 +56,8 @@ onboarded one.
 
 **⚙ Expert mode** in that panel sets the workflow the project starts with: quality gates, what every task is
 checked for, what every change is reviewed for, the workflow steps, the documentation to keep, the diagram format
-(Mermaid, PlantUML or both; one choice), the container engine (Podman, Docker or none; one choice) and how tools
+(Mermaid, PlantUML or both; one choice) and the diagram types to draw (C4 context and containers, sequence, ER,
+state, deployment, …), the container engine (Podman, Docker or none; one choice) and how tools
 and services are run, as toggle chips with defaults and your own entries (remembered in the browser). With "Check
 local containers and images for services to reuse" on, the server adds the list of local containers and images
 (`ps -a` and `images` of the chosen engine; nothing is started) to the message, so Claude suggests reusing e.g. a
