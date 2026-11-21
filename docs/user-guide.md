@@ -233,6 +233,18 @@ or **Skip → next candidate** to move on to the next one.
 
 ![Chatting about a candidate before deciding](images/dashboard-discover-chat.png)
 
+### Start a new project
+
+**＋ Start a new project** (next to the heading) brainstorms a project that does not exist yet. Choose the folder it
+goes into and describe the idea; Claude asks about the problem, the users, the scope of a first version, the stack
+and the quality gate, and proposes a first milestone of tickets. Once you agree it shows the project as a card.
+**Create project…** asks for the folder name; **Create and set up** creates the folder and lets Claude write
+`CLAUDE.md`, the README and the OpenSpec setup with the roadmap from the brainstorming, in the background and without
+committing. From then on the dashboard follows the project, also after a restart; its first ticket sets up the
+skeleton.
+
+![Brainstorming a new project](images/dashboard-new-project.png)
+
 ## Styles
 
 The dashboard has ten styles:

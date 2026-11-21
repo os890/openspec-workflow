@@ -200,7 +200,8 @@ What makes it more than a status page:
   you send it.
 - **Several projects** at once with a live overview, and **onboarding** right from it: it finds folders with a
   `CLAUDE.md` or `AGENTS.md`, lets you chat with Claude about whether one is worth it, and sets up OpenSpec there
-  in the background (nothing committed).
+  in the background (nothing committed). Or **start a new project**: brainstorm it with Claude, and once you agree
+  it is created with its roadmap and followed from then on.
 - **Ten styles**, from Flat and Glass to Clay, Paper, Blackboard or a green-screen Terminal.
 
 | Charts | Brainstorming an idea next to the backlog |

@@ -1019,9 +1019,38 @@ function createAgent(project) {
       'Answer like in a chat: short, in Markdown, in the language the user writes in. When you have enough, give a clear recommendation, "Onboard" or "Skip", with the two or three reasons that decide it and what the first milestone would be. The user then decides with the buttons in the dashboard.',
     ].join('\n');
   }
+  // A new project: brainstormed in the folder it will be created in (read-only), then created and onboarded.
+  function newProjectSystem() {
+    return [
+      `You are a brainstorming partner for starting a NEW software project. It will get its own new folder inside ${displayPath(root)} (that folder is only the parent; its name says nothing about the project), be built ticket by ticket with OpenSpec and the OpenSpec ticket workflow by coding agents, and be followed in the OpenSpec dashboard.`,
+      'Help the user shape it: the problem and who it is for, the scope of a first usable version and what is explicitly out, the stack, the quality gate (one command that builds and tests everything), and a first milestone of 3 to 8 tickets in order, where the first ticket sets up the skeleton with its quality gates and the second is the first complete vertical slice.',
+      'Ask at most three focused questions at a time; push back on scope creep; propose sensible defaults instead of asking about everything. Read files in this folder (e.g. sibling projects, to reuse their conventions) only when the user refers to them; never change a file.',
+      'When the user agrees (or asks for it), write the project as one fenced code block with the info string "project", in this form, and nothing after the block except one short sentence:',
+      '```project',
+      'name: <a new folder name for the project, kebab-case, derived from what the project is>',
+      'title: <the name in words>',
+      'stack: <languages, frameworks, database>',
+      'quality gate: <one command>',
+      '---',
+      '<Markdown brief: purpose and users; scope of the first version; out of scope; conventions; milestone M1 "<title>" with the ordered tickets as `change-name`: goal (depends on …)>',
+      '```',
+      'Revise the block when the user asks for changes. If it does not converge, say so plainly and write no block. Answer like in a chat: short, in Markdown, in the language the user writes in.',
+    ].join('\n');
+  }
   const SKILL_MD = path.resolve(HERE, '..', '..', 'skills', 'openspec-ticket-workflow', 'SKILL.md');
-  function onboardPrompt() {
+  function onboardPrompt(brief) {
     const skill = fs.existsSync(SKILL_MD) ? `read ${SKILL_MD} and follow its setup part (and the references it points to)` : 'use the openspec-ticket-workflow skill if it is available';
+    if (brief) return [
+      'This project was just created: an empty folder with git initialised. Set it up for OpenSpec and the OpenSpec ticket workflow from the brief the user agreed on in a brainstorming:',
+      '', brief, '',
+      'Create CLAUDE.md (purpose, stack, conventions, the quality gate, and that work goes ticket by ticket with the workflow) and a short README.md.',
+      `Then set up OpenSpec: ${skill}.`,
+      USE_CLI ? `The OpenSpec CLI is available as \`${CLI}\`; use non-interactive options.` : 'Use the OpenSpec CLI if it is installed; otherwise write the files by hand.',
+      'Write openspec/config.yaml (context, conventions, the quality gate), roadmap.md with the milestone and the tickets of the brief in their order and dependencies, and a backlog draft in openspec/backlog/ for every ticket. There are no specs yet.',
+      'Do not write application code: the skeleton is the first ticket. Do not commit: leave every change uncommitted for the user to review.',
+      'Nobody can answer permission prompts: if a step needs a permission you do not have, skip it and say so at the end.',
+      'End with a short summary: what you created, what the user should check first, and the first ticket to start.',
+    ].join('\n');
     return [
       'Onboard this project to OpenSpec and the OpenSpec ticket workflow now' + (jobs.some((j) => j.kind === 'chat' && j.mode === 'scout') ? ', taking into account what we discussed.' : '.'),
       `To set it up, ${skill}.`,
@@ -1032,17 +1061,17 @@ function createAgent(project) {
       'End with a short summary: what you created, what the user should check first, and the first ticket to start.',
     ].join('\n');
   }
-  async function onboard({ onDone } = {}) {
+  async function onboard({ onDone, brief } = {}) {
     if (jobs.some((j) => j.kind === 'onboard' && j.child)) throw httpError(409, 'Onboarding is running already.');
     if (fs.existsSync(path.join(root, 'openspec'))) throw httpError(409, 'This folder has an openspec/ folder already; follow it instead.');
-    const scout = [...jobs].reverse().find((j) => j.kind === 'chat' && j.mode === 'scout' && j.sessionId);
+    const scout = brief ? null : [...jobs].reverse().find((j) => j.kind === 'chat' && j.mode === 'scout' && j.sessionId);
     if (scout?.child) { // end the chat process first; the onboarding continues its conversation
       const closed = new Promise((r) => scout.child.once('close', r));
       scout.child.stdin.end();
       await Promise.race([closed, new Promise((r) => setTimeout(r, 15000))]);
     }
     const job = newJob('onboard', null, null);
-    job.prompt = onboardPrompt();
+    job.prompt = onboardPrompt(brief);
     job.onExit = (j) => { if (j.status === 'done' && fs.existsSync(path.join(root, 'openspec'))) onDone?.(); };
     push(job, 'prompt', job.prompt);
     const tools = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash(git status:*)', 'Bash(git log:*)', 'Bash(ls:*)', 'Bash(mkdir:*)', ...(USE_CLI ? [`Bash(${CLI}:*)`] : [])];
@@ -1055,7 +1084,7 @@ function createAgent(project) {
   function chat({ text, fresh, mode = 'assistant', idea }) {
     text = String(text ?? '').trim();
     if (!text) throw httpError(400, 'The message is empty.');
-    if (!['assistant', 'brainstorm', 'scout'].includes(mode)) throw httpError(400, 'Unknown chat mode.');
+    if (!['assistant', 'brainstorm', 'scout', 'newproject'].includes(mode)) throw httpError(400, 'Unknown chat mode.');
     if (idea && !changeOf(idea)) throw httpError(404, `No idea "${idea}".`);
     let job = liveChat(mode);
     if (job && fresh) { job.child.stdin.end(); job = null; }
@@ -1079,7 +1108,7 @@ function createAgent(project) {
       launch(job, [...base, '--resume', prev.sessionId], userLine(text), true);
     } else {
       job.sessionId = randomUUID();
-      const sys = mode === 'brainstorm' ? brainstormSystem(job.idea) : mode === 'scout' ? scoutSystem() : chatSystem();
+      const sys = mode === 'brainstorm' ? brainstormSystem(job.idea) : mode === 'scout' ? scoutSystem() : mode === 'newproject' ? newProjectSystem() : chatSystem();
       launch(job, [...base, '--session-id', job.sessionId, '-n', `dashboard ${mode === 'assistant' ? 'chat' : mode} ${project.name}`, '--append-system-prompt', sys], userLine(text), true);
     }
     return { job: job.id };
@@ -1719,6 +1748,14 @@ try { const d = JSON.parse(fs.readFileSync(DISC_FILE, 'utf8')); disc.path = d.pa
 const saveDisc = () => { try { fs.mkdirSync(STATE_DIR, { recursive: true }); fs.writeFileSync(DISC_FILE, JSON.stringify({ path: disc.path, skipped: [...disc.skipped], added: [...disc.added] })); } catch { /* not essential */ } };
 function adopt(dir) { const p = addProject(dir); disc.added.add(dir); saveDisc(); overviewChanged(); return p; }
 const scouts = new Map();
+const newChats = new Map(); // parent folder -> pseudo project for brainstorming a new project there
+const expandHome = (d) => path.resolve(String(d ?? '').trim().replace(/^~(?=$|\/)/, os.homedir()));
+const homeDisplay = (d) => (d.startsWith(os.homedir() + path.sep) ? '~' + d.slice(os.homedir().length) : d);
+function newChatFor(dir) {
+  let p = newChats.get(dir);
+  if (!p) { p = { id: 'new-project', root: dir, name: path.basename(dir), clients: new Set(), state: null }; p.agent = createAgent(p); newChats.set(dir, p); }
+  return p;
+}
 function scoutFor(dir) {
   let p = scouts.get(dir);
   if (!p) { p = { id: 'candidate', root: dir, name: path.basename(dir), clients: new Set(), state: null }; p.agent = createAgent(p); scouts.set(dir, p); }
@@ -1727,7 +1764,8 @@ function scoutFor(dir) {
 const isFollowed = (dir) => projects.some((p) => p.root === dir || (() => { try { return p.root === fs.realpathSync(dir); } catch { return false; } })());
 function discoveryView() {
   return {
-    path: disc.path, display: disc.path ? (disc.path.startsWith(os.homedir() + path.sep) ? '~' + disc.path.slice(os.homedir().length) : disc.path) : null, scanning: disc.scanning, scannedAt: disc.scannedAt, error: disc.error,
+    path: disc.path, display: disc.path ? homeDisplay(disc.path) : null, scanning: disc.scanning, home: homeDisplay(os.homedir()),
+    newChats: [...newChats.entries()].map(([parent, p]) => ({ parent, display: homeDisplay(parent), jobs: p.agent.view().jobs.filter((j) => j.kind === 'chat') })), scannedAt: disc.scannedAt, error: disc.error,
     candidates: disc.candidates.map((c) => {
       const p = isFollowed(c.path) ? projects.find((x) => x.root === c.path || x.root === c.real) : null;
       return { ...c, followed: !!p, projectId: p?.id ?? null, openspec: fs.existsSync(path.join(c.path, 'openspec')), skipped: disc.skipped.has(c.path),
@@ -1771,7 +1809,8 @@ async function discover(start) {
   }
   return out.sort((a, b) => (b.lastCommit ?? 0) - (a.lastCommit ?? 0) || a.name.localeCompare(b.name));
 }
-async function discoveryAction({ action, path: p, text, fresh }) {
+async function discoveryAction(body) {
+  const { action, path: p, text, fresh } = body;
   if (action === 'scan') {
     let dir = String(p ?? '').trim().replace(/^~(?=$|\/)/, os.homedir());
     if (!dir || !path.isAbsolute(dir)) throw httpError(400, 'Enter an absolute folder path, e.g. ~/workspace.');
@@ -1784,6 +1823,23 @@ async function discoveryAction({ action, path: p, text, fresh }) {
     catch (e) { disc.error = e.message; }
     finally { disc.scanning = false; overviewChanged(); }
     return { found: disc.candidates.length };
+  }
+  if (action === 'newchat' || action === 'create') {
+    const parent = expandHome(body.parent);
+    if (!body.parent || !fs.statSync(parent, { throwIfNoEntry: false })?.isDirectory()) throw httpError(404, 'Choose an existing folder to create the project in, e.g. ~/code.');
+    if (action === 'newchat') { const r = newChatFor(parent).agent.chat({ text, fresh, mode: 'newproject' }); return { ...r, parent }; }
+    const name = String(body.name ?? '').trim();
+    if (!/^[a-z0-9][a-z0-9._-]*$/.test(name)) throw httpError(400, 'The folder name must be lower case: letters, digits, ".", "_" or "-".');
+    if (!String(body.brief ?? '').trim()) throw httpError(400, 'The brief is empty.');
+    const dir = path.join(parent, name);
+    if (fs.existsSync(dir)) throw httpError(409, `${homeDisplay(dir)} exists already.`);
+    await fsp.mkdir(dir);
+    await git(dir, ['init', '-q']);
+    const brief = String(body.brief).slice(0, 20000);
+    disc.candidates.unshift({ path: dir, real: dir, name, display: homeDisplay(dir), markers: [], about: brief.split('\n').find((l) => l.trim() && !/^(#|[a-z ]+:)/i.test(l.trim()))?.trim().slice(0, 200) ?? null, lastCommit: null, created: true });
+    const job = await scoutFor(dir).agent.onboard({ brief, onDone: () => adopt(dir) });
+    overviewChanged();
+    return { path: dir, job: job.id };
   }
   const c = disc.candidates.find((x) => x.path === p);
   if (!c) throw httpError(404, 'Not a candidate of the last scan.');

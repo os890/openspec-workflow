@@ -44,6 +44,15 @@ markers, the first line of its README, and when it was last committed; the most 
 - **Skip** hides a candidate; **show skipped** brings them back. A folder that has `openspec/` already gets
   **Follow** instead.
 
+**＋ Start a new project** brainstorms a project that does not exist yet. Pick the parent folder (e.g. `~/code`) and
+describe the idea: Claude asks about the problem and the users, the scope of a first version and what is out, the
+stack and the quality gate, and proposes a first milestone of tickets (the first sets up the skeleton, the second is
+the first vertical slice). It works read-only in the parent folder. Once you agree, it shows the project as a card;
+**Create project…** asks for the folder name, creates the folder, runs `git init` and starts the same background
+setup as an onboarding, with the agreed brief: `CLAUDE.md`, `README.md`, `openspec/` with the roadmap and a backlog
+draft per ticket, no application code, nothing committed. When it is done the project is followed like an
+onboarded one.
+
 The folder, the skipped candidates and the projects added this way are remembered
 (`$XDG_STATE_HOME/openspec-dashboard/discovery.json`), so added projects are followed again after a restart. With
 `--agent` the overview is reachable from the project picker (**All projects**) also when only one project is
