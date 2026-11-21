@@ -110,7 +110,8 @@ move that would put a change before one of its prerequisites.
 age of open changes against the typical time, the cycle time of each change split into its phases, the
 dependency graph with the critical path, and when tasks get checked off. The milestone picked above filters them.
 They are built from the git history of `openspec/` and from what the dashboard recorded while it ran, so they also
-cover the time before you first started it; hover for values, **Data** shows a table.
+cover the time before you first started it; hover for values, **Data** shows a table. **○ Focus** shows open work
+only: no archived band in the flow, no archived changes in the cycle times and the dependency graph.
 
 ![Charts](images/dashboard-charts.png)
 

@@ -95,6 +95,10 @@ file changed since it was read. Nothing else in the file is touched.
   Click a change to open it.
 - **When tasks get checked off**: check-offs per day and hour.
 
+**○ Focus** works here too: the flow leaves out the archived band (so the open statuses get the scale), and the cycle
+times and the dependency graph show only changes that are not archived; the medians still come from all finished
+changes.
+
 The data comes from two sources. **git**: every commit that touched `openspec/changes` or `openspec/backlog`
 (when a draft, a design or tasks appeared, a task was checked, a change was archived), so the charts cover the
 whole history, but only as finely as the commits: a ticket committed once shows up as done in one step. **The

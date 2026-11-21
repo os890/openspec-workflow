@@ -1801,11 +1801,11 @@ function renderBoard(s) {
     <div class="board-head">
       <span class="view-switch" role="tablist" aria-label="View"><button type="button" role="tab" data-board-view="board" aria-selected="${ui.boardView === 'board'}">Board</button><button type="button" role="tab" data-board-view="backlog" aria-selected="${ui.boardView === 'backlog'}">Backlog</button><button type="button" role="tab" data-board-view="charts" aria-selected="${ui.boardView === 'charts'}">Charts</button></span>
       ${max ? `<span class="board-live">${$('conn').innerHTML}</span>` : ''}
-      <span class="muted num" style="font-size:12.5px">${s.changes.filter(isDone).length} of ${s.changes.filter((c) => c.status !== 'parking').length} changes done · ${s.totals.done}/${s.totals.total} tasks${focus && ui.boardView !== 'charts' && byCol.archived.length ? ` · ${byCol.archived.length} archived hidden` : ''}</span>
+      <span class="muted num" style="font-size:12.5px">${s.changes.filter(isDone).length} of ${s.changes.filter((c) => c.status !== 'parking').length} changes done · ${s.totals.done}/${s.totals.total} tasks${focus && byCol.archived.length ? ` · ${byCol.archived.length} archived hidden` : ''}</span>
       ${s.changes.filter((c) => c.status === 'parking').map((c) => `<button type="button" class="btn" data-pick="${esc(c.name)}" title="Parking lot: deferred items, never archived">Parking lot · ${c.tasks ? `${c.tasks.total - c.tasks.done} open` : esc(c.name)}</button>`).join('')}
       <span class="ms-filter">${msBtn('', '<b>All</b>', s.changes.filter((c) => c.status !== 'parking'))}${s.milestones.map((m) => msBtn(m.id, `<b>${esc(m.id)}</b><span class="ms-name">${esc(m.title)}</span>`, s.changes.filter((c) => c.milestone === m.id), m.title)).join('')}</span>
       <span class="board-actions">${AGENT_TOKEN ? '<button class="btn board-toggle" type="button" data-chat-btn aria-controls="agent">Chat</button>' : ''}
-      ${ui.boardView === 'charts' ? '' : `<button class="btn board-toggle" type="button" data-board-focus aria-pressed="${ui.boardFocus}" title="${ui.boardFocus ? 'Show all columns again' : 'Hide archived tickets and fold empty columns, so the open tickets get the space'}">${ui.boardFocus ? '◉ Focus' : '○ Focus'}</button>`}
+      <button class="btn board-toggle" type="button" data-board-focus aria-pressed="${ui.boardFocus}" title="${ui.boardFocus ? 'Show the archived changes again' : ui.boardView === 'charts' ? 'Open work only: no archived band in the flow, no archived changes in the cycle times and the dependency graph' : 'Hide archived tickets and fold empty columns, so the open tickets get the space'}">${ui.boardFocus ? '◉ Focus' : '○ Focus'}</button>
       <button class="btn board-toggle" type="button" data-max aria-pressed="${max}" title="${max ? 'Back to the dashboard (Esc)' : 'Show the board across the whole window'}">${max ? 'Exit full screen ✕' : '⤢ Full screen'}</button></span>
     </div>
     ${now}
@@ -1952,23 +1952,24 @@ function timeFrame(W, H, t0, t1, maxY, { L = 34, R = 16, T = 10, B = 24 } = {}) 
 
 // ---- cumulative flow
 function cfdChart(s, shownNames, times, W) {
+  const BANDS = ui.boardFocus ? CF.filter(([k]) => k !== 'archived') : CF; // focus: open work only
   const names = [...shownNames].filter((n) => times.get(n) && Object.keys(times.get(n)).length);
   const ts = [...new Set(names.flatMap((n) => Object.values(times.get(n))))].sort((a, b) => a - b);
   const now = Date.now();
   if (ts.length < 2) return '<div class="empty">Not enough history yet: the flow appears after the first status changes (from git or while the dashboard runs).</div>';
   const t0 = ts[0], t1 = now;
   const pts = [...ts.filter((t) => t <= now), now].map((t) => {
-    const n = Object.fromEntries(CF.map(([k]) => [k, 0]));
-    for (const name of names) { const st = statusAt(times.get(name), t); if (st) n[st]++; }
+    const n = Object.fromEntries(BANDS.map(([k]) => [k, 0]));
+    for (const name of names) { const st = statusAt(times.get(name), t); if (st && st in n) n[st]++; }
     return { t, n };
   });
-  const maxY = Math.max(...pts.map((p) => CF.reduce((a, [k]) => a + p.n[k], 0)));
+  const maxY = Math.max(...pts.map((p) => BANDS.reduce((a, [k]) => a + p.n[k], 0)));
   const H = 240;
   const f = timeFrame(W, H, t0, t1, maxY, { R: 104 });
   let bands = '', gaps = '', labels = '';
   const cum = pts.map(() => 0);
   const lastY = [];
-  for (const [k, label, v] of CF) {
+  for (const [k, label, v] of BANDS) {
     const lo = cum.slice();
     pts.forEach((p, i) => { cum[i] += p.n[k]; });
     if (!pts.some((p) => p.n[k])) continue;
@@ -1985,9 +1986,9 @@ function cfdChart(s, shownNames, times, W) {
   lastY.sort((a, b) => a.y - b.y);
   for (let i = 1; i < lastY.length; i++) if (lastY[i].y - lastY[i - 1].y < 15) lastY[i].y = lastY[i - 1].y + 15;
   for (const l of lastY) labels += `<rect x="${W - f.R + 8}" y="${l.y - 5}" width="8" height="8" rx="2" fill="${CF_VAR[l.k]}"/><text class="ch-lbl" x="${W - f.R + 20}" y="${l.y + 3.5}">${l.label} <tspan class="ch-num">${l.n}</tspan></text>`;
-  chartGeo.set('cfd', { x: f.x, t0, t1, rows: pts.map((p) => ({ t: p.t, lines: [whenFmt(p.t), ...CF.slice().reverse().filter(([k]) => p.n[k]).map(([k, l]) => `${l}: ${p.n[k]}`)] })) });
-  const legend = `<div class="ch-legend">${CF.slice().reverse().map(([k, l]) => `<span><i style="background:${CF_VAR[k]}"></i>${l}</span>`).join('')}</div>`;
-  const table = `<details class="ch-data"><summary>Data</summary><table><thead><tr><th>Time</th>${CF.map(([, l]) => `<th>${l}</th>`).join('')}</tr></thead><tbody>${pts.slice(-40).reverse().map((p) => `<tr><td>${whenFmt(p.t)}</td>${CF.map(([k]) => `<td>${p.n[k]}</td>`).join('')}</tr>`).join('')}</tbody></table></details>`;
+  chartGeo.set('cfd', { x: f.x, t0, t1, rows: pts.map((p) => ({ t: p.t, lines: [whenFmt(p.t), ...BANDS.slice().reverse().filter(([k]) => p.n[k]).map(([k, l]) => `${l}: ${p.n[k]}`)] })) });
+  const legend = `<div class="ch-legend">${BANDS.slice().reverse().map(([k, l]) => `<span><i style="background:${CF_VAR[k]}"></i>${l}</span>`).join('')}</div>`;
+  const table = `<details class="ch-data"><summary>Data</summary><table><thead><tr><th>Time</th>${BANDS.map(([, l]) => `<th>${l}</th>`).join('')}</tr></thead><tbody>${pts.slice(-40).reverse().map((p) => `<tr><td>${whenFmt(p.t)}</td>${BANDS.map(([k]) => `<td>${p.n[k]}</td>`).join('')}</tr>`).join('')}</tbody></table></details>`;
   return `${legend}<svg class="ch-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Cumulative flow: ${lastY.map((l) => `${l.label} ${l.n}`).join(', ')}">
     ${f.grid}${bands}${gaps}${labels}
     <line class="ch-cross" x1="0" x2="0" y1="${f.T}" y2="${H - f.B}" visibility="hidden"/>
@@ -2062,18 +2063,20 @@ function ganttChart(s, shownNames, times, W) {
   const now = Date.now();
   const scopeBy = new Map();
   for (const x of tl.data?.scope ?? []) scopeBy.set(x.change, (scopeBy.get(x.change) ?? 0) + x.added);
-  const rows = [...shownNames].map((n) => ({ n, c: s.changes.find((x) => x.name === n), t: times.get(n) ?? {} }))
+  const all = [...shownNames].map((n) => ({ n, c: s.changes.find((x) => x.name === n), t: times.get(n) ?? {} }))
     .filter((r) => r.t.specified != null || r.t['in-progress'] != null || r.t.complete != null || r.t.archived != null)
     .map((r) => ({ ...r, ph: phasesOf(r.t, now), start: Math.min(...['specified', 'in-progress', 'complete', 'archived'].map((k) => r.t[k]).filter((v) => v != null)) }))
-    .sort((a, b) => a.start - b.start).slice(-30);
-  if (!rows.length) return '<div class="empty">No change has been specified yet.</div>';
+    .sort((a, b) => a.start - b.start);
+  const finished = all.filter((r) => r.t.specified != null && (r.t.archived ?? r.t.complete) != null)
+    .map((r) => ({ total: (r.t.archived ?? r.t.complete) - r.t.specified, ph: r.ph }));
+  const rows = all.filter((r) => !(ui.boardFocus && r.c?.status === 'archived')).slice(-30);
+  if (!rows.length) return `<div class="empty">${all.length ? 'Every change here is archived (focus mode hides them).' : 'No change has been specified yet.'}</div>`;
   const t0 = Math.min(...rows.map((r) => r.start)), t1 = now;
   const LBL = Math.min(230, Math.max(150, W * 0.28)), RT = 120, rowH = 24, T = 6;
   const H = T + rows.length * rowH + 26;
   const x = (t) => LBL + ((t - t0) / Math.max(1, t1 - t0)) * (W - LBL - RT);
   let g = '';
   for (const k of timeTicks(t0, t1, Math.max(2, Math.floor((W - LBL - RT) / 80)))) g += `<line class="ch-grid" x1="${x(k.t)}" x2="${x(k.t)}" y1="${T}" y2="${H - 22}"/><text class="ch-ax" x="${x(k.t)}" y="${H - 6}" text-anchor="middle">${k.label}</text>`;
-  const finished = [];
   rows.forEach((r, i) => {
     const y = T + i * rowH + 6, h = 12;
     const lab = `#${r.c?.inRoadmap ? r.c.order : '–'} ${title(r.n)}`;
@@ -2089,7 +2092,6 @@ function ganttChart(s, shownNames, times, W) {
     const st = r.t.specified ?? r.start;
     const end = r.t.archived ?? r.t.complete;
     const total = end != null ? end - st : now - st;
-    if (end != null && r.t.specified != null) finished.push({ total, ph: r.ph });
     const extra = scopeBy.get(r.n);
     g += `<text class="ch-lbl" x="${W - RT + 10}" y="${y + 10}">${r.t.specified == null ? '<tspan class="muted">—</tspan>' : `${end == null ? '<tspan class="muted">open </tspan>' : ''}${dur(total)}`}${extra ? ` <tspan class="ch-warn">+${extra} task${extra > 1 ? 's' : ''}</tspan>` : ''}</text>`;
   });
@@ -2160,7 +2162,7 @@ function heatChart(s, shownNames, times, W) {
 
 // ---- the roadmap as a dependency graph, with the longest open chain highlighted
 function depsChart(s, shownNames, times, W) {
-  const all = s.changes.filter((c) => c.inRoadmap && c.status !== 'parking');
+  const all = s.changes.filter((c) => c.inRoadmap && c.status !== 'parking' && !(ui.boardFocus && c.status === 'archived'));
   const byOrder = new Map(all.map((c) => [c.order, c]));
   const nodes = all.filter((c) => shownNames.has(c.name) || all.some((x) => shownNames.has(x.name) && x.dependsOn.includes(c.order)));
   if (!nodes.length) return '<div class="empty">No roadmap.</div>';
