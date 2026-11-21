@@ -13,7 +13,8 @@ The repository contains:
 - an agent skill, [`openspec-ticket-workflow`](skills/openspec-ticket-workflow/SKILL.md), that runs a ticket
   through the workflow and sets it up in a new project.
 - [`openspec-dashboard`](tools/openspec-dashboard/README.md), a live local dashboard to follow the progress of the
-  changes while agents work on them.
+  changes while agents work on them, with a backlog, charts from the git history and a chat with Claude Code
+  (see [below](#the-dashboard)).
 - two sample OpenSpec contexts, [`examples/todo-app`](examples/todo-app) and
   [`examples/habit-tracker`](examples/habit-tracker), and a short
   [user guide](docs/user-guide.md) with screenshots.
@@ -164,22 +165,46 @@ skill's references hold the pieces it uses:
   (acceptance check, diff review, findings validation, docs, diagrams),
 - [templates.md](skills/openspec-ticket-workflow/references/templates.md): roadmap, backlog draft and parking lot.
 
-## Following the progress
+## The dashboard
+
+A live, local dashboard for following agents (or a team) through the tickets: one Node script and one HTML page,
+no dependencies, no build, no install.
 
 ```sh
 cd <your project>
-node <path-to>/tools/openspec-dashboard/server.mjs
+node <path-to>/tools/openspec-dashboard/server.mjs          # add --agent to talk to Claude Code from it
 ```
-
-Shows the change being worked on with its current task, the milestone, an activity feed, a board of all
-changes (with a focus mode), a backlog view and charts of how the work flows (cumulative flow, burn-up with a
-forecast, cycle time, the critical path), updated live from the files, git and the `openspec` CLI. Several projects at once (`--scan=<dir>`) get an
-overview page. With `--agent` it also talks to Claude Code: ask about a ticket, message the working session or
-start a session on a ticket. No dependencies; see its [README](tools/openspec-dashboard/README.md).
 
 ![OpenSpec dashboard on the todo-app sample](docs/images/dashboard-overview.png)
 
+What makes it more than a status page:
+
+- **Live from the files.** Status is derived from `openspec/` itself, not from a tracker that drifts: the change
+  being worked on, its *current task* with the `verify:` criterion, when the last task was checked off and when a
+  file was last written, so you can tell whether the agent is still busy. Updates within a second.
+- **Board, backlog and focus.** A board in six columns derived from the files, a backlog per milestone like an
+  issue tracker (reorder untouched tickets by drag and drop; the dashboard rewrites the roadmap and keeps every
+  dependency number right), and a focus mode that hides what is archived.
+- **Charts from the git history.** Cumulative flow, a milestone burn-up with a forecast, the age of open work
+  against the typical time, the cycle time of every change split into specify, implement and review, the
+  dependency graph with the critical path, and when tasks get checked off. They are rebuilt from `git log` of
+  `openspec/`, so they cover the whole project, not just the time the dashboard ran.
+- **Talk to the agent** (`--agent`). A chat with a read-only project assistant, Claude Code sessions started on a
+  ticket from the dashboard, and messages to a session that is already working, also one in a terminal (through
+  a hook). It runs your local `claude` command with its own login: no API key, same plan.
+- **Voice and rephrasing, locally.** Dictate into any text box with a local speech-to-text container, and let a
+  local model turn a rough draft into a clear prompt. Nothing of it goes to the cloud, and nothing is sent until
+  you send it.
+- **Several projects** at once with a live overview, and **ten styles** from Flat and Glass to Clay, Paper,
+  Blackboard or a green-screen Terminal.
+
+| Charts | Backlog |
+|---|---|
+| ![Charts: cumulative flow, burn-up, cycle time, critical path](docs/images/dashboard-charts.png) | ![Backlog with the opened change highlighted](docs/images/dashboard-backlog.png) |
+
 ![Chat with the project assistant next to the full-screen board](docs/images/dashboard-chat.png)
+
+Details: the [user guide](docs/user-guide.md) and the dashboard [README](tools/openspec-dashboard/README.md).
 
 ## Rendering the diagrams
 
