@@ -1339,9 +1339,17 @@ function modelRoots() {
 }
 // chat models only: instruction-tuned GGUF files, no projectors, speech or embedding models
 const isChatModel = (f) => /\.gguf$/i.test(f) && !/^mmproj|tts|pocket|embed|whisper|vad|rerank/i.test(f) && /(-it\b|-it-|instruct|chat)/i.test(f);
+// A chosen model file. In a Hugging Face cache (…/models--org--repo/snapshots/<rev>/<file>.gguf) the file is a link
+// into blobs/ with a hash for a name, so the whole cache is mounted and the model is addressed by its snapshot path,
+// exactly like a model that was found automatically; a plain file is mounted with its folder.
 function modelFile(file) {
-  const real = fs.realpathSync(path.resolve(file));
-  return { root: path.dirname(real), rel: path.basename(real), sizeMb: fs.statSync(real).size / 1048576, file: path.basename(file), path: path.resolve(file) };
+  const p = path.resolve(file);
+  const sizeMb = fs.statSync(p).size / 1048576; // follows the link
+  const i = p.lastIndexOf(`${path.sep}models--`);
+  if (i > 0) return { root: p.slice(0, i), rel: p.slice(i + 1), sizeMb, file: path.basename(p), path: p };
+  const real = fs.realpathSync(p);
+  if (!/\.gguf$/i.test(real)) return { root: path.dirname(p), rel: path.basename(p), sizeMb, file: path.basename(p), path: p, linkTo: real };
+  return { root: path.dirname(real), rel: path.basename(real), sizeMb, file: path.basename(p), path: p };
 }
 function findModel() {
   const chosen = settings.rephrase.model || RP_MODEL_ARG;
@@ -1518,8 +1526,10 @@ function startLlm() {
       const others = (await run(rp.engine, ['ps', '--format', '{{.Names}}']).catch(() => '')).split('\n').filter((n) => n && n !== `openspec-dashboard-llm-${process.pid}`);
       const llms = others.filter((n) => /llm/i.test(n));
       const free = rp.engine === 'podman' && process.platform !== 'linux' ? Number((await run('podman', ['machine', 'ssh', 'free -m | sed -n 2p'], { timeout: 15000 }).catch(() => '')).trim().split(/\s+/)[6]) || null : null;
-      why = ` while loading the model${detail ? ` (${detail})` : ''}. It needs about ${(mem / 1024).toFixed(1)} GB in the ${rp.engine} VM${free ? `, which has ${(free / 1024).toFixed(1)} GB available now` : ''}.`
-        + (llms.length ? ` Another model container is running: ${llms.join(', ')}; it stops after 10 idle minutes, or stop it in ⚙ › Podman.` : others.length ? ` Other containers running: ${others.slice(0, 4).join(', ')}${others.length > 4 ? ' …' : ''}.` : '');
+      const enough = free != null && free >= mem;
+      if (me.adapterEnd && enough) why = ` while loading the model: ${me.adapterEnd}. Check the image and the model in ⚙ Settings.`;
+      else why = ` while loading the model${detail ? ` (${detail})` : ''}. It needs about ${(mem / 1024).toFixed(1)} GB in the ${rp.engine} VM${free ? `, which has ${(free / 1024).toFixed(1)} GB available now` : ''}${enough ? ', so memory was probably not the reason' : ''}.`
+        + (enough ? '' : llms.length ? ` Another model container is running: ${llms.join(', ')}; it stops after 10 idle minutes, or stop it in ⚙ › Podman.` : others.length ? ` Other containers running: ${others.slice(0, 4).join(', ')}${others.length > 4 ? ' …' : ''}.` : '');
     }
     const e = new Error(`The model container ended${why}`);
     me.onFail(e);
@@ -1553,6 +1563,7 @@ async function rephraseText(text) {
     return cleanSuggestion((await r.json()).choices?.[0]?.message?.content ?? '');
   }
   if (rp.kind === 'apple') return appleRephrase(messages);
+  if (!llm) await sttQueue; // a transcription in progress first: the speech and the language model do not load side by side
   const me = llm ?? startLlm();
   clearTimeout(me.idle);
   await Promise.race([me.ready, new Promise((_, rej) => setTimeout(() => rej(new Error('The model did not load within 3 minutes.')), 180000))]);
