@@ -188,7 +188,8 @@ only: no archived band in the flow, no archived changes in the cycle times and t
 
 ### Git history
 
-**⎇** in the header (on a project's page, in a git repository) opens the history of the project's repository:
+**⎇** in the header (on a project's page, in a git repository) opens the history of the project's repository; an
+orange dot on it says there are uncommitted changes (the tooltip counts the files changed, added or deleted):
 
 - at the top the commits, newest first, with a graph of the branches and badges for the current branch, other
   branches, tags and remote branches; more load as you scroll;
@@ -378,7 +379,7 @@ with an LLM adapter), **✨ Rephrase** turns a rough draft into a clear prompt: 
 dropped, in the language you wrote. It shows a suggestion; **Accept** replaces your text, **Reject** keeps it. On a
 CPU the first request waits until the model has loaded.
 
-**⚙ Settings** (in the header, and next to Rephrase) shows the models in use, with the matching option and its image
+**⚙ Settings** (in the header's ☰ menu, and next to Rephrase) shows the models in use, with the matching option and its image
 and model filled in. With **Choose automatically** the dashboard picks them; untick it to keep that setup fixed or to
 choose: for Rephrase a container with its image and model, a local server such as Ollama or LM Studio (URL and model name),
 Apple's on-device model on macOS 26 with Apple Intelligence, or off; for speech-to-text the whisper image, or off.
@@ -545,8 +546,8 @@ The dashboard has ten styles:
 | **Terminal** | retro green-screen CRT with scanlines and a blinking cursor; always dark |
 | **Comic** | halftone dots, thick ink outlines, the current task in a speech bubble |
 
-The style picker in the header switches the style, ◐ switches light and dark; both choices are remembered per
-browser. In a link, `?style=<name>` (lower case, e.g. `notebook`) and `?theme=light|dark` set them, e.g.
+**☰** at the end of the header holds the style picker, **◐ Switch** for light and dark, and the settings; both
+choices are remembered per browser. In a link, `?style=<name>` (lower case, e.g. `notebook`) and `?theme=light|dark` set them, e.g.
 http://127.0.0.1:4590/?style=paper&theme=dark.
 
 | Flat, light | Flat, dark | Glass, dark |

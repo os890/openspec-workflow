@@ -610,7 +610,11 @@ function createProject(root, id, historyFile, onChange) {
     }, { excludes: WORKSPACE_EXCLUDES, maxFiles: 40000 });
     const now = Date.now();
     all.sort((a, b) => b.mtime - a.mtime);
+    // uncommitted changes (files changed, added or deleted) for the dot on ⎇; null outside a git repository
+    const inside = (await gitRead(root, ['rev-parse', '--is-inside-work-tree'], 100))?.out?.trim() === 'true';
+    const status = inside ? await gitRead(root, ['status', '--porcelain', '--untracked-files=normal'], 1 << 20) : null;
     workspace = {
+      uncommitted: status ? status.out.split('\n').filter(Boolean).length : null,
       recent: all.slice(0, 15),
       changedLast15m: all.filter((f) => now - f.mtime < 15 * 60e3).length,
       changedLastHour: all.filter((f) => now - f.mtime < 60 * 60e3).length,

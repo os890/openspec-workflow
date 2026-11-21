@@ -245,7 +245,10 @@ of the branches and badges for the refs (150 at a time, more on scroll); below (
 selected commit with author, date, message, parents (click to jump), the changed files (status, +/−) and their
 unified diff, a merge against its first parent. **openspec/ only** keeps the commits that changed `openspec/`.
 ↑/↓, j/k, Page Up/Down, Home/End move; `Esc` restores, then closes; it reloads when the newest commit or the branch
-changes. `GET /api/git/log?skip=&only=1` and `GET /api/git/commit?h=` serve it.
+changes. `GET /api/git/log?skip=&only=1` and `GET /api/git/commit?h=` serve it. An orange dot on ⎇ marks
+uncommitted changes: the workspace scan (every 10 s while a page is open) also runs `git status --porcelain` and
+sends the number as `workspace.uncommitted`. The style picker, the light/dark switch and the settings sit in the
+header's ☰ menu, so the header stays short on small screens.
 
 A repository's content and configuration are untrusted: git runs without pager, external diff or textconv drivers,
 fsmonitor, prompts, optional locks or any transport (a partial clone does not fetch missing objects), with a

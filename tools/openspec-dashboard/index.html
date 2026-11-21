@@ -1458,6 +1458,14 @@ body.board-max { overflow: hidden; }
 .agent-panel.term-look-all .btn:not(.primary) { background: #161b22; color: #d6dde6; border-color: #30363d; }
 .agent-panel.term-look-all .chip { background: #161b22; color: #d6dde6; border-color: #30363d; }
 .agent-panel.term-look-all .chip[aria-selected="true"] { background: #1e3a8a; color: #fff; }
+.hdr-menu { position: fixed; top: 64px; right: 24px; z-index: 95; min-width: 260px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-hover); padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.hdr-menu[hidden] { display: none; }
+.hm-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 5px 4px; font-size: 13px; }
+.hm-row .style-select { min-width: 130px; }
+.hm-set:has(#settings-btn[hidden]) { display: none; }
+/* uncommitted changes: a dot on ⎇ */
+#git-btn { position: relative; }
+#git-btn.git-dirty::after { content: ""; position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background: #f08c2e; border: 2px solid var(--surface); }
 .bg-btn { display: inline-flex; align-items: center; gap: 6px; position: relative; }
 .bg-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--st-complete, #1f9d68); }
 .bg-has-working .bg-dot { background: var(--st-progress, #f5a54a); animation: pulse 1.6s infinite; }
@@ -1756,20 +1764,25 @@ body.ag-max { overflow: hidden; }
       <select id="project" class="style-select" aria-label="Project" title="Project" hidden></select>
       <span id="conn"><span class="dot"></span>connecting…</span>
       <span id="cli"></span>
-      <select id="style" class="style-select" aria-label="Style" title="Visual style">
-        <option value="flat">Flat</option><option value="glass">Glass</option><option value="clay">Clay</option><option value="paper">Paper</option><option value="whiteboard">Whiteboard</option><option value="blackboard">Blackboard</option><option value="notebook">Notebook</option><option value="matrix">Matrix</option><option value="terminal">Terminal</option><option value="comic">Comic</option>
-      </select>
       <button class="btn" id="agent-btn" type="button" data-chat-btn aria-controls="agent" hidden>Chat</button>
-      <button class="btn" id="theme" type="button" aria-label="Toggle light or dark theme">◐</button>
       <button class="btn" id="bg-btn" type="button" aria-label="Sessions in the background" aria-haspopup="true" aria-expanded="false" hidden></button>
       <button class="btn" id="term-btn" type="button" aria-label="Terminal sessions" aria-controls="agent" title="Sessions running in a terminal or an IDE: join one, follow it live, write to it" hidden>⌨</button>
       <button class="btn" id="folder-btn" type="button" aria-label="Open the project folder" title="Open the project folder in the file manager (which one: ⚙ Settings › General)" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg></button>
       <button class="btn" id="git-btn" type="button" aria-label="Git history" aria-controls="githist" title="Git history: the commits, branches and tags, and what each commit changed" hidden>⎇</button>
-      <button class="btn" id="settings-btn" type="button" aria-label="Settings" title="Settings: local models and Podman" hidden>⚙</button>
+      <button class="btn" id="menu-btn" type="button" aria-label="Look and settings" aria-haspopup="true" aria-expanded="false" aria-controls="hdr-menu" title="Style, light or dark, settings">☰</button>
     </div>
   </div>
 </header>
 
+<div class="hdr-menu" id="hdr-menu" role="menu" aria-label="Look and settings" hidden>
+  <label class="hm-row"><span>Style</span>
+    <select id="style" class="style-select" aria-label="Style" title="Visual style">
+      <option value="flat">Flat</option><option value="glass">Glass</option><option value="clay">Clay</option><option value="paper">Paper</option><option value="whiteboard">Whiteboard</option><option value="blackboard">Blackboard</option><option value="notebook">Notebook</option><option value="matrix">Matrix</option><option value="terminal">Terminal</option><option value="comic">Comic</option>
+    </select>
+  </label>
+  <div class="hm-row"><span>Light or dark</span><button class="btn" id="theme" type="button" aria-label="Toggle light or dark theme">◐ Switch</button></div>
+  <div class="hm-row hm-set"><span>Settings</span><button class="btn" id="settings-btn" type="button" aria-label="Settings" title="Settings: local models, Podman, write mode, file manager" hidden>⚙ Open…</button></div>
+</div>
 <div class="bg-pop" id="bg-pop" role="dialog" aria-label="Sessions in the background" hidden></div>
 <div class="wrap">
   <section class="overview" id="overview" aria-live="polite" hidden></section>
@@ -3182,6 +3195,11 @@ function render() {
 // ------------------------------------------------------------ live data
 function accept(next) {
   $('git-btn').hidden = false; ghOnState();
+  { // a dot on ⎇ while the repository has uncommitted changes
+    const n = next.workspace?.uncommitted ?? 0, b = $('git-btn');
+    b.classList.toggle('git-dirty', n > 0);
+    b.title = n > 0 ? `Git history · ${n} uncommitted change${n === 1 ? '' : 's'} (files changed, added or deleted)` : 'Git history: the commits, branches and tags, and what each commit changed';
+  }
   if (AGENT_TOKEN) $('folder-btn').hidden = false;
   const prev = ui.state;
   if (prev) {
@@ -3250,6 +3268,12 @@ $('style').addEventListener('change', (e) => {
   const st = applyStyle(e.target.value);
   try { localStorage.setItem('osd-style', st); } catch {}
 });
+// the menu at the end of the header: style, light or dark, settings
+const hdrMenu = (open) => { $('hdr-menu').hidden = !open; $('menu-btn').setAttribute('aria-expanded', String(open)); };
+$('menu-btn').addEventListener('click', (e) => { e.stopPropagation(); hdrMenu($('hdr-menu').hidden); });
+document.addEventListener('click', (e) => { if (!$('hdr-menu').hidden && !e.target.closest?.('#hdr-menu, #menu-btn')) hdrMenu(false); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('hdr-menu').hidden) hdrMenu(false); });
+$('settings-btn').addEventListener('click', () => hdrMenu(false));
 $('theme').addEventListener('click', () => {
   const root = document.documentElement;
   const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
