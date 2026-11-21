@@ -1840,7 +1840,7 @@ function icExchanges(c, tab) {
   const list = [];
   let cur = null;
   for (const j of conv.jobs) for (const l of j.log) {
-    if (l.kind === 'user') { cur = l.text.startsWith(prefix) ? { q: (l.text.match(IC_RE)?.[3] ?? l.text).replace(/^Please propose an updated version of (\S+?)(?: that does this: (.*?)| that applies what we discussed)(?:, so that openspec validate passes)?\. Write the complete new content[\s\S]*$/, (_, f, what) => `✎ Propose an update${what ? `: ${what}` : ''}`), t: l.t, a: [], key: '' } : null; if (cur) list.push(cur); }
+    if (l.kind === 'user') { cur = l.text.startsWith(prefix) ? { q: (l.text.match(IC_RE)?.[3] ?? l.text).replace(/^Please propose an updated version of (\S+?)(?: that does this: (.*?)| (that applies what we discussed)[^.,:]*|(: review it)[^.]*?)?(?:, so that openspec validate passes)?\. Write the complete new content[\s\S]*$/, (_, f, what, disc, review) => `✎ Propose an update${what ? `: ${what}` : disc ? ' from what we discussed' : review ? ': review and improve it' : ''}`), t: l.t, a: [], key: '' } : null; if (cur) list.push(cur); }
     else if (l.kind === 'text' && !l.sub && cur) { if (!cur.key) cur.key = `${j.id}:${l.t}`; cur.a.push(l.text); }
   }
   return { list: list.slice(-3), running: ['running', 'starting'].includes(conv.last?.status) };
@@ -1854,7 +1854,7 @@ function icHtml(c, tab) {
   const key = `${c.name}|${tab}`;
   return `<div class="ic" data-ic="${esc(key)}">
     <div class="ic-thread">${icThreadHtml(c, tab)}</div>
-    <div class="ic-compose"><textarea class="ic-text" rows="1" placeholder="Ask about the ${esc(IC_LABEL[tab])} of ${esc(title(c.name))}…"></textarea><button class="btn" type="button" data-ic-send>Ask</button>${icFiles(c, tab).length ? `<button class="btn" type="button" data-ic-propose title="Ask Claude for an updated version of ${esc(icFiles(c, tab).join(', '))}, with what you typed as the instructions (or what was discussed); you see a diff and accept or reject it">✎ Propose update</button>` : ''}</div>
+    <div class="ic-compose"><textarea class="ic-text" rows="1" placeholder="Ask about the ${esc(IC_LABEL[tab])} of ${esc(title(c.name))}…"></textarea><button class="btn" type="button" data-ic-send>Ask</button>${icFiles(c, tab).length ? `<button class="btn" type="button" data-ic-propose title="Ask Claude for an updated version of ${esc(icFiles(c, tab).join(', '))}: with what you type here as the instructions; with an empty box ${icExchanges(c, tab).list.length ? 'from what was discussed about it above' : 'Claude reviews it and proposes what it would improve'}. You see a diff and accept or reject it.">✎ Propose update</button>` : ''}</div>
     <div class="ic-note"><span class="ic-err"></span>Goes to the assistant with this context; it reads the project and changes nothing. Enter sends. <button class="link" type="button" data-chat="assistant">Continue in chat →</button></div>
   </div>`;
 }
@@ -1888,8 +1888,14 @@ async function icSend(box, propose = false) {
   const [name, tab] = box.dataset.ic.split('|');
   const c = ui.state.changes.find((x) => x.name === name);
   const files = icFiles(c, tab);
+  // what to change: what was typed; else what was discussed about this tab; else Claude reviews the file itself
+  const discussed = icExchanges(c, tab).list.length > 0;
+  const what = q ? ` that does this: ${q}`
+    : discussed ? ` that applies what we discussed about the ${IC_LABEL[tab]} above`
+    : tab === 'validation' ? ''
+    : ': review it and make the changes you consider most worthwhile (clearer, consistent with the proposal and the specs, nothing missing); keep the scope and invent no new requirements';
   const text = propose
-    ? `${icTag(c, tab)} Please propose an updated version of ${files.join(', ')}${q ? ` that does this: ${q}` : ' that applies what we discussed'}${tab === 'validation' ? ', so that openspec validate passes' : ''}. Write the complete new content in a fenced block whose info string is "edit" and the path (four backticks if the content contains three), one block per changed file, and say in one sentence what changed.`
+    ? `${icTag(c, tab)} Please propose an updated version of ${files.join(', ')}${what}${tab === 'validation' ? ', so that openspec validate passes' : ''}. Write the complete new content in a fenced block whose info string is "edit" and the path (four backticks if the content contains three), one block per changed file, and say in one or two sentences what changed${!q && !discussed ? ', as a short list' : ''}.`
     : `${icTag(c, tab)} ${q}`;
   try {
     await agentPost('chat', { text, mode: 'assistant' });
@@ -3153,8 +3159,8 @@ function lineDiff(a, b) {
   let i = 0, j = 0;
   while (i < n || j < m) {
     if (i < n && j < m && A[i] === B[j]) { ops.push([' ', A[i]]); i++; j++; }
-    else if (j < m && (i >= n || L[i][j + 1] >= L[i + 1][j])) ops.push(['+', B[j++]]);
-    else ops.push(['-', A[i++]]);
+    else if (i < n && (j >= m || L[i + 1][j] >= L[i][j + 1])) ops.push(['-', A[i++]]); // the old line first, then the new one
+    else ops.push(['+', B[j++]]);
   }
   return ops;
 }
