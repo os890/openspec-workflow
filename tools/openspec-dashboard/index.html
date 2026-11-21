@@ -3441,13 +3441,16 @@ const pmFetch = (method, body) => fetch('/api/podman', { method, headers: { 'con
   .then(async (r) => { const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` })); if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`); return d; });
 async function openPodman() {
   clearTimeout(st.pmTimer);
+  if (st.tab !== 'podman') return;
   if (!st.pm) { st.pmNote = 'Asking Podman…'; renderPodman(); }
   try { st.pm = await pmFetch('GET'); if (st.pmNote === 'Asking Podman…') st.pmNote = ''; } catch (e) { st.pmNote = '✕ ' + e.message; }
+  if (st.tab !== 'podman' || !$('settings').open) return; // switched away (or closed) while Podman was asked: do not draw over it
   renderPodman();
   if ($('settings').open && st.tab === 'podman') st.pmTimer = setTimeout(openPodman, st.pm?.op?.state === 'running' ? 2000 : 8000);
 }
 const gb = (mb) => `${(mb / 1024).toFixed(1)} GB`;
 function renderPodman() {
+  if (st.tab !== 'podman') return;
   const dlg = $('settings');
   const v = st.pm;
   const head = `<div class="set-head"><h2 id="set-title">Settings</h2><button class="link" type="button" data-set-close>Close ✕</button></div>${setTabs()}`;
@@ -3500,7 +3503,7 @@ $('settings').addEventListener('click', async (e) => {
   const t = e.target;
   if (t === $('settings') || t.closest('[data-set-close]')) return $('settings').close();
   const tab = t.closest('[data-set-tab]');
-  if (tab) { st.tab = tab.dataset.setTab; return st.tab === 'podman' ? openPodman() : st.view ? renderSettings() : openSettings(false); }
+  if (tab) { clearTimeout(st.pmTimer); st.tab = tab.dataset.setTab; return st.tab === 'podman' ? openPodman() : st.view ? renderSettings() : openSettings(false); }
   if (t.closest('[data-pm-restart]')) {
     if (!confirm('Restart the Podman VM? Every container in it stops; the checked ones are started again. Sessions that use containers (builds, tests, other tools) are interrupted.')) return;
     try { await pmFetch('POST', { action: 'restart' }); st.pmNote = ''; } catch (err) { st.pmNote = '✕ ' + err.message; }
