@@ -129,6 +129,11 @@ Before the first session:
 - For a session running in a terminal, install the hook once so it receives messages:
   `node tools/openspec-dashboard/agent-hook.mjs install <project>`.
 
+**Voice input**: if Podman has a speech-to-text image (whisper.cpp's `whisper-cli` with a model), the text boxes get
+a microphone. Click it, speak, click **Stop**: the recording is transcribed locally in that container, and the text
+lands in the box for you to check before you send it. Pick the language you speak next to it; that is much faster
+than **Auto**.
+
 Every question, chat message and session is a normal Claude Code run and counts towards your plan. Details:
 [dashboard README](../tools/openspec-dashboard/README.md#agent-panel-optional).
 

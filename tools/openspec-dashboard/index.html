@@ -1138,6 +1138,8 @@ body.board-max { overflow: hidden; }
 .ag-log li.sub { margin-left: 14px; }
 .ag-spin { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--st-progress); margin-right: 7px; animation: pulse 2.4s infinite; }
 .ag-open { font-size: 12px; padding: 2px 10px; }
+.ref { color: var(--accent); text-decoration: underline dotted; text-underline-offset: 2px; }
+.md a { color: var(--accent); }
 .ag-sub { margin: 0 var(--agp) 4px; display: flex; gap: 8px 10px; align-items: center; flex-wrap: wrap; }
 .ag-sub .link { margin-left: auto; font-size: 13px; }
 .ag-empty { color: var(--muted); font-size: 13px; padding: 6px 2px; }
@@ -1165,6 +1167,14 @@ body.board-max { overflow: hidden; }
 .ag-compose { display: flex; gap: 8px; align-items: flex-end; padding: 10px var(--agp) 4px; border-top: 1px solid var(--line); }
 .ag-compose textarea { flex: 1; min-height: 42px; max-height: 160px; resize: vertical; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); color: var(--ink); padding: 9px 12px; font: inherit; font-size: 13.5px; }
 .ag-route { padding: 0 var(--agp) 12px; }
+.ag-voice { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.ag-voice[hidden] { display: none !important; }
+.ag-mic { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; }
+.ag-mic.recording { background: color-mix(in srgb, var(--st-blocked) 16%, var(--surface)) !important; color: var(--st-blocked) !important; font-weight: 700; font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 calc(var(--lvl, 0) * 6px) color-mix(in srgb, var(--st-blocked) 25%, transparent); transition: box-shadow .15s; }
+.ag-mic.busy { color: var(--muted); }
+.rec-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st-blocked); animation: pulse 1.2s infinite; }
+.ag-lang { border: 0; background: var(--surface-2); color: var(--muted); border-radius: 999px; padding: 4px 6px; font-size: 11.5px; cursor: pointer; }
 /* on wide screens the full-screen board makes room for the panel instead of hiding columns under it */
 @media (min-width: 1100px) { body.ag-open:not(.ag-max) .board.max { padding-right: calc(min(480px, 100vw - 24px) + 24px); } }
 /* maximized: the panel covers the window, its content stays a readable centred column */
@@ -1284,7 +1294,9 @@ function applyStyle(name) {
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const inline = (s) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/(^|[\s(])\*([^*\s][^*]*?)\*(?=[\s.,;:!?)]|$)/g, '$1<em>$2</em>');
+// [text](url): web links open in a new tab; project paths show the text, the path is the tooltip
+const link = (_, text, url) => /^https?:\/\//.test(url) ? `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>` : `<span class="ref" title="${url}">${text}</span>`;
+const inline = (s) => esc(s).replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, link).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/(^|[\s(])\*([^*\s][^*]*?)\*(?=[\s.,;:!?)]|$)/g, '$1<em>$2</em>');
 const stVar = (s) => `var(${STATUS[s]?.v ?? '--st-proposed'})`;
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 // add-due-dates -> Add due dates (the slug stays visible where it matters)
@@ -1787,7 +1799,7 @@ function openTicket(change, mode, draft) {
   const ta = $('ag-text');
   if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
 }
-function closeAgent() { ag.open = false; $('agent').hidden = true; document.body.classList.remove('ag-open', 'ag-max'); updateAgentBtn(); }
+function closeAgent() { cancelRecording(); ag.open = false; $('agent').hidden = true; document.body.classList.remove('ag-open', 'ag-max'); updateAgentBtn(); }
 function applyAgentMax() {
   $('agent').classList.toggle('max', ag.max);
   document.body.classList.toggle('ag-max', ag.max && ag.open);
@@ -1813,6 +1825,7 @@ function buildChat(s) {
     <div class="ag-thread" id="ag-thread" aria-live="polite"></div>
     <div class="ag-compose">
       <textarea id="ag-text" rows="2" placeholder="${esc(ph)}">${esc(ag.drafts['chat-' + ag.convo] ?? '')}</textarea>
+      ${micHtml()}
       <button class="btn primary" type="button" data-ag-send>Send</button>
     </div>
     <div class="ag-note ag-route" id="ag-route"></div>`;
@@ -1825,7 +1838,7 @@ function buildTicket(s) {
   let form;
   if (ag.mode === 'ask') {
     form = `<textarea id="ag-text" rows="3" placeholder="Ask about ${esc(title(c.name))}, e.g. What is left to do? Which scenario covers …?">${esc(ag.drafts['ticket-ask'] ?? '')}</textarea>
-      <div class="ag-row"><button class="btn primary" type="button" data-ag-send>Ask</button><span class="ag-note">Claude reads this ticket's files read-only and answers here. ⌘/Ctrl+Enter sends.</span></div>`;
+      <div class="ag-row">${micHtml()}<button class="btn primary" type="button" data-ag-send>Ask</button><span class="ag-note">Claude reads this ticket's files read-only and answers here. ⌘/Ctrl+Enter sends.</span></div>`;
   } else {
     form = `<div class="ag-note">Starts a new Claude Code session that works on <b>${esc(title(c.name))}</b> with the ticket workflow. You follow and talk to it in the <b>Chat</b>.</div>
       ${ag.view?.trusted === false ? `<div class="ag-note warn">Claude Code does not trust this folder yet, so it ignores the project's permission rules and the session will be stuck at the first command. Run <code>claude</code> in ${esc(s.project)} once and accept the trust dialog.</div>` : ''}
@@ -1903,6 +1916,7 @@ function ticketItem(j) {
 function renderAgentLive() {
   updateAgentBtn();
   if (!ag.open || !ag.view) return;
+  for (const el of document.querySelectorAll('[data-ag-voice]')) el.hidden = !ag.view.stt?.available;
   if (ag.panel === 'chat') {
     if (!$('ag-thread')) return;
     const list = conversations();
@@ -1937,7 +1951,7 @@ function updateAgentBtn() {
 
 // ---- actions
 async function agentSend(force = false) {
-  if (ag.busy) return;
+  if (ag.busy || voice.state !== 'idle') return;
   const ta = $('ag-text');
   const text = ta?.value.trim() ?? '';
   ag.busy = true;
@@ -2024,6 +2038,152 @@ document.addEventListener('keydown', (e) => {
   if (chatSend || e.metaKey || e.ctrlKey) { e.preventDefault(); agentSend(false); }
 });
 setInterval(() => ag.open && renderAgentLive(), 15000);
+
+// ---- voice input: recorded here, transcribed by the local speech-to-text container (never by Claude); the text
+// only goes into the box, so it can be checked and corrected before it is sent
+const STT_LANGS = ['auto', 'en', 'de', 'fr', 'es', 'it', 'nl', 'pt', 'pl', 'cs', 'sv', 'da', 'no', 'fi', 'tr', 'ru', 'uk', 'ja', 'zh', 'ko'];
+const voice = { state: 'idle', rec: null, started: 0, timer: null, level: 0, lang: 'auto' };
+{
+  let l = null;
+  try { l = localStorage.getItem('osd-stt-lang'); } catch {}
+  const nav = (navigator.language || '').slice(0, 2).toLowerCase();
+  voice.lang = STT_LANGS.includes(l) ? l : STT_LANGS.includes(nav) ? nav : 'auto';
+}
+const langName = (c) => { if (c === 'auto') return 'Detect the language (slower)'; try { return new Intl.DisplayNames([navigator.language || 'en'], { type: 'language' }).of(c); } catch { return c; } };
+const MIC_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-6a3.5 3.5 0 1 0-7 0v6A3.5 3.5 0 0 0 12 15Zm6-3.5a1 1 0 1 0-2 0 4 4 0 0 1-8 0 1 1 0 1 0-2 0 6 6 0 0 0 5 5.91V20H8.5a1 1 0 1 0 0 2h7a1 1 0 1 0 0-2H13v-2.59a6 6 0 0 0 5-5.91Z"/></svg>';
+function micHtml() {
+  const on = !!ag.view?.stt?.available;
+  const label = voice.state === 'recording' ? `<span class="rec-dot"></span>${fmtSecs((Date.now() - voice.started) / 1000)} · Stop`
+    : voice.state === 'busy' ? '<span class="ag-spin"></span>Transcribing…' : MIC_SVG;
+  const title = voice.state === 'recording' ? 'Stop and transcribe' : voice.state === 'busy' ? 'Transcribing locally…'
+    : `Voice input: transcribed locally by ${ag.view?.stt?.image ?? 'the speech-to-text container'}; the text lands here to check before sending`;
+  return `<span class="ag-voice" data-ag-voice ${on ? '' : 'hidden'}>
+    <button class="btn ag-mic ${voice.state}" type="button" data-ag-mic title="${esc(title)}" aria-label="${voice.state === 'recording' ? 'Stop recording' : 'Voice input'}" ${voice.state === 'busy' ? 'disabled' : ''}>${label}</button>
+    <select class="ag-lang" data-ag-lang title="Language you speak (${esc(langName(voice.lang))})" aria-label="Language you speak">${STT_LANGS.map((c) => `<option value="${c}" ${c === voice.lang ? 'selected' : ''}>${c === 'auto' ? 'Auto' : c.toUpperCase()}</option>`).join('')}</select>
+  </span>`;
+}
+const fmtSecs = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+function refreshMic() {
+  for (const el of document.querySelectorAll('[data-ag-voice]')) el.outerHTML = micHtml();
+}
+function voiceNote(text, warn = false) {
+  const el = $('ag-route') ?? $('ag-note');
+  if (el) { el.textContent = text; el.style.color = warn ? 'var(--st-blocked)' : ''; }
+}
+async function startRecording() {
+  if (!navigator.mediaDevices?.getUserMedia) return voiceNote('This browser cannot record audio here.', true);
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } }); }
+  catch { return voiceNote('Microphone access was denied.', true); }
+  const ctx = new AudioContext();
+  const src = ctx.createMediaStreamSource(stream);
+  const chunks = [];
+  const take = (c) => {
+    chunks.push(c);
+    let sum = 0;
+    for (let i = 0; i < c.length; i += 4) sum += c[i] * c[i];
+    voice.level = Math.min(1, Math.sqrt(sum / (c.length / 4)) * 6);
+  };
+  let node;
+  if (ctx.audioWorklet && window.AudioWorkletNode) {
+    const code = "registerProcessor('osd-rec', class extends AudioWorkletProcessor { process(i) { const c = i[0] && i[0][0]; if (c) this.port.postMessage(c.slice(0)); return true; } });";
+    const url = URL.createObjectURL(new Blob([code], { type: 'application/javascript' }));
+    await ctx.audioWorklet.addModule(url);
+    URL.revokeObjectURL(url);
+    node = new AudioWorkletNode(ctx, 'osd-rec');
+    node.port.onmessage = (e) => take(e.data);
+  } else {
+    node = ctx.createScriptProcessor(4096, 1, 1);
+    node.onaudioprocess = (e) => take(e.inputBuffer.getChannelData(0).slice(0));
+  }
+  src.connect(node);
+  node.connect(ctx.destination); // silent: nothing is written to the outputs
+  voice.rec = { stream, ctx, chunks, rate: ctx.sampleRate };
+  voice.state = 'recording';
+  voice.started = Date.now();
+  voice.timer = setInterval(() => {
+    if (Date.now() - voice.started > 5 * 60e3) return stopRecording();
+    const b = document.querySelector('.ag-mic.recording');
+    if (b) { b.style.setProperty('--lvl', voice.level.toFixed(2)); b.innerHTML = `<span class="rec-dot"></span>${fmtSecs((Date.now() - voice.started) / 1000)} · Stop`; }
+  }, 200);
+  refreshMic();
+  voiceNote('Recording… click Stop when you are done.');
+}
+function endRecording() {
+  clearInterval(voice.timer);
+  const r = voice.rec;
+  voice.rec = null;
+  if (!r) return null;
+  r.stream.getTracks().forEach((t) => t.stop());
+  r.ctx.close().catch(() => {});
+  return r;
+}
+function cancelRecording() { if (voice.state === 'recording') { endRecording(); voice.state = 'idle'; } }
+async function stopRecording() {
+  const r = endRecording();
+  if (!r) return;
+  const wav = toWav16k(r.chunks, r.rate);
+  if (wav.byteLength < 44 + 16000 * 2 * 0.3) { voice.state = 'idle'; refreshMic(); return voiceNote('That was too short to transcribe.', true); }
+  voice.state = 'busy';
+  refreshMic();
+  voiceNote('Transcribing locally…');
+  try {
+    const res = await fetch(`/api/stt?lang=${encodeURIComponent(voice.lang)}`, { method: 'POST', headers: { 'content-type': 'audio/wav', 'x-osd-token': AGENT_TOKEN }, body: wav });
+    const d = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+    const ta = $('ag-text');
+    if (!d.text) voiceNote('No speech recognized.', true);
+    else if (ta) {
+      const at = ta.selectionStart ?? ta.value.length, end = ta.selectionEnd ?? at;
+      const before = ta.value.slice(0, at), after = ta.value.slice(end);
+      const ins = (before && !/\s$/.test(before) ? ' ' : '') + d.text + (after && !/^\s/.test(after) ? ' ' : '');
+      ta.value = before + ins + after;
+      ta.dispatchEvent(new Event('input', { bubbles: true })); // keeps the draft
+      ta.focus();
+      ta.setSelectionRange(before.length + ins.length, before.length + ins.length);
+      voiceNote(`Transcribed locally in ${(d.ms / 1000).toFixed(1)} s. Check the text, then send it.`);
+    }
+  } catch (e) {
+    voiceNote('✕ ' + e.message, true);
+  } finally {
+    voice.state = 'idle';
+    refreshMic();
+  }
+}
+// mono float samples at the recording rate -> 16 kHz mono 16-bit PCM WAV (what whisper.cpp reads)
+function toWav16k(chunks, rate) {
+  const len = chunks.reduce((a, c) => a + c.length, 0);
+  const data = new Float32Array(len);
+  let o = 0;
+  for (const c of chunks) { data.set(c, o); o += c.length; }
+  const ratio = rate / 16000;
+  const n = Math.floor(len / ratio);
+  const buf = new ArrayBuffer(44 + n * 2);
+  const v = new DataView(buf);
+  const str = (off, s) => { for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 16000, true);
+  v.setUint32(28, 32000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) {
+    const a = Math.floor(i * ratio), b = Math.max(a + 1, Math.min(len, Math.floor((i + 1) * ratio)));
+    let s = 0;
+    for (let k = a; k < b; k++) s += data[k];
+    const x = Math.max(-1, Math.min(1, s / (b - a))); // averaging also filters what 16 kHz cannot hold
+    v.setInt16(44 + i * 2, x < 0 ? x * 0x8000 : x * 0x7fff, true);
+  }
+  return buf;
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('[data-ag-mic]')) return;
+  if (voice.state === 'recording') stopRecording();
+  else if (voice.state === 'idle') startRecording();
+});
+document.addEventListener('change', (e) => {
+  if (!e.target.matches?.('[data-ag-lang]')) return;
+  voice.lang = e.target.value;
+  try { localStorage.setItem('osd-stt-lang', voice.lang); } catch {}
+  refreshMic();
+});
 
 // ------------------------------------------------------------ several projects
 // ?project=<id> shows one project; with several projects and no ?project= the overview is the start page.

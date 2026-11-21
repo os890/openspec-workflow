@@ -5,7 +5,7 @@
 //                  [--port=4590] [--host=127.0.0.1] [--cli=<command>] [--no-cli]
 //                  [--parking-lot=<change>] [--history=<file-or-dir>] [--no-open]
 //                  [--agent [--claude=<command>] [--agent-permission-mode=<mode>] [--agent-model=<model>]
-//                           [--agent-prompt=<file>]]
+//                           [--agent-prompt=<file>] [--stt-image=<image>] [--stt-language=<code>] [--no-stt]]
 //
 // Follows one or more projects (each a folder with openspec/). Without arguments it follows the current folder;
 // --scan finds every project with an openspec/ folder up to three levels below the given folder.
@@ -19,7 +19,9 @@
 // --agent adds an agent panel: ask read-only questions, send messages to a working Claude Code session and start a
 // session on a ticket. It runs the local `claude` command (Claude Code, with its own login), only on 127.0.0.1, and
 // every action needs a per-start token that only the served page knows. Sessions started elsewhere get messages
-// through agent-hook.mjs.
+// through agent-hook.mjs. If a speech-to-text image (whisper.cpp's whisper-cli) is available in Podman or Docker,
+// the text boxes get a microphone: the recording is transcribed locally in that container (no network) and the text
+// is only put into the box, never sent by itself.
 
 import http from 'node:http';
 import fs from 'node:fs';
@@ -56,6 +58,9 @@ const CLAUDE = claudeArg.includes('/') || claudeArg.includes(path.sep) ? path.re
 const AGENT_MODE = typeof opt('agent-permission-mode') === 'string' ? opt('agent-permission-mode') : 'acceptEdits';
 const AGENT_MODEL = typeof opt('agent-model') === 'string' ? opt('agent-model') : null;
 const AGENT_PROMPT = typeof opt('agent-prompt') === 'string' ? fs.readFileSync(path.resolve(opt('agent-prompt')), 'utf8') : null;
+const STT_IMAGE_ARG = typeof opt('stt-image') === 'string' ? opt('stt-image') : process.env.OPENSPEC_DASHBOARD_STT_IMAGE || null;
+const STT_LANGUAGE = typeof opt('stt-language') === 'string' ? opt('stt-language') : 'auto';
+const USE_STT = AGENT && !opt('no-stt');
 const TOKEN = randomBytes(18).toString('hex');
 if (AGENT && !['127.0.0.1', 'localhost', '::1'].includes(HOST)) {
   console.error('--agent starts Claude Code sessions and only runs on 127.0.0.1 (no --host).');
@@ -585,6 +590,7 @@ function createAgent(project) {
     const now = Date.now();
     return {
       permissionMode: AGENT_MODE, model: AGENT_MODEL, claude: CLAUDE, hooks: hooksInstalled(), trusted: trusted(root),
+      stt: { available: stt.available, image: stt.image, language: STT_LANGUAGE },
       hookInstall: `node ${displayPath(hookFile)} install ${displayPath(root)}`,
       sessions: inbox.sessions.filter((x) => now - x.t < 12 * 3600e3).slice(0, 6),
       messages: inbox.messages,
@@ -860,10 +866,86 @@ function createAgent(project) {
     setInterval(reloadInbox, 10000);
     reloadInbox();
   }
+  sttListeners.add(() => changed(0));
   return { view, ask, chat, start, message, control, cancel, brief, startWatching };
 }
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => { for (const c of children) { try { c.kill('SIGTERM'); } catch { /* gone */ } } process.exit(0); });
+}
+
+// ---------------------------------------------------------------- speech to text (with --agent)
+// Detects a container image whose entrypoint is whisper.cpp's whisper-cli with a model (-m ...), in Podman or Docker,
+// or takes --stt-image. A recording (16 kHz mono 16-bit WAV from the browser) goes in on stdin of a throwaway
+// container without network, with a read-only root and memory limits; the text comes back to the browser only.
+const stt = { available: false, image: null, engine: null, threads: 4, checkedAt: null, error: null };
+const sttListeners = new Set();
+const run = (cmd, args, { input = null, timeout = 30000 } = {}) => new Promise((resolve, reject) => {
+  const child = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+  let out = Buffer.alloc(0), err = '';
+  const timer = setTimeout(() => child.kill('SIGKILL'), timeout);
+  child.stdout.on('data', (d) => { out = Buffer.concat([out, d]); });
+  child.stderr.on('data', (d) => { err = (err + d).slice(-4000); });
+  child.on('error', (e) => { clearTimeout(timer); reject(e); });
+  child.on('close', (code) => { clearTimeout(timer); code === 0 ? resolve(out.toString('utf8')) : reject(new Error(err.trim().split('\n').slice(-2).join(' ') || `exit code ${code}`)); });
+  child.stdin.on('error', () => {});
+  if (input) child.stdin.end(input); else child.stdin.end();
+});
+async function detectStt() {
+  const before = JSON.stringify(stt);
+  try {
+    let engine = null;
+    for (const e of ['podman', 'docker']) { try { await run(e, ['--version'], { timeout: 10000 }); engine = e; break; } catch { /* next */ } }
+    if (!engine) throw new Error('Neither Podman nor Docker found.');
+    const isWhisper = async (img) => {
+      const ep = await run(engine, ['image', 'inspect', '--format', '{{json .Config.Entrypoint}}', img]).catch(() => 'null');
+      const a = JSON.parse(ep.trim() || 'null') ?? [];
+      return a.some((x) => /whisper-cli$/.test(x)) && a.includes('-m');
+    };
+    let image = null;
+    if (STT_IMAGE_ARG) {
+      if (!(await isWhisper(STT_IMAGE_ARG))) throw new Error(`${STT_IMAGE_ARG}: not found, or its entrypoint is not whisper-cli with -m <model>.`);
+      image = STT_IMAGE_ARG;
+    } else {
+      const raw = await run(engine, ['images', '--format', 'json']);
+      let list;
+      try { list = JSON.parse(raw || '[]'); } catch { list = raw.split('\n').filter(Boolean).map((l) => JSON.parse(l)); } // Docker: one object per line
+      const cands = list.flatMap((i) => (i.Names ?? i.RepoTags ?? (i.Repository ? [`${i.Repository}:${i.Tag}`] : [])).filter((n) => /whisper/i.test(n) && !/<none>/.test(n)).map((n) => ({ n, t: i.Created ?? 0 })))
+        .sort((a, b) => b.t - a.t);
+      for (const c of cands) if (await isWhisper(c.n)) { image = c.n; break; }
+    }
+    // threads: the CPUs the containers really get (Podman's VM on macOS/Windows), at most 4 (more were slower)
+    let cpus = os.availableParallelism?.() ?? 4;
+    if (engine === 'podman' && process.platform !== 'linux') {
+      cpus = Number((await run('podman', ['machine', 'inspect', '--format', '{{.Resources.CPUs}}']).catch(() => '')).trim().split('\n')[0]) || cpus;
+    }
+    Object.assign(stt, { available: !!image, image, engine, threads: Math.max(1, Math.min(4, cpus)), error: image ? null : 'No whisper-cli image found.' });
+  } catch (e) {
+    Object.assign(stt, { available: false, image: null, error: e.message });
+  }
+  stt.checkedAt = Date.now();
+  const { checkedAt, ...a } = JSON.parse(before);
+  const { checkedAt: _, ...b } = stt;
+  if (JSON.stringify(a) !== JSON.stringify(b)) for (const fn of sttListeners) fn();
+}
+let sttQueue = Promise.resolve();
+// Speed: a fixed language saves Whisper's language detection (a full extra encoder pass), and an audio context sized to
+// a short clip (-ac; 50 frames per second, 1500 = the full 30 s window) cuts the encoder's work: ~4 s instead of ~30 s.
+function transcribe(wav, lang = STT_LANGUAGE) {
+  if (!stt.available) return Promise.reject(httpError(409, 'No speech-to-text image is available.'));
+  if (wav.length < 44 || wav.toString('ascii', 0, 4) !== 'RIFF' || wav.toString('ascii', 8, 12) !== 'WAVE') return Promise.reject(httpError(400, 'Expected a WAV recording.'));
+  const seconds = (wav.length - 44) / 32000;
+  // language detection needs the full window: with a short one it returns garbage
+  const ac = lang !== 'auto' && seconds <= 27 ? Math.max(384, Math.ceil(seconds * 50) + 128) : 0;
+  if (!/^(auto|[a-z]{2,3})$/.test(lang)) return Promise.reject(httpError(400, 'Unknown language.'));
+  const args = ['run', '--rm', '-i', '--pull=never', '--network=none', '--read-only', '--tmpfs', '/tmp:rw,size=16m,mode=1777',
+    '--cap-drop=ALL', '--security-opt=no-new-privileges', '--memory=3g', '--pids-limit=64', '--log-driver=none',
+    stt.image, '-t', String(stt.threads), '-l', lang, '-ac', String(ac),
+    '-sns', '-np', '-nt', '-of', '/tmp/transcript', '-f', '-'];
+  const job = () => run(stt.engine, args, { input: wav, timeout: 120000 + seconds * 3000 }).then((out) => out.split('\n')
+    .map((l) => l.replace(/^\s*\[[^\]]*-->[^\]]*\]\s*/, '').trim()).filter(Boolean).join(' ').replace(/\s+/g, ' ').trim());
+  const p = sttQueue.then(job);
+  sttQueue = p.catch(() => {});
+  return p;
 }
 
 // ---------------------------------------------------------------- which projects
@@ -963,6 +1045,22 @@ const server = http.createServer(async (req, res) => {
       const html = await fsp.readFile(INDEX, 'utf8');
       return res.end(AGENT ? html.replace('<meta name="osd-agent" content="">', `<meta name="osd-agent" content="${TOKEN}">`) : html);
     }
+    if (url.pathname === '/api/stt' && req.method === 'POST') {
+      if (!AGENT) { res.writeHead(404); return res.end('start the dashboard with --agent'); }
+      const origin = req.headers.origin;
+      if (req.headers['x-osd-token'] !== TOKEN || (origin && !OWN_HOSTS.has(new URL(origin).host))) { res.writeHead(403); return res.end('forbidden'); }
+      const chunks = [];
+      let size = 0;
+      for await (const c of req) { size += c.length; if (size > 40e6) { res.writeHead(413); return res.end('recording too long'); } chunks.push(c); }
+      const t0 = Date.now();
+      try {
+        const text = await transcribe(Buffer.concat(chunks), url.searchParams.get('lang') || STT_LANGUAGE);
+        return json(res, { text, ms: Date.now() - t0 });
+      } catch (e) {
+        res.writeHead(e.status ?? 500, { 'content-type': 'application/json' });
+        return res.end(JSON.stringify({ error: e.message }));
+      }
+    }
     if (url.pathname.startsWith('/api/agent')) {
       if (!AGENT) { res.writeHead(404); return res.end('start the dashboard with --agent'); }
       const p = projectFor(url);
@@ -1026,6 +1124,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 for (const p of projects) { await p.scanWorkspace(); await p.publish(); p.start(); p.agent?.startWatching(); }
+if (USE_STT) { detectStt().then(() => console.log(`  Voice input: ${stt.available ? `${stt.engine} image ${stt.image}` : `off (${stt.error})`}`)); setInterval(detectStt, 60000); }
 server.listen(PORT, HOST, () => {
   const link = `http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}/`;
   console.log(`OpenSpec dashboard\n  ${link}\n  CLI: ${USE_CLI ? CLI : 'disabled'}`);

@@ -86,6 +86,15 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
 node server.mjs --agent                              # in the project folder, or with --project/--scan
 ```
 
+**Voice input.** If Podman (or Docker) has a speech-to-text image, every text box of the panel gets a microphone.
+The recording is transcribed locally in that container, never by Claude, and the text only goes into the box, so
+you can check and correct it before sending. The dashboard looks for an image whose entrypoint is whisper.cpp's
+`whisper-cli` with its model (`whisper-cli -m <model> …`) and checks again every minute; `--stt-image` names one.
+Each recording runs in a throwaway container without network, with a read-only root and memory limits; the audio
+goes in on stdin and is never written to a file. The small selector next to the microphone is the language you
+speak (default: the browser's language). With a fixed language a short clip takes a few seconds; **Auto** detects
+the language first, which takes noticeably longer on a CPU.
+
 It runs the `claude` command (Claude Code) in the project folder, so it uses Claude Code's own login and counts
 towards the same plan or account as your other sessions; there is no separate key. Each question and session is
 a normal Claude Code run.
@@ -147,6 +156,9 @@ Without a working CLI everything except the validation results still works.
 | `--agent-permission-mode=<mode>` | `acceptEdits` | permission mode of started sessions (`acceptEdits`, `auto`, `dontAsk`, `plan`, …) |
 | `--agent-model=<model>` | Claude Code's default | model for questions and sessions, e.g. `sonnet` |
 | `--agent-prompt=<file>` | built in | first message of a started session; `{change}` is replaced by the change name |
+| `--stt-image=<image>` | detected (or `OPENSPEC_DASHBOARD_STT_IMAGE`) | speech-to-text image: entrypoint `whisper-cli -m <model>` |
+| `--stt-language=<code>` | `auto` | language when the page sends none |
+| `--no-stt` | | no voice input |
 
 Nine styles, picked in the header: Flat, Glass, Paper, Whiteboard, Notebook and Comic (each in light and dark), Blackboard, Matrix and Terminal (always dark). In the address, `?style=flat|glass|paper|whiteboard|blackboard|notebook|matrix|terminal|comic` and `?theme=light|dark` choose the look (otherwise the header buttons and the
 system setting decide), `?panel=chat` opens the chat, and `?snapshot` loads the data once without the live stream (useful for screenshots).
