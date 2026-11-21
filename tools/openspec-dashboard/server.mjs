@@ -449,7 +449,7 @@ function parseJsonOutput(s) {
 function createProject(root, id, historyFile, onChange) {
   const OPENSPEC = path.join(root, 'openspec');
   const rel = (p) => relTo(root, p);
-  const cli = { available: USE_CLI, lastRun: null, durationMs: null, error: null, validate: {}, list: {}, version: null };
+  const cli = { available: USE_CLI, lastRun: null, durationMs: null, error: null, validate: {}, list: {}, show: {}, version: null };
   let workspace = { recent: [], changedLast15m: 0, changedLastHour: 0, scannedAt: null };
   let history = { snapshot: null, events: [], series: [] };
   try { history = { ...history, ...JSON.parse(fs.readFileSync(historyFile, 'utf8')) }; } catch { /* first run */ }
@@ -483,6 +483,16 @@ function createProject(root, id, historyFile, onChange) {
         cli.validate[`${item.type}:${item.id}`] = { valid: item.valid, issues: (item.issues ?? []).map((i) => ({ level: i.level, path: i.path, message: i.message })) };
       }
       cli.list = Object.fromEntries((l.changes ?? []).map((c) => [c.name, c]));
+      // what validate checked: the spec deltas of each active change (openspec show), so a passing change is not
+      // just "passes"; at most 12 changes, the ones not archived
+      const show = {};
+      for (const name of Object.keys(cli.list).slice(0, 12)) {
+        try {
+          const d = parseJsonOutput(await run(['show', name, '--json', '--no-interactive']));
+          show[name] = (d.deltas ?? []).map((x) => ({ op: x.operation, spec: x.spec, requirement: x.requirement?.name ?? null, scenarios: x.requirement?.scenarios?.length ?? 0 }));
+        } catch { /* keep the rest */ }
+      }
+      cli.show = show;
       cli.error = null;
     } catch (e) {
       cli.error = e.message;
@@ -607,6 +617,7 @@ function createProject(root, id, historyFile, onChange) {
       c.milestone = c.inRoadmap ? milestones.find((m) => orderNum(c.order) >= m.from && orderNum(c.order) <= m.to)?.id ?? null : null;
       c.validation = cli.validate[`change:${c.name}`] ?? null;
       c.cliList = cli.list[c.name] ?? null;
+      c.deltas = cli.show[c.name] ?? null;
     }
     for (const c of changes) {
       c.blockedBy = c.dependsOn.filter((o) => !isDone(byOrder.get(o)));

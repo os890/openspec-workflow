@@ -222,8 +222,11 @@ refused. Questions and the assistant cannot change files. Questions, chats and s
 The dashboard runs `openspec validate --all --json` and `openspec list --json` when something under `openspec/`
 changed (checked every 60 seconds and after file changes), one call at a time across all projects, and shows the
 result per change. A call that takes longer than two minutes is stopped and not repeated; after a failure the next
-try waits 1, 2, 4 … up to 15 minutes. The **Validation** tab says what the CLI is doing, and that drafts in
-`openspec/backlog/` and archived changes are not validated by it. It uses `openspec` from `PATH`. If OpenSpec runs
+try waits 1, 2, 4 … up to 15 minutes. For each active change it also runs `openspec show <change> --json`, so the
+**Validation** tab shows what was checked (every spec delta with its requirement and number of scenarios, a missing
+scenario marked) next to the errors, warnings and notes. It also says what the CLI is doing, and that drafts in
+`openspec/backlog/` and archived changes are not validated by it. Validation checks the structure of a change
+(requirements with SHALL/MUST and at least one scenario), so it matters from the moment a change is specified. It uses `openspec` from `PATH`. If OpenSpec runs
 somewhere else (a container, a wrapper script), point the dashboard at it:
 
 ```sh
