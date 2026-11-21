@@ -305,7 +305,8 @@ thread shows each one short, e.g. **👀 Status**.
   change it is on and how many are left;
 - steer the work: ⏸ finish the current step, then stop and wait, 🎯 stay within the current ticket and put anything
   else in the parking lot, 🧹 wrap up (finish the task, update tasks.md, summarize);
-- quality: 🧪 run the quality gate now and report the result, without fixing anything yet.
+- quality and trying it out: 🧪 run the quality gate now and report the result, without fixing anything yet;
+  ▶️ start the app in a clean way (stop what still runs, a clean build, start it) and say how to reach it.
 
 ![Quick messages under the input box](images/dashboard-quick-messages.png)
 
