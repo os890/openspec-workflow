@@ -316,6 +316,28 @@ span.ch-warn { color: var(--st-progress); }
   border-radius: 8px; padding: 6px 10px; font-size: 12px; line-height: 1.45; max-width: 320px; }
 .ch-tip .h { font-weight: 700; }
 .board.max .charts { padding-bottom: 8px; }
+/* settings dialog: local models */
+.set-dialog { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); padding: 18px 22px; box-shadow: var(--shadow-hover); }
+.set-dialog::backdrop { background: rgba(0, 0, 0, .35); }
+.set-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+.set-head h2 { margin: 0; font-size: 19px; margin-right: auto; }
+.set-sec { border-top: 1px solid var(--line); padding: 12px 0 6px; display: flex; flex-direction: column; gap: 6px; }
+.set-sec h3 { margin: 0; font-size: 14px; }
+.set-status { font-size: 12.5px; } .set-status.ok { color: var(--st-complete); } .set-status.bad { color: var(--st-blocked); }
+.set-opt { display: flex; gap: 10px; align-items: flex-start; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
+.set-opt:hover { background: var(--surface-2); } .set-opt.off { opacity: .55; cursor: default; }
+.set-opt b { display: block; font-size: 13.5px; } .set-desc { font-size: 12px; color: var(--muted); }
+.set-sub, .set-row { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 2px 8px 8px 34px; }
+.set-row { padding-left: 0; align-items: flex-end; }
+.set-sub label, .set-row label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); flex: 1 1 220px; min-width: 0; }
+.set-sub input, .set-sub select, .set-row select { font: inherit; font-size: 13px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; min-width: 0; }
+.set-row .set-check { flex: 0 0 auto; flex-direction: row; align-items: center; gap: 6px; padding-bottom: 7px; }
+.set-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 12px; margin-top: 4px; }
+.set-actions .btn.primary { background: var(--accent) !important; color: var(--bg) !important; border-color: var(--accent) !important; font-weight: 700; }
+.set-note { font-size: 12.5px; color: var(--muted); } .set-note.warn { color: var(--st-blocked); font-weight: 600; }
+.set-test { margin: 10px 0 4px; font-size: 13px; background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
+.set-dialog .ag-note { margin-top: 10px; }
+.ag-gear { font-size: 16px; text-decoration: none; padding: 0 4px; color: var(--muted); } .ag-gear:hover { color: var(--accent); }
 /* backlog: new tickets and ideas */
 .bl-tools { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
 .nt-done { font-size: 13px; display: inline-flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 6px 12px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--st-complete) 12%, var(--surface)); }
@@ -1443,6 +1465,7 @@ body.ag-max { overflow: hidden; }
       </select>
       <button class="btn" id="agent-btn" type="button" data-chat-btn aria-controls="agent" hidden>Chat</button>
       <button class="btn" id="theme" type="button" aria-label="Toggle light or dark theme">◐</button>
+      <button class="btn" id="settings-btn" type="button" aria-label="Local models" title="Local models: rephrasing and speech-to-text" hidden>⚙</button>
     </div>
   </div>
 </header>
@@ -1458,6 +1481,7 @@ body.ag-max { overflow: hidden; }
   </div>
   <section class="panel board" id="board"></section>
 </div>
+<dialog class="set-dialog" id="settings" aria-labelledby="set-title"></dialog>
 <aside class="drawer agent-panel" id="agent" aria-label="Agent" hidden></aside>
 
 <script>
@@ -3219,7 +3243,8 @@ const draftKey = () => (ag.panel === 'chat' ? 'chat-' + ag.convo : 'ticket-' + a
 function rephraseBtnHtml() {
   const on = !!ag.view?.rephrase?.available;
   return `<button class="btn ag-rp" type="button" data-ag-rephrase ${on ? '' : 'hidden'} ${rps.state === 'busy' ? 'disabled' : ''}
-    title="Rephrase the text into a clear prompt with the local model${ag.view?.rephrase?.model ? ` (${esc(ag.view.rephrase.model)})` : ''}; you accept or reject the suggestion">${RP_SVG}<span>Rephrase</span></button>`;
+    title="Rephrase the text into a clear prompt with the local model${ag.view?.rephrase?.model ? ` (${esc(ag.view.rephrase.model)})` : ''}; you accept or reject the suggestion">${RP_SVG}<span>Rephrase</span></button>`
+    + '<button class="link ag-gear" type="button" data-set-open title="Local models: rephrasing and speech-to-text" aria-label="Local models">⚙</button>';
 }
 function suggestHtml() {
   if (rps.key !== draftKey() || rps.state === 'idle' && !rps.text && !rps.error) return '';
@@ -3272,6 +3297,111 @@ document.addEventListener('click', (e) => {
   }
   if (t.closest('[data-ag-reject]')) { Object.assign(rps, { text: null, error: null }); refreshSuggest(); $('ag-text')?.focus(); }
 });
+
+// ------------------------------------------------------------ settings: the local models (with --agent)
+// Which model rephrases drafts (a container, a local OpenAI-compatible server such as Ollama or LM Studio, Apple's
+// on-device model on macOS 26, or none) and which image transcribes speech. Saved by the server; applies at once.
+const st = { view: null, busy: false, note: '', test: null };
+async function settingsFetch(method, body, fresh) {
+  const r = await fetch('/api/settings' + (fresh ? '?fresh' : ''), { method, headers: { 'content-type': 'application/json', 'x-osd-token': AGENT_TOKEN }, body: body ? JSON.stringify(body) : undefined });
+  const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+  if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+  return d;
+}
+async function openSettings(fresh) {
+  const dlg = $('settings');
+  if (!dlg.open) dlg.showModal();
+  st.note = 'Looking for local models…'; renderSettings();
+  try { st.view = await settingsFetch('GET', null, fresh); st.note = ''; } catch (e) { st.note = '✕ ' + e.message; }
+  renderSettings();
+}
+function renderSettings() {
+  const v = st.view;
+  const dlg = $('settings');
+  if (!v) { dlg.innerHTML = `<div class="set-head"><h2 id="set-title">Local models</h2><button class="link" type="button" data-set-close>Close ✕</button></div><div class="ag-note">${esc(st.note)}</div>`; return; }
+  const r = v.settings.rephrase, o = v.options;
+  const radio = (val, label, desc, disabled = false) => `<label class="set-opt ${disabled ? 'off' : ''}"><input type="radio" name="rp" value="${val}" ${r.provider === val ? 'checked' : ''} ${disabled ? 'disabled' : ''}><span><b>${label}</b><span class="set-desc">${desc}</span></span></label>`;
+  const opt = (val, label, cur) => `<option value="${esc(val)}" ${val === (cur ?? '') ? 'selected' : ''}>${esc(label)}</option>`;
+  const now = v.rephrase;
+  const status = now.available
+    ? `✓ ${now.kind === 'container' ? `Container <code>${esc(now.image)}</code> with <code>${esc(now.model)}</code> · ${esc(now.state)}` : now.kind === 'url' ? `Server <code>${esc(now.url)}</code>${now.model ? ` · model <code>${esc(now.model)}</code>` : ''}` : 'Apple on-device model'}`
+    : `✕ ${esc(now.error ?? 'Not available.')}`;
+  dlg.innerHTML = `
+    <div class="set-head"><h2 id="set-title">Local models</h2><button class="link" type="button" data-set-refresh title="Look for images and models again">Look again</button><button class="link" type="button" data-set-close>Close ✕</button></div>
+    <section class="set-sec">
+      <h3>Rephrase</h3>
+      <div class="set-status ${now.available ? 'ok' : 'bad'}">${status}</div>
+      ${radio('auto', 'Automatic', `${v.flags.url ? 'the server given with --rephrase-url' : 'the first LLM container found'}, otherwise Apple's on-device model`)}
+      ${radio('container', 'Container (Podman or Docker)', 'an image with an LLM adapter runs a GGUF model; started on the first request, stopped after 10 idle minutes')}
+      <div class="set-sub" data-for="container">
+        <label>Image <select data-set="image">${opt('', o.images.length ? `automatic (${o.images[0]})` : 'automatic (none found)', r.image)}${o.images.map((i) => opt(i, i, r.image)).join('')}</select></label>
+        <label>Model <select data-set="model">${opt('', o.models.length ? `automatic: the largest (${o.models[0].file})` : 'automatic (none found)', r.model)}${o.models.map((m) => opt(m.path, `${m.file} · ${(m.sizeMb / 1024).toFixed(1)} GB`, r.model)).join('')}</select></label>
+      </div>
+      ${radio('url', 'Local server (OpenAI-compatible)', 'e.g. Ollama, LM Studio or llama.cpp’s llama-server on this machine')}
+      <div class="set-sub" data-for="url">
+        <label>API base URL <input data-set="url" value="${esc(r.url ?? v.flags.url ?? '')}" placeholder="http://127.0.0.1:11434/v1" spellcheck="false"></label>
+        <label>Model <input data-set="urlModel" value="${esc(r.urlModel ?? '')}" placeholder="e.g. llama3.2 or gemma3" spellcheck="false"></label>
+      </div>
+      ${radio('apple', 'Apple on-device model', o.apple.available ? 'Apple Intelligence on this Mac; nothing leaves it' : esc(o.apple.reason ?? 'not available'), !o.apple.available)}
+      ${radio('off', 'Off', 'no Rephrase button')}
+    </section>
+    <section class="set-sec">
+      <h3>Speech-to-text</h3>
+      <div class="set-status ${v.stt.available ? 'ok' : 'bad'}">${v.stt.available ? `✓ <code>${esc(v.stt.image)}</code>` : `✕ ${esc(v.stt.error ?? 'Not available.')}`}</div>
+      <div class="set-row">
+        <label>Image <select data-set="sttImage">${opt('', o.sttImages.length ? `automatic (${o.sttImages[0]})` : 'automatic (none found)', v.settings.stt.provider === 'off' ? '' : v.settings.stt.image)}${o.sttImages.map((i) => opt(i, i, v.settings.stt.image)).join('')}</select></label>
+        <label class="set-check"><input type="checkbox" data-set="sttOff" ${v.settings.stt.provider === 'off' ? 'checked' : ''}> off</label>
+      </div>
+    </section>
+    <div class="set-actions">
+      <button class="btn primary" type="button" data-set-save ${st.busy ? 'disabled' : ''}>Save</button>
+      <button class="btn" type="button" data-set-test ${st.busy || !now.available ? 'disabled' : ''} title="Rephrase a sample sentence with the saved setting">Test</button>
+      ${now.available && now.kind === 'container' && now.state === 'stopped' ? '<button class="btn" type="button" data-set-warm title="Start the container now, so the first suggestion does not wait for the model to load">Load now</button>' : ''}
+      <span class="set-note ${st.note.startsWith('✕') ? 'warn' : ''}">${esc(st.note)}</span>
+    </div>
+    ${st.test ? `<div class="set-test"><span class="muted">Test (${st.test.ms ? (st.test.ms / 1000).toFixed(1) + ' s' : '…'}):</span> ${esc(st.test.text)}</div>` : ''}
+    <div class="ag-note">Saved in <code>~/.local/state/openspec-dashboard/settings.json</code>; it overrides the command-line options. Everything runs on this machine.</div>`;
+  syncSettingsForm();
+}
+function syncSettingsForm() {
+  const prov = $('settings').querySelector('input[name="rp"]:checked')?.value;
+  for (const el of $('settings').querySelectorAll('.set-sub')) el.hidden = el.dataset.for !== prov;
+}
+function settingsBody() {
+  const dlg = $('settings');
+  const val = (k) => dlg.querySelector(`[data-set="${k}"]`)?.value ?? '';
+  return {
+    rephrase: { provider: dlg.querySelector('input[name="rp"]:checked')?.value ?? 'auto', image: val('image'), model: val('model'), url: val('url'), urlModel: val('urlModel') },
+    stt: { provider: dlg.querySelector('[data-set="sttOff"]')?.checked ? 'off' : 'auto', image: val('sttImage') },
+  };
+}
+$('settings').addEventListener('change', (e) => { if (e.target.name === 'rp') syncSettingsForm(); });
+$('settings').addEventListener('click', async (e) => {
+  const t = e.target;
+  if (t === $('settings') || t.closest('[data-set-close]')) return $('settings').close();
+  if (t.closest('[data-set-refresh]')) return openSettings(true);
+  if (t.closest('[data-set-save]')) {
+    st.busy = true; st.note = 'Saving…'; st.test = null; renderSettings();
+    try { st.view = await settingsFetch('POST', settingsBody()); st.note = '✓ Saved'; } catch (err) { st.note = '✕ ' + err.message; }
+    st.busy = false; return renderSettings();
+  }
+  if (t.closest('[data-set-warm]')) {
+    try { st.view.rephrase = await settingsFetch('POST', { warm: true }); st.note = 'Loading the model…'; } catch (err) { st.note = '✕ ' + err.message; }
+    return renderSettings();
+  }
+  if (t.closest('[data-set-test]')) {
+    st.busy = true; st.test = { text: 'um so can you like check whether all the tests for the due dates pass and fix it if not', ms: 0 }; st.note = 'Testing…'; renderSettings();
+    try {
+      const r = await fetch(withProject('/api/rephrase'), { method: 'POST', headers: { 'content-type': 'application/json', 'x-osd-token': AGENT_TOKEN }, body: JSON.stringify({ text: st.test.text }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      st.test = { text: d.text, ms: d.ms }; st.note = '';
+    } catch (err) { st.test = null; st.note = '✕ ' + err.message; }
+    st.busy = false; renderSettings();
+  }
+});
+if (AGENT_TOKEN) { $('settings-btn').hidden = false; $('settings-btn').addEventListener('click', () => openSettings(false)); }
+document.addEventListener('click', (e) => { if (e.target.closest?.('[data-set-open]')) { e.stopPropagation(); openSettings(false); } }, true);
 
 // ------------------------------------------------------------ several projects
 // ?project=<id> shows one project; with several projects and no ?project= the overview is the start page.

@@ -204,8 +204,9 @@ you can check and correct it before sending. The dashboard looks for an image wh
 `whisper-cli` with its model (`whisper-cli -m <model> …`) and checks again every minute; `--stt-image` names one.
 Each recording runs in a throwaway container without network, with a read-only root and memory limits; the audio
 goes in on stdin and is never written to a file. The small selector next to the microphone is the language you
-speak (default: the browser's language). With a fixed language a short clip takes a few seconds; **Auto** detects
-the language first, which takes noticeably longer on a CPU.
+speak (default: the browser's language). With a fixed language a short clip takes a few seconds (Whisper's audio
+window is sized to the clip, with a floor that keeps it from repeating itself); **Auto** detects the language
+first, which takes noticeably longer on a CPU.
 
 **Rephrase.** If a local language model is available, **✨ Rephrase** next to the microphone rewrites the draft in
 the box into a clear prompt: to the point, nothing important dropped, in the language of the draft. The result is a
@@ -219,6 +220,22 @@ runs locally, never through Claude. Two ways to provide a model:
   GGUF chat model (in a Hugging Face cache layout under `~/.cache/huggingface/hub`, or `--rephrase-models=<dir>`,
   or `--rephrase-model=<file>`), starts the container on the first request without network and with the model
   folder read-only, and ends it after 10 idle minutes. On a CPU the first request waits for the model to load.
+
+**Local models (⚙).** The ⚙ button in the header (and next to Rephrase) opens a dialog that shows which local models
+are in use and lets you choose:
+
+- **Rephrase**: *Automatic* (the server from `--rephrase-url`, otherwise the first LLM container found, otherwise
+  Apple's on-device model), a *Container* (pick the image and the GGUF model), a *Local server* with an
+  OpenAI-compatible API (e.g. Ollama at `http://127.0.0.1:11434/v1` with a model name, LM Studio or `llama-server`;
+  the dashboard checks that it answers), *Apple's on-device model* (macOS 26 with Apple Intelligence; the dashboard
+  builds a small Swift helper once with the Xcode command line tools; not tested yet, as no macOS 26 machine was at
+  hand), or *Off*. **Test** rephrases a sample sentence; **Load now** starts a container model ahead of the first
+  request.
+- **Speech-to-text**: the whisper image, or off.
+
+The choice is saved in `$XDG_STATE_HOME/openspec-dashboard/settings.json`, applies at once and overrides the
+command-line options. If a model container ends while loading, the panel says why, e.g. that it ran out of memory
+because another model container is running in the same VM.
 
 It runs the `claude` command (Claude Code) in the project folder, so it uses Claude Code's own login and counts
 towards the same plan or account as your other sessions; there is no separate key. Each question and session is
