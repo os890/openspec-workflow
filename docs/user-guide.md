@@ -68,7 +68,8 @@ You stay in control of three things:
 ## 4. Follow the progress
 
 Start the dashboard in your project (`node <path-to>/tools/openspec-dashboard/server.mjs`) and keep it open while
-the agent works. It updates within a second of every file change.
+the agent works. It updates within a second of every file change. The screenshots show the **Glass** style; see
+[Styles](#styles) for the others.
 
 ![Dashboard overview](images/dashboard-overview.png)
 
@@ -90,6 +91,17 @@ Click a card to open its details next to the board; `Esc` closes them. A link to
 `#board:<change>`, e.g. http://127.0.0.1:4590/#board:add-due-dates:
 
 ![Board with the details of a change](images/dashboard-board-details.png)
+
+## Styles
+
+The dashboard has two styles, **Flat** (the default) and **Glass**, each in light and dark. The **Glass** / **Flat**
+button in the header switches the style, ◐ switches light and dark; both choices are remembered per browser.
+In a link, `?style=glass|flat` and `?theme=light|dark` set them, e.g.
+http://127.0.0.1:4590/?style=glass&theme=dark.
+
+| Flat, light | Flat, dark | Glass, dark |
+|---|---|---|
+| ![Flat style, light](images/style-flat-light.png) | ![Flat style, dark](images/style-flat-dark.png) | ![Glass style, dark](images/style-glass-dark.png) |
 
 ## Tips
 

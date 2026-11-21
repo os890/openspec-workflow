@@ -247,6 +247,130 @@ body.board-max { overflow: hidden; }
 .drawer .progress { grid-template-columns: 1fr; }
 .drawer .seg-labels { display: none; }
 
+/* ---------------------------------------------------------------- style: glass
+   Frosted, translucent surfaces over a soft colour field; depth from layered shadows and top highlights.
+   Active with <html data-style="glass">; every colour comes from the tokens below (light + both dark blocks). */
+:root {
+  --g-field-1: #c9d3ff; --g-field-2: #ffd9b8; --g-field-3: #bdf0dc; --g-field-base: #eef0fb;
+  --g-surface: rgba(255, 255, 255, .58);
+  --g-surface-strong: rgba(255, 255, 255, .78);
+  --g-edge: rgba(255, 255, 255, .75);
+  --g-hi: rgba(255, 255, 255, .9);
+  --g-shade: rgba(40, 46, 120, .14);
+  --g-shade-strong: rgba(40, 46, 120, .24);
+  --g-track: rgba(35, 37, 63, .08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --g-field-1: #2b2f86; --g-field-2: #6b3416; --g-field-3: #0f5a46; --g-field-base: #0d0f1a;
+    --g-surface: rgba(30, 33, 52, .55); --g-surface-strong: rgba(36, 39, 62, .78);
+    --g-edge: rgba(255, 255, 255, .10); --g-hi: rgba(255, 255, 255, .14);
+    --g-shade: rgba(0, 0, 0, .40); --g-shade-strong: rgba(0, 0, 0, .55); --g-track: rgba(255, 255, 255, .08);
+  }
+}
+:root[data-theme="dark"] {
+  --g-field-1: #2b2f86; --g-field-2: #6b3416; --g-field-3: #0f5a46; --g-field-base: #0d0f1a;
+  --g-surface: rgba(30, 33, 52, .55); --g-surface-strong: rgba(36, 39, 62, .78);
+  --g-edge: rgba(255, 255, 255, .10); --g-hi: rgba(255, 255, 255, .14);
+  --g-shade: rgba(0, 0, 0, .40); --g-shade-strong: rgba(0, 0, 0, .55); --g-track: rgba(255, 255, 255, .08);
+}
+:root[data-style="glass"] body {
+  background:
+    radial-gradient(60vmax 45vmax at 8% -5%, var(--g-field-1), transparent 70%),
+    radial-gradient(50vmax 40vmax at 100% 20%, var(--g-field-2), transparent 70%),
+    radial-gradient(55vmax 45vmax at 40% 110%, var(--g-field-3), transparent 70%),
+    var(--g-field-base);
+  background-attachment: fixed;
+}
+:root[data-style="glass"] .panel,
+:root[data-style="glass"] .drawer,
+:root[data-style="glass"] .live > span,
+:root[data-style="glass"] .board-live {
+  background: var(--g-surface);
+  -webkit-backdrop-filter: blur(22px) saturate(170%);
+  backdrop-filter: blur(22px) saturate(170%);
+  border: 1px solid var(--g-edge);
+  box-shadow: inset 0 1px 0 var(--g-hi), 0 2px 6px var(--g-shade), 0 18px 40px -12px var(--g-shade-strong);
+}
+:root[data-style="glass"] .board.max { background: transparent; }
+:root[data-style="glass"] .col {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--st) 16%, var(--g-surface)), color-mix(in srgb, var(--st) 6%, var(--g-surface)));
+  border: 1px solid var(--g-edge);
+  box-shadow: inset 0 1px 0 var(--g-hi), 0 1px 3px var(--g-shade);
+}
+:root[data-style="glass"] .board.max .col {
+  -webkit-backdrop-filter: blur(18px) saturate(160%); backdrop-filter: blur(18px) saturate(160%);
+}
+:root[data-style="glass"] .kc {
+  background: linear-gradient(180deg, var(--g-surface-strong), var(--g-surface));
+  border: 1px solid var(--g-edge);
+  box-shadow: inset 0 1px 0 var(--g-hi), 0 1px 2px var(--g-shade), 0 8px 18px -8px var(--g-shade-strong);
+}
+:root[data-style="glass"] .kc:hover { transform: translateY(-2px); box-shadow: inset 0 1px 0 var(--g-hi), 0 2px 4px var(--g-shade), 0 16px 28px -10px var(--g-shade-strong); }
+:root[data-style="glass"] .kc.focus { box-shadow: 0 0 0 2px var(--accent), inset 0 1px 0 var(--g-hi), 0 12px 24px -8px var(--g-shade-strong); }
+:root[data-style="glass"] .bar,
+:root[data-style="glass"] .seg { background: var(--g-track); box-shadow: inset 0 1px 2px var(--g-shade); }
+:root[data-style="glass"] .bar > span,
+:root[data-style="glass"] .seg > span {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, .45), rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, .10));
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--st-complete) 45%, transparent);
+}
+:root[data-style="glass"] .now {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--st-progress) 18%, var(--g-surface-strong)), color-mix(in srgb, var(--st-progress) 6%, var(--g-surface)));
+  border: 1px solid color-mix(in srgb, var(--st-progress) 30%, var(--g-edge));
+  box-shadow: inset 0 1px 0 var(--g-hi), 0 10px 24px -12px color-mix(in srgb, var(--st-progress) 55%, transparent);
+}
+:root[data-style="glass"] .now.done {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--st-complete) 18%, var(--g-surface-strong)), color-mix(in srgb, var(--st-complete) 6%, var(--g-surface)));
+  border-color: color-mix(in srgb, var(--st-complete) 30%, var(--g-edge));
+  box-shadow: inset 0 1px 0 var(--g-hi), 0 10px 24px -12px color-mix(in srgb, var(--st-complete) 55%, transparent);
+}
+:root[data-style="glass"] .board-now {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--st-progress) 16%, var(--g-surface-strong)), var(--g-surface));
+  border: 1px solid var(--g-edge);
+  box-shadow: inset 0 1px 0 var(--g-hi), 0 6px 18px -10px var(--g-shade-strong);
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+}
+:root[data-style="glass"] .now .tag,
+:root[data-style="glass"] .pill {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 1px 2px var(--g-shade);
+}
+:root[data-style="glass"] .now .tag { background-image: linear-gradient(180deg, rgba(255, 255, 255, .28), rgba(255, 255, 255, 0)); }
+:root[data-style="glass"] .btn,
+:root[data-style="glass"] .tab,
+:root[data-style="glass"] .ms-filter button,
+:root[data-style="glass"] .eyebrow .switch button {
+  background: linear-gradient(180deg, var(--g-surface-strong), var(--g-surface));
+  border: 1px solid var(--g-edge);
+  box-shadow: inset 0 1px 0 var(--g-hi), 0 1px 2px var(--g-shade);
+}
+:root[data-style="glass"] .btn:hover,
+:root[data-style="glass"] .ms-filter button:hover,
+:root[data-style="glass"] .tab:hover:not(:disabled) { box-shadow: inset 0 1px 0 var(--g-hi), 0 4px 10px -2px var(--g-shade-strong); }
+:root[data-style="glass"] .tab[aria-selected="true"],
+:root[data-style="glass"] .ms-filter button[aria-pressed="true"],
+:root[data-style="glass"] .eyebrow .switch button[aria-pressed="true"] {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 88%, white), var(--accent));
+  color: var(--surface); border-color: transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 4px 12px -2px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+:root[data-style="glass"] .ms-filter button[aria-pressed="true"] b { color: var(--surface); }
+:root[data-style="glass"] .tabs { gap: 6px; }
+:root[data-style="glass"] .task.done .box {
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--st-complete) 55%, white), var(--st-complete) 70%);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--st-complete) 55%, transparent);
+}
+:root[data-style="glass"] .box { box-shadow: inset 0 1px 2px var(--g-shade); }
+:root[data-style="glass"] .task.cur,
+:root[data-style="glass"] details.group.current { background: color-mix(in srgb, var(--st-progress) 10%, transparent); }
+:root[data-style="glass"] .task.cur { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--st-progress) 30%, transparent); }
+:root[data-style="glass"] code { background: var(--g-track); }
+:root[data-style="glass"] .col-head .t .num,
+:root[data-style="glass"] details.group > summary .num { box-shadow: inset 0 1px 0 var(--g-hi), 0 1px 2px var(--g-shade); }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root[data-style="glass"] .panel, :root[data-style="glass"] .drawer { background: var(--g-surface-strong); }
+}
+
 @media (max-width: 1000px) {
   .main { grid-template-columns: 1fr; }
   .board.max { overflow: auto; }
@@ -272,6 +396,7 @@ body.board-max { overflow: hidden; }
     <div class="live">
       <span id="conn"><span class="dot"></span>connecting…</span>
       <span id="cli"></span>
+      <button class="btn" id="style" type="button" title="Switch between the flat and the glass style">Glass</button>
       <button class="btn" id="theme" type="button" aria-label="Toggle light or dark theme">◐</button>
     </div>
   </div>
@@ -300,6 +425,23 @@ const STATUS = {
 };
 const ui = { state: null, pinned: null, tab: 'tasks', open: new Map(), fileCache: new Map(), fresh: new Set(), prevCol: new Map(), ms: '', boardMax: false, drawer: null, drawerScroll: 0, colScroll: new Map() };
 try { const t = localStorage.getItem('osd-theme'); if (t) document.documentElement.dataset.theme = t; ui.ms = localStorage.getItem('osd-ms') || ''; } catch {}
+// visual style: flat (default) or glass; ?style=glass overrides the remembered choice
+const STYLES = ['flat', 'glass'];
+function applyStyle(name) {
+  const st = STYLES.includes(name) ? name : 'flat';
+  if (st === 'flat') delete document.documentElement.dataset.style; else document.documentElement.dataset.style = st;
+  const b = document.getElementById('style');
+  if (b) b.textContent = st === 'flat' ? 'Glass' : 'Flat';
+  return st;
+}
+{
+  // ?theme=light|dark overrides the remembered light/dark choice (links, screenshots)
+  const qt = new URLSearchParams(location.search).get('theme');
+  if (qt === 'light' || qt === 'dark') document.documentElement.dataset.theme = qt;
+  let st = new URLSearchParams(location.search).get('style');
+  if (!st) { try { st = localStorage.getItem('osd-style'); } catch {} }
+  applyStyle(st);
+}
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -695,6 +837,10 @@ document.addEventListener('toggle', (e) => {
   const d = e.target;
   if (d.matches?.('details.group')) ui.open.set(d.dataset.key, d.open);
 }, true);
+$('style').addEventListener('click', () => {
+  const st = applyStyle(document.documentElement.dataset.style === 'glass' ? 'flat' : 'glass');
+  try { localStorage.setItem('osd-style', st); } catch {}
+});
 $('theme').addEventListener('click', () => {
   const root = document.documentElement;
   const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
