@@ -28,7 +28,9 @@ Run it in the background (`nohup … &`) so the session can go on; stop it with 
 **As an app** (macOS: Launchpad and Dock; Linux: application menu), opening in a window of its own:
 `node <dash>/launcher.mjs install -- <the server options>` (`--port=`, `--name=`, `--tab` for a browser tab).
 `launcher.mjs stop` ends a dashboard it started, `launcher.mjs uninstall` removes the app. Run `install` again
-after changing the options.
+after changing the options. For an icon of its own in the Dock, the user installs the page as a web app (Chrome:
+Install in the address bar; Safari: File › Add to Dock); add `--service` to `install` so the dashboard runs from
+login on and the pinned web app always finds it (macOS LaunchAgent, Linux systemd user service).
 
 ## With `--agent`
 

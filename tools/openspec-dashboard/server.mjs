@@ -2879,9 +2879,19 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   try {
     if (AGENT && !OWN_HOSTS.has(req.headers.host)) { res.writeHead(403); return res.end('unknown host'); }
-    if (url.pathname === '/logo.svg') { // the tab icon and the logo in the header
-      res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'max-age=86400' });
-      return res.end(await fsp.readFile(path.join(HERE, 'logo.svg')));
+    // the logo (tab icon, header) and what makes the page installable as an app (Chrome: Install; Safari: Add to Dock)
+    const ASSETS = { '/logo.svg': ['logo.svg', 'image/svg+xml'], '/icon-192.png': ['icon-192.png', 'image/png'], '/icon-512.png': ['icon-512.png', 'image/png'] };
+    if (ASSETS[url.pathname]) {
+      res.writeHead(200, { 'content-type': ASSETS[url.pathname][1], 'cache-control': 'max-age=86400' });
+      return res.end(await fsp.readFile(path.join(HERE, ASSETS[url.pathname][0])));
+    }
+    if (url.pathname === '/manifest.webmanifest') {
+      res.writeHead(200, { 'content-type': 'application/manifest+json', 'cache-control': 'no-cache' });
+      return res.end(JSON.stringify({
+        id: '/', name: 'OpenSpec Dashboard', short_name: 'OpenSpec', description: 'The progress of OpenSpec changes, live',
+        start_url: '/', scope: '/', display: 'standalone', background_color: '#eef0fb', theme_color: '#5865f2',
+        icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }, { src: '/logo.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
+      }));
     }
     if (url.pathname === '/' || url.pathname === '/index.html') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });

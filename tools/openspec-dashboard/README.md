@@ -9,14 +9,18 @@ cd <your project>                                   # the folder that contains o
 node <path-to>/tools/openspec-dashboard/server.mjs  # opens http://127.0.0.1:4590/
 ```
 
-**As an app:** `node launcher.mjs install [--name=…] [--port=4590] [--tab] -- <server options>` creates a
+**As an app:** `node launcher.mjs install [--name=…] [--port=4590] [--tab] [--service] -- <server options>` creates a
 launcher with the logo (`logo.svg`, and `logo-1024.png` for the macOS icon): on macOS `~/Applications/<name>.app`
 (an `Info.plist`, an `.icns` made with `sips` and `iconutil`, and a start script), on Linux a `.desktop` entry in
 `~/.local/share/applications`. The start script checks `http://localhost:<port>/api/projects`; if nothing answers,
 it starts `server.mjs` with the options in the folder `install` ran in (with that Node.js, by its stable path, and
 that PATH, since an app from the Dock has no shell), logs to `~/Library/Logs/<name>.log` (macOS) or the state
 folder, waits until it answers and opens the page in a window of its own (Chrome, Edge, Brave or Chromium with
-`--app=`, found at install time), or with `--tab` (or without such a browser) in a tab of the default browser. `launcher.mjs stop` ends a dashboard it started (its pid is in the state folder), `uninstall`
+`--app=`, found at install time), or with `--tab` (or without such a browser) in a tab of the default browser;
+once the page is installed as a web app (`/manifest.webmanifest`, `icon-192.png`, `icon-512.png`; Chrome puts it
+into `~/Applications/Chrome Apps.localized/`), it opens that app, which has its own icon in the Dock.
+`--service` runs the dashboard from login on: a LaunchAgent (`~/Library/LaunchAgents/local.openspec-dashboard.<name>-<port>.plist`,
+`RunAtLoad`, `KeepAlive`) or a systemd user unit (`~/.config/systemd/user/<name>-<port>.service`). `launcher.mjs stop` ends a dashboard it started (its pid is in the state folder), `uninstall`
 removes the launcher. The logo is also the page's icon and sits in the header (`GET /logo.svg`).
 
 ## Several projects

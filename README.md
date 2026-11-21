@@ -245,7 +245,8 @@ What makes it more than a status page:
   (configurable).
 - **Ten styles**, from Flat and Glass to Clay, Paper, Blackboard or a green-screen Terminal.
 - **An app of its own**: `launcher.mjs install` puts the dashboard with its logo into Launchpad and the Dock
-  (macOS) or the application menu (Linux); one click starts it if needed and opens it.
+  (macOS) or the application menu (Linux); one click starts it if needed and opens it. Installed as a web app it
+  gets its own Dock icon, and `--service` keeps the dashboard running from login on.
 
 | Charts | Brainstorming an idea next to the backlog |
 |---|---|
