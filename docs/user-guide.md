@@ -216,7 +216,8 @@ tap ⋯) and a row of buttons appears:
   "Thanks, that helps.", "Great, that is exactly right.", "Good idea, let us keep that."); only positive ones. 🌿
   accepts a proposal but has it done on a new git branch: Claude creates one named after it, works there and leaves
   merging to you;
-- 🔁 asks for the answer again in simpler words, 📝 for a summary in a few bullet points, 📊 for an overview table;
+- 🔁 asks for the answer again in simpler words, 📝 for a summary in a few bullet points, 📊 for an overview table,
+  and 🔄 has it tried again (e.g. a failed run, after you changed something);
 - ↩ quotes the answer in your next message; select a part of it first to quote just that part.
 
 Claude gets the answer's first sentence (or the part you selected) as the reference, so it knows which answer you
@@ -270,8 +271,12 @@ asks you something there (a permission, a choice), since Return would answer it.
 dashboard may control it.
 
 While you write, the details above the conversation fold into one line (**✎ Writing to …**, its state, **Details ▾**,
-**Read only**), so the conversation gets the panel; **Details ▾** shows the session picker and the notes again,
-**Fewer details ▴** folds them. Claude's answers have the same quick replies as the chat (👍 ✅ 🌿 🙏 🎉 💡, 🔁 📝 📊
+**Read only**), so the conversation gets the panel. That way a session you started in the terminal continues in the
+dashboard. If its folder is not a project of the dashboard yet, **Onboard as project** next to **Read only** sets up
+OpenSpec there right away (after one confirmation; in the background, nothing committed; the session keeps
+running) and shows the progress on the overview, and **Follow now** follows a folder that has an `openspec/`
+already and continues the session there. **Details ▾** shows the session picker and the notes again,
+**Fewer details ▴** folds them. Claude's answers have the same quick replies as the chat (👍 ✅ 🌿 🙏 🎉 💡, 🔁 📝 📊 🔄
 and ↩ to quote, also a selected part); they are typed into the session like any message, and the thread shows them
 as reactions and quotes.
 

@@ -265,7 +265,10 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     on its own. The end of a joined session's thread shows its state (working with the current step, done and
     waiting, listening, ended), polled with the transcript every 2 s from Claude Code's own idle/busy. In write mode
     the bar folds into one line (**Details ▾** unfolds it), and Claude's answers get the reactions, requests and
-    quotes of the chat; a quote typed into a terminal is one line, so the dashboard reads `[Replying to …] text`
+    quotes of the chat, and a session-only session gets the quick path next to **Read only**: **Onboard as
+    project** (a confirmation, then `add` and `onboard` of the discovery API, and the overview with its onboarding
+    chat) or **Follow now** when the folder has `openspec/` (following it again removes it from the unfollowed or
+    archived ones); a quote typed into a terminal is one line, so the dashboard reads `[Replying to …] text`
     with a space as well as with a line break. **▣ Terminal** cycles terminal colors for the conversation (with the
     steps CLI-style: `⏺ Tool(argument)` and `⎿` the first four lines of its result, taken from the transcript's
     `tool_result`), for the whole panel, and back; **A− / A / A+** set the text size. While the session has been working
@@ -294,7 +297,8 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
   - **Reactions and quotes**: each of Claude's answers has a faint ⋯; hovering the answer (or tapping ⋯) shows a
     row where 👍 ✅ 🌿 🙏 🎉 💡 send a short answer at once ("I agree
     with this.", "Yes, go ahead with this.", …; 🌿 accepts but on a new git branch, unmerged), 🔁 asks Claude to say it again in simpler words, 📝 to summarize
-    it in a few bullet points and 📊 to turn it into an overview table, and **↩ Quote** replies to that answer (select a part of it first
+    it in a few bullet points, 📊 to turn it into an overview table and 🔄 to try it again (e.g. a failed run after
+    a change), and **↩ Quote** replies to that answer (select a part of it first
     to quote just that part). Claude sees no timestamps of the dashboard, so the reference it gets is the answer's
     first sentence, or the selected part, in a fixed form (`[Reaction 👍 to your message: "…"]`,
     `[Request 📝 about your message: "…"]`, `[Replying to your message: "…"]`), which it finds in its own conversation; the whole answer is not sent again.

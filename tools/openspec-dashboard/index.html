@@ -1410,8 +1410,8 @@ body.board-max { overflow: hidden; }
 .term-compact { flex-wrap: wrap; align-items: center; gap: 4px 10px; } /* wraps rather than hiding buttons */
 .term-vs { display: inline-flex; gap: 8px; align-items: center; }
 .term-v[disabled] { opacity: .35; cursor: default; text-decoration: none; }
-/* write mode: a quiet focus on the input box (no strong blue frame) */
-.agent-panel.term-writing .ag-compose textarea:focus, .agent-panel.term-writing .ag-compose textarea:focus-visible { outline: none; box-shadow: none; border-color: color-mix(in srgb, var(--ink) 30%, var(--line)); }
+/* the input boxes of the panel (chat, brainstorm, sessions, new project): a quiet focus, no strong colored frame */
+.agent-panel .ag-compose textarea:focus, .agent-panel .ag-compose textarea:focus-visible { outline: none; box-shadow: none; border-color: color-mix(in srgb, var(--ink) 30%, var(--line)); }
 .term-v[aria-pressed="true"] { font-weight: 600; text-decoration: underline; }
 /* write mode in a joined session: the text size, and optionally terminal colors (your messages stay easy to spot) */
 .agent-panel.term-writing #ag-thread .msg, .agent-panel.term-writing #ag-thread .msg .md { font-size: var(--term-fs, 13.5px); }
@@ -1453,6 +1453,7 @@ body.board-max { overflow: hidden; }
 .agent-panel.term-look-all .btn:not(.primary) { background: #161b22; color: #d6dde6; border-color: #30363d; }
 .agent-panel.term-look-all .chip { background: #161b22; color: #d6dde6; border-color: #30363d; }
 .agent-panel.term-look-all .chip[aria-selected="true"] { background: #1e3a8a; color: #fff; }
+.term-btns { display: inline-flex; gap: 6px; margin-left: auto; }
 .term-compact .link, .term-compact .btn { white-space: nowrap; flex-shrink: 0; }
 .term-compact .ag-note { min-width: 120px; flex: 1 1 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .term-done { align-self: center; font-size: 12.5px; color: var(--muted); padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); margin: 4px 0 2px; }
@@ -1706,7 +1707,7 @@ body.ag-max { overflow: hidden; }
 :root[data-style="clay"] .msg.them .md { font-size: 15px; }
 :root[data-style="clay"] .msg.them .meta { align-self: flex-start; }
 :root[data-style="clay"] .ag-compose textarea { background: var(--surface); border-radius: 16px; box-shadow: var(--shadow); }
-:root[data-style="clay"] .ag-compose textarea:focus { outline: none; border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+:root[data-style="clay"] .ag-compose textarea:focus { outline: none; border-color: color-mix(in srgb, var(--ink) 30%, var(--line)); }
 :root[data-style="clay"] .agent-panel .btn.primary, :root[data-style="clay"] .backlog .btn.primary { border-radius: 10px; color: #fff !important; }
 :root[data-style="clay"] .ag-answer { font-family: var(--font-serif); font-size: 14.5px; }
 :root[data-style="clay"] .ag-item { background: var(--surface-2); border: 1px solid var(--line); }
@@ -3521,7 +3522,8 @@ const REACTIONS = [['👍', 'I agree with this.'], ['✅', 'Yes, go ahead with t
   ['🌿', 'Yes, go ahead with this, but on a new git branch: create one named after it, switch to it and do the work there; do not merge it, I decide that later.'], ['🙏', 'Thanks, that helps.'], ['🎉', 'Great, that is exactly right.'], ['💡', 'Good idea, let us keep that.']];
 // requests about an answer: sent the same way, but asking Claude to do something with it
 const REQUESTS = [['🔁', 'Please say this again in other words, simpler and clearer.', 'Rephrase'], ['📝', 'Please summarize this in three to five short bullet points.', 'Summarize'],
-  ['📊', 'Please turn this into an overview table (Markdown): one row per item or point, with the columns that fit the content, and nothing important left out.', 'Table']];
+  ['📊', 'Please turn this into an overview table (Markdown): one row per item or point, with the columns that fit the content, and nothing important left out.', 'Table'],
+  ['🔄', 'Please try this again: run it once more, I changed something in the meantime. If it fails again, tell me what is different this time.', 'Try again']];
 const rx = { msgs: new Map(), quote: null, openId: null };
 const plainOf = (md) => String(md).replace(/```[\s\S]*?```/g, ' ').replace(/`([^`]*)`/g, '$1').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[#>*_|]+/g, ' ').replace(/\s+/g, ' ').trim();
 const clip = (t, n) => (t.length > n ? t.slice(0, n - 1).replace(/\s+\S*$/, '') + '…' : t).replace(/"/g, '”');
@@ -3806,15 +3808,17 @@ function barHtml(c) {
     if (x?.hookless && !x.typeable) return `<div class="ag-row ag-target">${pick}</div><div class="ag-note">${x.waiting ? '<span class="dot"></span>Waiting for input in the terminal' : '<span class="dot on"></span>Working'} · last activity ${ago(x.t)} · read-only: this session runs without the dashboard's hook</div>
       ${ag.view?.hooks ? `<div class="ag-note">The hook is set up, but this session started before it: restart it to write to it (<code>/exit</code>, then <code>claude --resume ${esc(x.sessionId)}</code>).</div>` : setup('To write to it, set up the hook')}`;
     const state = x2.listening ? '<span class="dot on"></span>Listening: waiting for your message' : x2.waiting ? '<span class="dot"></span>Waiting for input in the terminal' : '<span class="dot on"></span>Working';
+    // a session in a folder that is not followed: the quick path to make it a project, next to "Read only"
+    const quickAdopt = xo && ag.termWrite ? `<button class="btn" type="button" data-ag-adopt="${xo.openspec ? 'follow' : 'onboard'}" data-quick title="${xo.openspec ? 'It has an openspec/ folder: follow it as a project and continue this session there' : 'Set up OpenSpec in this folder (in the background, nothing committed) and follow it'}">${xo.openspec ? 'Follow now' : 'Onboard as project'}</button>` : '';
     // writing: the details fold into one line, so the conversation gets the panel ("Details" brings them back)
     const look = `<button class="link term-v" type="button" data-term-look aria-pressed="${termView.look > 0}" title="${['Terminal colors for the conversation (your messages stay highlighted)', 'Terminal colors for the whole panel', 'Back to the normal colors'][termView.look]}">${['▣ Terminal', '▣ Terminal: conversation', '▣ Terminal: all'][termView.look]}</button><button class="link term-v" type="button" data-term-fs="-1" title="Smaller text" aria-label="Smaller text">A−</button><button class="link term-v" type="button" data-term-fs="0" ${termView.fs === TERM_FS ? 'disabled' : ''} title="Default text size (${TERM_FS}px)" aria-label="Default text size">A</button><button class="link term-v" type="button" data-term-fs="1" title="Larger text" aria-label="Larger text">A+</button>`;
     if (ag.termWrite && !ag.termDetails) return `<div class="ag-row term-compact"><span class="ag-note">✎ Writing to <b>${esc(xo ? xo.display : x2.prompt ? `“${x2.prompt.replace(/\s+/g, ' ').slice(0, 40)}${x2.prompt.length > 40 ? '…' : ''}”` : x2.sessionId.slice(0, 8))}</b> · ${state}</span>
         <span class="term-vs" style="margin-left:auto">${look}</span><button class="link" type="button" data-ag-term-details aria-expanded="false" title="Show the session picker and the details again">Details ▾</button>
-        <button class="btn" type="button" data-ag-term-write aria-pressed="true" title="Back to read-only">Read only</button></div>${termLog.get(x2.sessionId)?.err ? `<div class="ag-note warn">✕ ${esc(termLog.get(x2.sessionId).err)}</div>` : ''}`;
+        <span class="term-btns">${cur && !x2.hookless && !x2.typeable ? `<button class="btn" type="button" data-ag-term-listen aria-pressed="${!!x2.listen}" title="When it is about to stop, it waits for your message instead (the terminal shows the hook running; Esc there takes the session back)">${x2.listen ? '👂 Listening · stop' : '👂 Keep it listening'}</button>` : ''}${quickAdopt}<button class="btn" type="button" data-ag-term-write aria-pressed="true" title="Back to read-only">Read only</button></span></div>${termLog.get(x2.sessionId)?.err ? `<div class="ag-note warn">✕ ${esc(termLog.get(x2.sessionId).err)}</div>` : ''}`;
     return `${top}
       <div class="ag-row"><span class="ag-note">${state} · last step ${ago(x2.t)}${x2.tool && !x2.waiting ? ` (${esc(x2.tool)})` : ''}</span>
         ${ag.termWrite ? `<span class="term-vs" style="margin-left:auto">${look}</span><button class="link" type="button" data-ag-term-details aria-expanded="true" title="Fold the details into one line">Fewer details ▴</button>` : ''}
-        <button class="btn ${ag.termWrite ? '' : 'primary'}" type="button" data-ag-term-write aria-pressed="${ag.termWrite}" ${ag.termWrite ? '' : 'style="margin-left:auto"'} title="${ag.termWrite ? 'Back to read-only' : 'Write to this session as if you typed it there'}">${ag.termWrite ? 'Read only' : '✎ Write to it'}</button>
+        ${ag.termWrite ? quickAdopt : ''}<button class="btn ${ag.termWrite ? '' : 'primary'}" type="button" data-ag-term-write aria-pressed="${ag.termWrite}" ${ag.termWrite ? '' : 'style="margin-left:auto"'} title="${ag.termWrite ? 'Back to read-only' : 'Write to this session as if you typed it there'}">${ag.termWrite ? 'Read only' : '✎ Write to it'}</button>
         ${ag.termWrite && cur && !x2.hookless && !x2.typeable ? `<button class="btn" type="button" data-ag-term-listen aria-pressed="${!!x2.listen}" title="When it is about to stop, it waits for your message instead (the terminal shows the hook running; Esc there takes the session back)">${x2.listen ? '👂 Listening · stop' : '👂 Keep it listening'}</button>` : ''}</div>
       ${ag.termWrite && x2.typeable ? `<div class="ag-note">Your message is typed into its Terminal tab and sent with Return, exactly as if you typed it there, also while it waits for input (one line; not while it asks you something there).</div>`
       : ag.termWrite ? `<div class="ag-note">Your message reaches it at its next step, as if you typed it there. ${x2.listening ? 'It is listening: your message continues it right away.' : x2.waiting ? `It is waiting for input in the terminal, so it takes no step: the message arrives with the next prompt typed there.${x2.listen ? ' After that answer it listens and takes your messages directly.' : ' <b>Keep it listening</b> lets it take your messages directly after its next answer.'}` : x2.listen ? 'When it is done, it waits for your messages instead of stopping.' : '<b>Keep it listening</b> lets it wait for your messages when it is done, instead of stopping.'}${cur ? '' : ` To let it listen, the hook needs an update: <button class="link" type="button" data-ag-hook ${xs.elsewhere ? `data-folder="${esc(xs.folder)}"` : ''}>Update it</button> (then restart the session)`}</div>` : '<div class="ag-note">Read-only: you see what the session does, live.</div>'}
@@ -3963,9 +3967,13 @@ document.addEventListener('click', (e) => {
     adopt.disabled = true; ag.note = '';
     const post = (body) => fetch('/api/discover', { method: 'POST', headers: { 'content-type': 'application/json', 'x-osd-token': AGENT_TOKEN }, body: JSON.stringify(body) }).then(async (r) => { const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`); return d; });
     const go = (q) => { const u = new URL(location.href); for (const k of ['project', 'panel', 'term', 'overview', 'onboard']) u.searchParams.delete(k); for (const [k, v] of Object.entries(q)) u.searchParams.set(k, v); u.hash = ''; location.href = u.toString(); };
+    // the quick path (write mode): onboarding starts at once, after one confirmation; the overview shows its progress
+    const quick = adopt.hasAttribute('data-quick');
+    if (quick && adopt.dataset.agAdopt === 'onboard' && !confirm(`Onboard ${xo.display} as a project?\n\nClaude sets up OpenSpec there in the background (CLAUDE.md, openspec/ with a roadmap and backlog drafts); nothing is committed. The session keeps running.`)) { adopt.disabled = false; return; }
     return post({ action: 'add', path: xo.folder })
       .then((r) => (r.project ? go({ project: r.project, panel: 'chat', term: xo.sessionId })
         : adopt.dataset.agAdopt === 'follow' ? post({ action: 'follow', path: r.path }).then((f) => go({ project: f.project, panel: 'chat', term: xo.sessionId }))
+        : quick ? post({ action: 'onboard', path: r.path }).then(() => go({ overview: '', onboard: r.path }))
         : go({ overview: '', onboard: r.path })))
       .catch((err) => { ag.note = '✕ ' + err.message; renderAgentLive(); });
   }

@@ -2508,7 +2508,12 @@ const DISC_SKIP = new Set(['node_modules', 'target', 'build', 'dist', 'out', 've
 const disc = { path: null, scanning: false, scannedAt: null, error: null, candidates: [], skipped: new Set(), added: new Set() };
 try { const d = JSON.parse(fs.readFileSync(DISC_FILE, 'utf8')); disc.path = d.path ?? null; disc.skipped = new Set(d.skipped ?? []); disc.added = new Set(d.added ?? []); } catch { /* first use */ }
 const saveDisc = () => { try { fs.mkdirSync(STATE_DIR, { recursive: true }); fs.writeFileSync(DISC_FILE, JSON.stringify({ path: disc.path, skipped: [...disc.skipped], added: [...disc.added] })); } catch { /* not essential */ } };
-function adopt(dir) { const p = addProject(dir); disc.added.add(dir); saveDisc(); overviewChanged(); return p; }
+function adopt(dir) {
+  const p = addProject(dir); disc.added.add(dir); saveDisc();
+  // followed again from a session or a candidate: no longer listed as unfollowed or archived
+  for (const k of [dir, p.root]) if (parkedState.unfollowed.delete(k) | parkedState.archived.delete(k)) saveParked();
+  overviewChanged(); return p;
+}
 // Unfollow / Archive a followed project, Reactivate an archived one or Follow an unfollowed one again.
 function projectAction(body) {
   const action = String(body.action ?? '');
