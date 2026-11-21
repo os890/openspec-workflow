@@ -11,6 +11,12 @@ is any new session or sub-agent that has not seen the implementation.
 
 ![Writing to a Claude Code session from the dashboard, in terminal colors: green code falls behind the conversation while the answer is on its way and stops when it is done](docs/images/dashboard-terminal-rain.webp)
 
+*Writing to a running Claude Code session from the dashboard. The falling code only shows up during longer runs:
+when an answer takes more than 30 seconds (adjustable, or off), it runs until the answer is in. The animation is
+shortened.*
+
+![Charts from the git history: cumulative flow, burn-up, cycle time and the critical path](docs/images/dashboard-charts.png)
+
 The repository contains:
 
 - the workflow as diagrams ([Mermaid](diagrams/openspec-workflow.mmd), horizontal in
@@ -252,9 +258,7 @@ What makes it more than a status page:
   (macOS) or the application menu (Linux); one click starts it if needed and opens it. Installed as a web app it
   gets its own Dock icon, and `--service` keeps the dashboard running from login on.
 
-| Charts | Brainstorming an idea next to the backlog |
-|---|---|
-| ![Charts: cumulative flow, burn-up, cycle time, critical path](docs/images/dashboard-charts.png) | ![Brainstorming an idea in the chat, next to the backlog with its ideas](docs/images/dashboard-brainstorm.png) |
+![Brainstorming an idea in the chat, next to the backlog with its ideas](docs/images/dashboard-brainstorm.png)
 
 Details: the [user guide](docs/user-guide.md) and the dashboard [README](tools/openspec-dashboard/README.md).
 
