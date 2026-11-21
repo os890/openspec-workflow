@@ -195,6 +195,10 @@ What makes it more than a status page:
 - **Talk to the agent** (`--agent`). A chat with a read-only project assistant, Claude Code sessions started on a
   ticket from the dashboard, and messages to a session that is already working, also one in a terminal (through
   a hook). It runs your local `claude` command with its own login: no API key, same plan.
+- **Quick replies in the chat.** React to an answer with one click (👍 ✅ 🙏 🎉 💡), ask for it again in simpler
+  words (🔁), as a summary (📝) or as a table (📊), or quote it (↩, also just a selected part). Claude gets a short
+  reference to the answer, so it knows what you mean without the answer being sent again; the chat stays quiet
+  with just a faint ⋯ until you hover an answer.
 - **Voice and rephrasing, locally.** Dictate into any text box with a local speech-to-text container, and let a
   local model turn a rough draft into a clear prompt. Nothing of it goes to the cloud, and nothing is sent until
   you send it.

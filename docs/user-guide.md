@@ -173,12 +173,21 @@ sends messages to a session running elsewhere. Enter sends, Shift+Enter starts a
 
 **⤢ Maximize** gives the chat the whole window; `Esc` brings the side panel back.
 
-To answer quickly, react to one of Claude's answers with 👍 ✅ 🙏 🎉 or 💡 (each sends a short sentence such as "Yes,
-go ahead with this."), ask for it again in simpler words (🔁), as a short summary (📝) or as an overview table (📊), or press **↩ Quote** to reply to that answer, after selecting the part you mean if it is
-only a part. Claude gets the first sentence or the selected part as a reference, so it knows which answer you mean
-even when the conversation has moved on.
-
 ![Maximized chat](images/dashboard-chat-max.png)
+
+**Quick replies.** Each of Claude's answers has a faint **⋯** next to its time. Move the mouse over the answer (or
+tap ⋯) and a row of buttons appears:
+
+- 👍 ✅ 🙏 🎉 💡 react at once, each with a short sentence ("I agree with this.", "Yes, go ahead with this.",
+  "Thanks, that helps.", "Great, that is exactly right.", "Good idea, let us keep that."); only positive ones;
+- 🔁 asks for the answer again in simpler words, 📝 for a summary in a few bullet points, 📊 for an overview table;
+- ↩ quotes the answer in your next message; select a part of it first to quote just that part.
+
+Claude gets the answer's first sentence (or the part you selected) as the reference, so it knows which answer you
+mean even when the conversation has moved on, without the whole answer being sent again. Reactions show as small
+badges on the answer, quotes as a quote above your text.
+
+![Reactions, a quote and the quick-reply row in the chat](images/dashboard-chat-reactions.png)
 
 **Agent…** on a ticket adds the ticket's context automatically: **Ask** a read-only question about it ("Ask about
 this task" next to the current task prefills one), or **Start session** to let a new session work on it with the

@@ -189,7 +189,8 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
   - **Terminal session**: messages for a session running elsewhere (a terminal, an IDE), delivered at its next
     step through the hook below; its replies appear there.
   - **⤢ Maximize** gives the chat the whole window (`Esc` restores it, a second `Esc` closes it).
-  - **Reactions and quotes**: under each of Claude's answers, 👍 ✅ 🙏 🎉 💡 send a short answer at once ("I agree
+  - **Reactions and quotes**: each of Claude's answers has a faint ⋯; hovering the answer (or tapping ⋯) shows a
+    row where 👍 ✅ 🙏 🎉 💡 send a short answer at once ("I agree
     with this.", "Yes, go ahead with this.", …), 🔁 asks Claude to say it again in simpler words, 📝 to summarize
     it in a few bullet points and 📊 to turn it into an overview table, and **↩ Quote** replies to that answer (select a part of it first
     to quote just that part). Claude sees no timestamps of the dashboard, so the reference it gets is the answer's
