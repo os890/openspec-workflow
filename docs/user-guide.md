@@ -78,11 +78,38 @@ the agent works. It updates within a second of every file change. The screenshot
   `verify:` criterion. Below it: when the last task was checked off and when a project file was last written, so
   you can tell whether the agent is still busy.
 - The progress bar has one segment per task group; the group with the current task is outlined.
-- The tabs show the proposal, design, spec deltas and the `openspec validate` result of the change.
+- The tabs show the proposal, design, spec deltas and the `openspec validate` result of the change (see
+  [Validation](#validation) below).
 - **Current milestone** lists the other changes of the milestone; **Activity** lists every checked-off task and
   status change since the dashboard started, with a chart of tasks done over time.
 - The **Board** shows every change in the column its files put it in. "Waits for #3, #6" names the unfinished
   prerequisites. The parking lot is the chip next to the counts.
+
+### Validation
+
+The **Validation** tab shows what `openspec validate` says about the change, and what it checked. It matters from
+the moment a change is specified (design, spec deltas and tasks written) until it is archived: a draft in
+`openspec/backlog/` is not an OpenSpec change yet, and an archived change is part of `openspec/specs/`, so the tab
+says that instead of a result.
+
+For a change that passes, the tab lists every spec delta the CLI checked: the operation (ADDED, MODIFIED, REMOVED),
+the capability, the requirement and how many scenarios it has.
+
+![Validation of a change that passes](images/dashboard-validation-pass.png)
+
+When it fails, errors come first, then warnings and notes, each with the spec file it is about; a requirement
+without a scenario shows a red **0** in the table. The tab is labelled **Validation · 2** (the number of issues),
+and the change's card on the board says "✕ validation fails", so a broken spec delta is visible without opening
+it.
+
+![Validation of a change with a requirement without a scenario](images/dashboard-validation-fail.png)
+
+Validation checks the structure: a proposal, requirements written with SHALL or MUST, at least one scenario per
+requirement. Whether the code does what the scenarios say is for the tests and the review. The dashboard runs the
+CLI again whenever a file under `openspec/` changes, and the tab says when it last checked, or what the CLI is busy
+with.
+
+### Board
 
 **⤢ Full screen** shows only the board, still live, with the current change and task in a line at the top:
 
