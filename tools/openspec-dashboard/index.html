@@ -5202,7 +5202,8 @@ document.addEventListener('keydown', (e) => {
 });
 function renderNewProject() {
   const d = ui.overview?.discovery;
-  const jobs = (sc.fresh ? null : d?.newChats.find((x) => x.parent === sc.parent)?.jobs) ?? [];
+  // only the current conversation: "New brainstorm" starts another one in the same folder, the earlier ones stay out
+  const jobs = (sc.fresh ? null : groupBySession(d?.newChats.find((x) => x.parent === sc.parent)?.jobs ?? []).at(-1)?.jobs) ?? [];
   $('sc-title').innerHTML = 'New project<span class="sc-path">brainstorm it, then create it</span>';
   const cr = sc.create;
   morphHtml($('sc-bar'), `<div class="ag-row np-row"><label class="np-parent">Create in <input id="np-parent" value="${esc(sc.parentInput ?? '')}" spellcheck="false" autocomplete="off" ${jobs.length ? 'readonly title="Start a new brainstorm to choose another folder"' : ''}></label>

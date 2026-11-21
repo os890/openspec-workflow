@@ -7,6 +7,8 @@ AI coding agents, from a draft in the backlog to an archived change and one comm
 language, build tool or agent product: the **quality gate** is your project's full build, and a **fresh agent**
 is any new session or sub-agent that has not seen the implementation.
 
+![The OpenSpec dashboard: the board of a project's changes, with the chat about the project next to it](docs/images/dashboard-chat.png)
+
 The repository contains:
 
 - the workflow as diagrams ([Mermaid](diagrams/openspec-workflow.mmd), horizontal in
@@ -251,8 +253,6 @@ What makes it more than a status page:
 | Charts | Brainstorming an idea next to the backlog |
 |---|---|
 | ![Charts: cumulative flow, burn-up, cycle time, critical path](docs/images/dashboard-charts.png) | ![Brainstorming an idea in the chat, next to the backlog with its ideas](docs/images/dashboard-brainstorm.png) |
-
-![Chat with the project assistant next to the full-screen board](docs/images/dashboard-chat.png)
 
 Details: the [user guide](docs/user-guide.md) and the dashboard [README](tools/openspec-dashboard/README.md).
 
