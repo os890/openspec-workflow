@@ -173,6 +173,11 @@ sends messages to a session running elsewhere. Enter sends, Shift+Enter starts a
 
 **⤢ Maximize** gives the chat the whole window; `Esc` brings the side panel back.
 
+To answer quickly, react to one of Claude's answers with 👍 ✅ 🙏 🎉 or 💡 (each sends a short sentence such as "Yes,
+go ahead with this."), or press **↩ Quote** to reply to that answer, after selecting the part you mean if it is
+only a part. Claude gets the first sentence or the selected part as a reference, so it knows which answer you mean
+even when the conversation has moved on.
+
 ![Maximized chat](images/dashboard-chat-max.png)
 
 **Agent…** on a ticket adds the ticket's context automatically: **Ask** a read-only question about it ("Ask about
