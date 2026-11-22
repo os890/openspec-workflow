@@ -563,6 +563,15 @@ period). Only the digest's numbers and change names go to Claude; it reads nothi
 
 ![The daily digest below the projects, with Claude's briefing](images/dashboard-digest.png)
 
+With `--agent`, the digest also looks after Claude Code itself. When something needs doing, a highlighted **⚠ Claude
+Code** box comes first: a newer version is available (with what is new, from the changelog Claude Code keeps
+locally), the sign-in ends within three days or has ended (renew it with `claude auth login`), or sessions still run
+an older version than the one installed (they keep it until restarted). Otherwise a small line says that Claude Code
+is up to date and until when you are signed in. Everything comes from this computer: `claude --version`, `claude auth
+status` and Claude Code's own files; nothing is fetched from the internet.
+
+![The Claude Code box in the digest: the sign-in ends soon, an update is available, sessions on an older version](images/dashboard-digest-claude.png)
+
 ### Usage of your Claude plan
 
 With `--agent`, the gauge button in the overview's header (on a project's page: **☰ › Usage…**) shows what `/usage`

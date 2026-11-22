@@ -3214,6 +3214,39 @@ async function projectDigest(p, since) {
     totals: s.totals,
   };
 }
+// Claude Code itself, for the digest (with --agent): an update (the newest version in the changelog Claude Code
+// caches, ~/.claude/cache/changelog.md, against `claude --version`), running sessions on an older version (they keep
+// it until restarted), the sign-in (`claude auth status`: signed in, when it expires; nothing else of it is kept).
+// All local, no network; looked at every 10 minutes.
+const verCmp = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); for (let i = 0; i < Math.max(x.length, y.length); i++) { if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0); } return 0; };
+const runOut = (cmd, args) => new Promise((resolve) => execFile(cmd, args, { timeout: 30000, cwd: os.homedir() }, (err, out) => resolve(err ? null : String(out ?? ''))));
+let healthCache = null;
+async function claudeHealth() {
+  if (!AGENT) return null;
+  if (healthCache && Date.now() - healthCache.at < 10 * 60e3) return healthCache.v;
+  const [ver, auth] = await Promise.all([runOut(CLAUDE, ['--version']), runOut(CLAUDE, ['auth', 'status'])]);
+  const version = ver?.match(/(\d+\.\d+\.\d+)/)?.[1] ?? null;
+  const log = path.join(os.homedir(), '.claude', 'cache', 'changelog.md'), head = readSync(log).slice(0, 60000);
+  const latest = head.match(/^## (\d+\.\d+\.\d+)/m)?.[1] ?? null;
+  let notes = null;
+  if (latest && version && verCmp(latest, version) > 0) { // what the newer versions bring: the first lines of their notes
+    const parts = head.split(/^## /m).slice(1).filter((x) => verCmp(x.match(/^(\S+)/)?.[1] ?? '0', version) > 0);
+    notes = parts.map((x) => x.split('\n').slice(1).filter((l) => /^\s*[-*]/.test(l)).slice(0, 4).map((l) => l.replace(/^\s*[-*]\s*/, '').slice(0, 200))).flat().slice(0, 6);
+  }
+  const a = (() => { try { return JSON.parse(auth ?? ''); } catch { return null; } })();
+  const older = new Map();
+  for (const f of (() => { try { return fs.readdirSync(path.join(os.homedir(), '.claude', 'sessions')); } catch { return []; } })()) {
+    if (!f.endsWith('.json')) continue;
+    const d = jsonOf(readSync(path.join(os.homedir(), '.claude', 'sessions', f)), null);
+    if (!d?.version || d.kind !== 'interactive' || !version || verCmp(d.version, version) >= 0) continue;
+    try { process.kill(d.pid, 0); } catch (e) { if (e.code !== 'EPERM') continue; }
+    older.set(d.version, (older.get(d.version) ?? 0) + 1);
+  }
+  const v = { version, latest, update: !!(latest && version && verCmp(latest, version) > 0), notes, changelogAt: fs.statSync(log, { throwIfNoEntry: false })?.mtimeMs ?? null,
+    olderSessions: [...older].map(([version, count]) => ({ version, count })), login: a ? { loggedIn: !!a.loggedIn, expiresAt: a.loginExpiresAt ?? null } : null };
+  healthCache = { at: Date.now(), v };
+  return v;
+}
 const DIGEST_FILE = path.join(STATE_DIR, 'digest.json');
 let digestWriteup = (() => { try { return JSON.parse(fs.readFileSync(DIGEST_FILE, 'utf8')); } catch { return null; } })();
 async function digest(days) {
@@ -3221,7 +3254,7 @@ async function digest(days) {
   const since = digestSince(days);
   const list = (await Promise.all(projects.filter((p) => !p.stopped).map((p) => projectDigest(p, since).catch(() => null)))).filter(Boolean);
   const w = digestWriteup?.since === since && digestWriteup?.days === days ? digestWriteup : null;
-  return { days, since, projects: list, writeup: w ? { text: w.text, at: w.at } : null, writing: !!digestBusy };
+  return { days, since, projects: list, claude: await claudeHealth().catch(() => null), writeup: w ? { text: w.text, at: w.at } : null, writing: !!digestBusy };
 }
 let digestBusy = null;
 // Claude writes the digest up in a few sentences: the numbers above as its only input, no tools
