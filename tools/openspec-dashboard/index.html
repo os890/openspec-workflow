@@ -3744,6 +3744,7 @@ function agentStackHtml() {
       <span class="as-ico">${agIcon(a)}</span><span class="as-txt"><b>${esc(a.description || 'Agent')}</b><span>${esc(a.state === 'working' && a.last ? a.last : agMeta(a))}</span></span>
       ${a.state !== 'working' ? `<button type="button" class="as-x" data-sa-hide="${esc(a.agent)}" title="Remove it from the stack" aria-label="Remove">✕</button>` : ''}${top && list.length > 1 && !agStack.open ? `<span class="as-more" data-sa-fan title="Show all ${list.length}">+${list.length - 1}</span>` : ''}</div>`;
   const working = list.filter((a) => a.state === 'working').length, done = list.filter((a) => a.state === 'done').length, stopped = list.length - working - done;
+  if (!working && !agStack.open) return ''; // all done: the chip goes away (the lines in the thread still open them); a new agent brings it back
   // folded: a small chip without text (🤖, how many work, how many are done); a click fans the cards out
   const tip = `${list.length} agent${list.length === 1 ? '' : 's'} of this session: ${[working && `${working} working`, done && `${done} done`, stopped && `${stopped} stopped`].filter(Boolean).join(', ')}. Click to show them.`;
   return `<div class="as-stack ${agStack.open ? 'open' : ''} ${list.length > 1 ? 'many' : ''}" aria-label="Agents of this session: ${working} working">

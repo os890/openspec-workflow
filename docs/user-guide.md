@@ -385,7 +385,7 @@ Privacy & Security › Automation**.
 **Its agents.** When the session starts agents (subagents, also in the background), they gather as a small stack
 in the lower left corner of the conversation: folded, a small chip without text (🤖, the spinner with how many
 still work, ✓ with how many are done), so it covers hardly anything; a click fans them out as cards (task, state,
-current step or steps and time). A click on an
+current step or steps and time). Once no agent works any more, the chip goes away; the next agent brings it back. A click on an
 agent opens its details: its task, the kind of agent, steps and time, its result once it is done and all its steps,
 live while it works. In the thread, where it was started, only a slim line remains (🤖 *its task* · done), which
 opens the same details. Agents that are done stay in the stack for an hour; ✕ puts one away. **🤖 2 working** in the
