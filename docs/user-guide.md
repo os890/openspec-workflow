@@ -449,6 +449,8 @@ compaction is done, the cube shrinks into the gauge and the context before and a
 that has been larger than 200k tokens (or the model says so) counts with 1M; otherwise the gauge uses
 **Settings › Write mode › Context window** (200k by default, or 1M). The background list shows the gauge too.
 
+<a id="the-press"></a>
+
 ![While the session compacts: the conversation is pressed into a smaller and smaller box, the words squeezed out fall into /dev/null, and at the end the bin puts on shades, runs under the press and is flattened too](images/dashboard-compact-press.webp)
 
 While you write, the details above the conversation fold into one line (**✎ Writing to …**, its state, **Details ▾**,
