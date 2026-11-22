@@ -322,6 +322,8 @@ are only for agents (`user-invocable: false`) are left out.
 They are handy while a session works: the message reaches it mid-turn, and it answers before it continues. The
 thread shows each one short, e.g. **👀 Status**.
 
+- git: the green arrow (**Commit**) asks it to make sure everything is up to date and commit, but not push; the blue
+  arrow (**Commit and push**) to make sure everything is up to date, commit and push;
 - find out where it stands: 👀 the current status (done, now, next), ❓ whether anything blocks it or it needs a
   decision, 🔍 a summary of the changes so far (files and why, nothing committed), 📍 which task of the current
   change it is on and how many are left;
@@ -399,7 +401,8 @@ message is typed into the session's macOS Terminal tab and sent with
 Return, exactly as if you typed it there, also while the session waits at its prompt; no setup is needed, and the
 transcript marks it as *typed from the dashboard*. Its bubble shows at once, like in a messenger: ◷ while the
 dashboard types it in, ✓ once it is in the session's terminal, ✓✓ once the session has picked it up (while it works,
-that is with its next step). If it could not be sent, the bubble goes and the text is back in the input box with the
+that is with its next step); only your latest message carries these ticks. It glides in at the speed of **Settings ›
+Write mode › Your messages › Pop-in** (very slow to instant, normal by default). If it could not be sent, the bubble goes and the text is back in the input box with the
 reason. It goes as one line (line breaks become spaces). The dashboard
 only types while Claude Code itself is in the foreground of that tab (never into a shell), and not while the session
 asks you something there (a permission, a choice), since Return would answer it. macOS asks once whether the

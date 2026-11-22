@@ -357,7 +357,8 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     on its own. It looks for up to ~5 s until the text shows, in the box or above it (a busy session may draw it
     late; an empty box alone is no proof), and answers 502 when it still sits in the box at the end. The page shows
     the bubble at once (`termPending`): ◷ while the `type` request runs, ✓ once it answered, ✓✓ on the transcript's
-    bubble once the transcript has the text (compared without whitespace runs); a failed send removes it and puts the
+    bubble once the transcript has the text (compared without whitespace runs), only on the latest own message; it glides
+    in at `termView.popSpeed` (`POP_MS`, 1.3 s to instant, default 0.8 s; Settings › Write mode › Your messages); a failed send removes it and puts the
     text back into the input box. The end of a joined session's thread shows its state (working with the current step, done and
     waiting, listening, ended), polled with the transcript every 2 s from Claude Code's own idle/busy (its status `shell`, a finished turn with
     a background command still running, counts as done). In write mode
@@ -477,7 +478,8 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     to quote just that part). Claude sees no timestamps of the dashboard, so the reference it gets is the answer's
     first sentence, or the selected part, in a fixed form (`[Reaction 👍 to your message: "…"]`,
     `[Request 📝 about your message: "…"]`, `[Replying to your message: "…"]`), which it finds in its own conversation; the whole answer is not sent again. **⋯ under the input box** holds
-    quick messages about no answer in particular, in groups (👀 status, ❓ blockers, 🔍 changes so far, 📍 ticket
+    quick messages about no answer in particular, in groups (⇧ commit and ⬆️ commit and push, both
+    drawn as colored arrow boxes — green and blue, `qkIcon` — and asking to make sure everything is up to date first · 👀 status, ❓ blockers, 🔍 changes so far, 📍 ticket
     progress · ⏸ pause after this step, 🎯 stay on the ticket, 🧹 wrap up · 🧪 run the quality gate, ▶️ start the app cleanly and end with `App: <URL or command>`, which becomes an
     **Open the app ↗** button in the thread, next to ✓ Done and in the background list (`app` in
     `/api/sessions/status`); without that line the first `localhost`/`127.0.0.1` URL of the answer; ⏹️ stops the app, 🔃 restarts it and ends with the same line), sent as they

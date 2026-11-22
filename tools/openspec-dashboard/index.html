@@ -472,6 +472,11 @@ details.as-sec summary.as-l { cursor: pointer; } .as-task { white-space: pre-wra
 .ic-chip .tick { margin-left: 3px; font-weight: 800; letter-spacing: -.25em; } /* like a messenger: ◷ typing it in, ✓ in its terminal, ✓✓ picked up */
 .ic-chip .tick.t0 { letter-spacing: 0; opacity: .75; }
 .msg.me.pending { opacity: .85; }
+.wm-pop { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; cursor: default; }
+.wm-pop-demo { flex: none; max-width: none; font-size: 12.5px; padding: 4px 10px; }
+.msg.me.pop-in { animation: msg-pop-in .8s cubic-bezier(.22, 1, .36, 1) both; transform-origin: bottom right; }
+@keyframes msg-pop-in { from { opacity: 0; transform: translateY(14px) scale(.97); } 35% { opacity: .5; } to { opacity: .85; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .msg.me.pop-in { animation: none; } }
 /* settings dialog: local models */
 .set-dialog { width: min(780px, calc(100vw - 32px)); max-height: calc(100vh - 48px); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); padding: 18px 22px; box-shadow: var(--shadow-hover); }
 .set-dialog::backdrop { background: rgba(0, 0, 0, .35); }
@@ -1624,7 +1629,8 @@ body.remote #folder-btn, body.remote #hm-install { display: none !important; }
 .agent-panel .wait-rain { position: absolute; z-index: 0; pointer-events: none; opacity: .32; }
 .agent-panel.term-look .wait-rain { opacity: 1; background: #0d1117; }
 .agent-panel.rain-on #ag-thread { position: relative; z-index: 1; }
-.agent-panel .press-canvas { opacity: 1; background: #0d1117; }
+.agent-panel .press-canvas { opacity: 1; background: #0d1117; animation: press-in .7s ease-out; } /* fades in, no hard cut */
+@keyframes press-in { from { opacity: 0; } }
 /* a minimized pop out: a terminal icon in the bottom right corner; a click pops the session out again */
 .pip-dock { position: fixed; right: 18px; bottom: 18px; z-index: 60; }
 .pip-dock-btn { width: 48px; height: 48px; border-radius: 50%; border: 1px solid #00d65a; background: #0d1117; color: #00d65a; display: grid; place-items: center; cursor: pointer; box-shadow: 0 0 14px rgba(0, 214, 90, .45), var(--shadow); }
@@ -1817,6 +1823,9 @@ body.remote #folder-btn, body.remote #hm-install { display: none !important; }
 .ag-route { padding: 0 var(--agp) 12px; }
 .ag-tools { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .ag-tools [data-ag-send] { margin-left: auto; }
+.em-arrow { display: inline-flex; align-items: center; justify-content: center; width: 1.05em; height: 1.05em; border-radius: .26em; color: #fff; font: 800 .82em/1 system-ui, sans-serif; vertical-align: -.1em; }
+.rx .em-arrow { font-size: .78em; width: 1.25em; height: 1.25em; vertical-align: -.2em; } /* in the round button: inside the circle like an emoji */
+.em-arrow.green { background: #2ea44f; } .em-arrow.blue { background: #2f81f7; }
 .qk { display: inline-flex; align-items: center; gap: 4px; }
 .qk-bar { display: inline-flex; gap: 3px; align-items: center; flex-wrap: wrap; }
 .qk-bar[hidden] { display: none; }
@@ -2135,6 +2144,9 @@ function setRain(on) {
 let wait = null;
 // the speed of the falling code (Settings › Write mode): ms per step, from very slow to very fast; 3 is the default
 const RAIN_MS = [null, 160, 100, 60, 40, 25], RAIN_SPEED = [null, 'very slow', 'slow', 'normal', 'fast', 'very fast'];
+// how fast a message you send glides into the conversation (Settings › Write mode); the fastest is no animation
+const POP_MS = [null, 1300, 1050, 800, 550, 320, 0], POP_SPEED = [null, 'very slow', 'slow', 'normal', 'fast', 'very fast', 'instant'];
+const popSpeed = () => Math.min(6, Math.max(1, Math.round(Number(termView.popSpeed)) || 3));
 const rainSpeed = () => Math.min(5, Math.max(1, Number(termView.rainSpeed) || 3));
 function setWaitRain(on) {
   if (!on) {
@@ -4235,6 +4247,9 @@ function termThreadHtml(sid) {
   const cli = termView.look > 0 && ag.termWrite;
   const results = new Map(items.filter((e) => e.kind === 'result' || (e.kind === 'error' && e.id)).map((e) => [e.id, e]));
   let lastAsk = '';
+  // the ticks only on the latest own message: an older one has clearly landed
+  const pendNow = termPending.get(sid) ?? [];
+  const lastMe = pendNow.length ? null : items.findLast((e) => e.kind === 'user');
   for (const e of items) {
     if (e.kind === 'result' || (e.kind === 'error' && e.id && cli)) continue;
     if (e.kind === 'user' || e.kind === 'mine') lastAsk = e.kind === 'mine' ? e.m.text : e.text;
@@ -4254,8 +4269,8 @@ function termThreadHtml(sid) {
     if (e.kind === 'tool' || e.kind === 'error') { steps.push(e); continue; }
     flush();
     if (e.kind === 'mine') out.push(`<div class="msg me"><span class="ic-chip">from the dashboard</span>${esc(e.m.text)}<span class="meta">${hhmm(e.m.t)} · ${e.m.state === 'queued' ? `${waitingNow ? 'queued: arrives with the next prompt typed in its terminal' : 'queued: arrives with its next step'}${e.m.state === 'queued' ? ` · <button class="link" type="button" data-ag-cancel="${esc(e.m.id)}" ${e.folder ? `data-folder="${esc(e.folder)}"` : ''}>cancel</button>` : ''}` : 'delivered ' + hhmm(e.m.deliveredAt)}</span></div>`);
-    else if (e.kind === 'user' && (REACT_RE.test(e.text) || QUOTE_RE.test(e.text) || quickOf(e.text))) out.push(userMsgHtml(e).replace('<div class="msg me', '<div class="msg me term-user'));
-    else if (e.kind === 'user') out.push(`<div class="msg me term-user">${typedHere.has(sqz(e.text)) ? `<span class="ic-chip">typed from the dashboard ${tickHtml(2)}</span>` : ''}${esc(e.text)}<span class="meta">${e.t ? hhmm(e.t) : ''} · in the terminal</span></div>`);
+    else if (e.kind === 'user' && (REACT_RE.test(e.text) || QUOTE_RE.test(e.text) || quickOf(e.text))) out.push(userMsgHtml(e).replace(/^<div class="msg me([^>]*)>/, (_, a) => `<div class="msg me term-user${a}>${typedHere.has(sqz(e.text)) ? `<span class="ic-chip">typed from the dashboard${e === lastMe ? ' ' + tickHtml(2) : ''}</span>` : ''}`));
+    else if (e.kind === 'user') out.push(`<div class="msg me term-user">${typedHere.has(sqz(e.text)) ? `<span class="ic-chip">typed from the dashboard${e === lastMe ? ' ' + tickHtml(2) : ''}</span>` : ''}${esc(e.text)}<span class="meta">${e.t ? hhmm(e.t) : ''} · in the terminal</span></div>`);
     else {
       const id = `term:${sid}:${e.t}:${n++}`;
       rx.msgs.set(id, e.text);
@@ -4263,7 +4278,10 @@ function termThreadHtml(sid) {
     }
   }
   flush();
-  for (const p of termPending.get(sid) ?? []) out.push(`<div class="msg me term-user pending"><span class="ic-chip">typed from the dashboard ${tickHtml(p.typed ? 1 : 0)}</span>${esc(p.text)}<span class="meta">${hhmm(p.t)} · ${p.typed ? 'in its terminal' : 'typing it in…'}</span></div>`);
+  // it glides in once: the thread is rebuilt on every poll, so the animation runs from the moment it was sent (a later
+  // rebuild continues it instead of starting it again)
+  const popIn = (t) => { const a = Date.now() - t, d = POP_MS[popSpeed()]; return a < d ? ` pop-in" style="animation-duration:${d}ms;animation-delay:-${a}ms` : ''; };
+  for (const p of pendNow) out.push(`<div class="msg me term-user pending${popIn(p.t)}"><span class="ic-chip">typed from the dashboard${p === pendNow.at(-1) ? ' ' + tickHtml(p.typed ? 1 : 0) : ''}</span>${quickOf(p.text) ? `<span title="${esc(p.text)}">${qkIcon(quickOf(p.text))} ${esc(quickOf(p.text)[2])}</span>` : esc(p.text)}<span class="meta">${hhmm(p.t)} · ${p.typed ? 'in its terminal' : 'typing it in…'}</span></div>`);
   out.push(termStateHtml(T, items, canWrite && sx?.typeable));
   return out.join('') || '<div class="ag-empty">Nothing in this session yet.</div>';
 }
@@ -4771,8 +4789,12 @@ const REQUESTS = [['🔁', 'Please say this again in other words, simpler and cl
   ['🔄', 'Please try this again: run it once more, I changed something in the meantime. If it fails again, tell me what is different this time.', 'Try again']];
 const rx = { msgs: new Map(), quote: null, openId: null };
 // quick messages under the input box (⋯): a whole message with one click, about no answer in particular
-// in groups: find out where it stands · steer the work · quality (null marks a gap between groups)
+// in groups: git · find out where it stands · steer the work · quality (null marks a gap between groups); a fourth
+// field draws the icon as a colored arrow box (there is no green arrow emoji), the first field stays its marker
 const QUICK = [
+  ['⇧', 'Please ensure everything is up to date and commit, but don\'t push it.', 'Commit', 'green'],
+  ['⬆️', 'Please ensure everything is up to date, commit and push it.', 'Commit and push', 'blue'],
+  null,
   ['👀', 'What is the current status of your work? Briefly: what is done, what you are doing right now, and what comes next.', 'Status'],
   ['❓', 'Is anything blocking you, or do you need a decision from me? If not, just say so and continue.', 'Blockers'],
   ['🔍', 'Summarize the changes so far: which files and why, in a few bullet points. Do not commit.', 'Changes so far'],
@@ -4817,7 +4839,8 @@ function qkFit() {
   }
 }
 addEventListener('resize', qkFit);
-const quickHtml = () => `<span class="qk"><button type="button" class="rx-more qk-more" data-qk-more aria-expanded="${quick.open}" title="Quick messages" aria-label="Quick messages">⋯</button><span class="qk-bar" ${quick.open ? '' : 'hidden'}>${QUICK.map((q) => (q ? `<button type="button" class="rx" data-qk="${q[0]}" title="${esc(`${q[2]}: sends "${q[0]} ${q[1]}"`)}" aria-label="${esc(q[2])}">${q[0]}</button>` : '<span class="rx-sep"></span>')).join('')}<span class="rx-sep ag-compact" ${compactOn() ? '' : 'hidden'}></span><button type="button" class="rx ag-compact" data-ctx-compact ${compactOn() ? '' : 'hidden'} title="Compact: types /compact into its terminal; the press runs while it compacts" aria-label="Compact the conversation (/compact)">🗑️</button></span></span>`;
+const qkIcon = (q) => (q[3] ? `<span class="em-arrow ${q[3]}" aria-hidden="true">↑</span>` : q[0]);
+const quickHtml = () => `<span class="qk"><button type="button" class="rx-more qk-more" data-qk-more aria-expanded="${quick.open}" title="Quick messages" aria-label="Quick messages">⋯</button><span class="qk-bar" ${quick.open ? '' : 'hidden'}>${QUICK.map((q) => (q ? `<button type="button" class="rx" data-qk="${q[0]}" title="${esc(`${q[2]}: sends "${q[0]} ${q[1]}"`)}" aria-label="${esc(q[2])}">${qkIcon(q)}</button>` : '<span class="rx-sep"></span>')).join('')}<span class="rx-sep ag-compact" ${compactOn() ? '' : 'hidden'}></span><button type="button" class="rx ag-compact" data-ctx-compact ${compactOn() ? '' : 'hidden'} title="Compact: types /compact into its terminal; the press runs while it compacts" aria-label="Compact the conversation (/compact)">🗑️</button></span></span>`;
 document.addEventListener('click', (e) => {
   const more = e.target.closest?.('[data-qk-more]'), qk = e.target.closest?.('[data-qk]');
   if (!more && !qk) return;
@@ -4846,7 +4869,7 @@ function reactionsIn(jobs) {
 const quickOf = (text) => QUICK.find((q) => q && String(text).trim() === `${q[0]} ${q[1]}`);
 function userMsgHtml(l) {
   const qk = quickOf(l.text); // a quick message (⋯ under the input box): short, the whole text as its tooltip
-  if (qk) return `<div class="msg me rx-sent" title="${esc(l.text)}"><span>${qk[0]} ${esc(qk[2])}</span><span class="meta">${hhmm(l.t)}</span></div>`;
+  if (qk) return `<div class="msg me rx-sent" title="${esc(l.text)}"><span>${qkIcon(qk)} ${esc(qk[2])}</span><span class="meta">${hhmm(l.t)}</span></div>`;
   // attachments (new-project brainstorm): a chip with the file names; the paths stay out of sight
   const att = l.text.match(/^\[Attached files \([^\n]*\n((?:- [^\n]*\n)*)\]\n([\s\S]*)$/);
   if (att) {
@@ -5839,12 +5862,22 @@ function renderWriteSettings() {
     ${[['flat', 'Flattened', 'the bin puts on shades, runs under the press and is flattened too (about 4 s, default)'], ['run', 'Runs away', 'the bin puts on shades and runs off to the right (shorter, about 2.5 s)']].map(([v, label, desc]) => `<label class="set-opt ${pressEndOf() === v ? 'sel' : ''}"><input type="radio" name="wm-press" data-wm="pressend" value="${v}" ${pressEndOf() === v ? 'checked' : ''}><span><b>${label}</b><span class="muted"> · ${desc}</span></span></label>`).join('')}
     <div class="wm-head"><b>Context window</b> <span class="muted">· for the gauge that shows how full a session's context is, when the session does not show it (a session beyond 200k has 1M)</span></div>
     ${[[200000, '200k tokens', 'the default'], [1000000, '1M tokens', 'the long-context models']].map(([v, label, desc]) => `<label class="set-opt ${(termView.ctxWin ?? 200000) === v ? 'sel' : ''}"><input type="radio" name="wm-ctx" data-wm="ctxwin" value="${v}" ${(termView.ctxWin ?? 200000) === v ? 'checked' : ''}><span><b>${label}</b><span class="muted"> · ${desc}</span></span></label>`).join('')}
-    <div class="wm-head"><b>Your messages</b> <span class="muted">· their background in the conversation</span></div>
+    <div class="wm-head"><b>Your messages</b> <span class="muted">· how they glide in and their background in the conversation</span></div>
+    <div class="set-opt wm-pop"><span class="wm-speed"><b>Pop-in</b> <span class="muted">slow</span><input type="range" min="1" max="6" step="1" data-wm="popspeed" value="${popSpeed()}" aria-label="Speed of the pop-in of a message you send" aria-valuetext="${POP_SPEED[popSpeed()]}"><span class="muted">instant</span> <span id="wm-pop-v">${POP_SPEED[popSpeed()]}</span></span><span class="msg me wm-pop-demo" aria-hidden="true">Like this</span></div>
     ${[['highlight', 'Highlighted', 'bright blue in terminal colors, the style\'s color otherwise (default)'], ['theme', 'Color of the style', 'the current style\'s own color, in terminal colors too'], ['custom', 'Your own color', '']].map(([v, label, desc]) => {
       const cur = /^#/.test(me) ? 'custom' : me;
       return `<label class="set-opt ${cur === v ? 'sel' : ''}"><input type="radio" name="wm-me" data-wm="me" value="${v}" ${cur === v ? 'checked' : ''}><span><b>${label}</b>${desc ? `<span class="muted"> · ${desc}</span>` : ''}${v === 'custom' ? ` <input type="color" data-wm="mecolor" value="${/^#/.test(me) ? me : termView.meLast ?? '#7c3aed'}" aria-label="Color of your messages" ${cur === 'custom' ? '' : 'disabled'}>` : ''}</span></label>`;
     }).join('')}`;
 }
+const popDemo = () => { // replays the sample bubble at the chosen speed
+  const d = document.querySelector('#settings .wm-pop-demo'); if (!d) return;
+  d.classList.remove('pop-in'); void d.offsetWidth; d.style.animationDuration = POP_MS[popSpeed()] + 'ms'; if (POP_MS[popSpeed()]) d.classList.add('pop-in');
+};
+document.addEventListener('input', (e) => { // the pop-in while dragging: the label follows and the sample bubble glides in
+  if (e.target.dataset?.wm !== 'popspeed') return;
+  termView.popSpeed = Number(e.target.value) || 3; termViewSave();
+  $('wm-pop-v').textContent = POP_SPEED[popSpeed()]; e.target.setAttribute('aria-valuetext', POP_SPEED[popSpeed()]); popDemo();
+});
 document.addEventListener('input', (e) => { // the speed while dragging: the label and a running rain follow at once
   if (e.target.dataset?.wm !== 'speed') return;
   termView.rainSpeed = Number(e.target.value) || 3; termViewSave();
@@ -5859,6 +5892,7 @@ document.addEventListener('change', (e) => {
   else if (k === 'ctxwin') termView.ctxWin = Number(e.target.value) || 200000;
   else if (k === 'pressend') termView.pressEnd = e.target.value === 'run' ? 'run' : 'flat';
   else if (k === 'speed') termView.rainSpeed = Number(e.target.value) || 3;
+  else if (k === 'popspeed') return; // saved while dragging (a re-render would cut the sample short)
   else termView.rainAfter = Math.min(600, Math.max(5, Number(e.target.value) || 30));
   termViewSave(); renderWriteSettings();
   if (ag.open) renderAgentLive(); // the open panel follows at once
