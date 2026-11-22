@@ -1462,6 +1462,12 @@ body.board-max { overflow: hidden; }
 @media (max-width: 720px) { .ov-grid { grid-template-columns: 1fr; } }
 /* settings › Phone and tablet */
 .us-dialog { width: min(820px, calc(100vw - 32px)); }
+#awake-btn { display: inline-flex; align-items: center; } #awake-btn.aw-on { color: #c2410c; border-color: color-mix(in srgb, #f08c2e 60%, var(--line)); background: color-mix(in srgb, #f08c2e 12%, var(--surface)); }
+.aw-pop { width: min(400px, calc(100vw - 32px)); font-size: 13.5px; display: flex; flex-direction: column; gap: 6px; }
+.aw-opts { display: flex; flex-direction: column; gap: 2px; } .aw-opt { display: flex; gap: 8px; align-items: center; cursor: pointer; } .aw-opt.off { color: var(--muted); cursor: default; }
+.aw-state { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.aw-h { font-weight: 700; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 8px; }
+.aw-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; } .aw-list li { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
 #usage-btn { display: inline-flex; align-items: center; }
 .us-limits { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 6px 0 4px; }
 .us-limit { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
@@ -1982,6 +1988,7 @@ body.ag-max { overflow: hidden; }
       <button class="btn" id="term-btn" type="button" aria-label="Terminal sessions" aria-controls="agent" title="Sessions running in a terminal or an IDE: join one, follow it live, write to it" hidden><svg class="ic-term" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="3"/><path d="M7 9.5l3 2.5-3 2.5M12.5 15h4.5"/></svg></button>
       <button class="btn" id="folder-btn" type="button" aria-label="Open the project folder" title="Open the project folder in the file manager (which one: ⚙ Settings › General)" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg></button>
       <button class="btn" id="git-btn" type="button" aria-label="Git history" aria-controls="githist" title="Git history: the commits, branches and tags, and what each commit changed" hidden>⎇</button>
+      <button class="btn" id="awake-btn" type="button" aria-label="Keep the Mac awake" aria-haspopup="true" aria-expanded="false" title="Keep the Mac awake (caffeinate), and who keeps it awake now" hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M16 11h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 3.5c0 1 1 1.5 1 2.5M12 3.5c0 1 1 1.5 1 2.5"/></svg></button>
       <button class="btn" id="usage-btn" type="button" aria-label="Usage" title="Usage of your Claude plan: the session and weekly limits, and what contributes to them" hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4.5 17a8 8 0 1 1 15 0"/><path d="M12 13l3.5-4"/><circle cx="12" cy="13" r="1.2" fill="currentColor"/></svg></button>
       <button class="btn" id="podman-btn" type="button" aria-label="Podman" title="Podman: the VM and its containers (start, stop, restart)" hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8l8.5 4.6v9.2L12 21.2l-8.5-4.6V7.4z"/><path d="M3.5 7.4L12 12l8.5-4.6M12 12v9.2"/></svg></button>
       <button class="btn" id="menu-btn" type="button" aria-label="Look and settings" aria-haspopup="true" aria-expanded="false" aria-controls="hdr-menu" title="Style, light or dark, settings">☰</button>
@@ -1998,10 +2005,12 @@ body.ag-max { overflow: hidden; }
   <div class="hm-row"><span>Light or dark</span><button class="btn" id="theme" type="button" aria-label="Toggle light or dark theme">◐ Switch</button></div>
   <div class="hm-row" id="hm-install" hidden><span>As an app, with its own icon in the Dock</span><button class="btn primary" id="install-btn" type="button">Install…</button></div>
   <div class="hm-row" id="hm-lan" hidden><span>On a phone or tablet</span><button class="btn" id="lan-btn" type="button" title="Show the dashboard on a phone or tablet in the same network">QR code…</button></div>
+  <div class="hm-row" id="hm-awake" hidden><span>Keep the Mac awake</span><button class="btn" id="awake-menu-btn" type="button">☕ …</button></div>
   <div class="hm-row" id="hm-usage" hidden><span>Usage of your Claude plan</span><button class="btn" id="usage-menu-btn" type="button">Usage…</button></div>
   <div class="hm-row hm-set"><span>Settings</span><button class="btn" id="settings-btn" type="button" aria-label="Settings" title="Settings: local models, Podman, write mode, file manager" hidden>⚙ Open…</button></div>
 </div>
 <div class="bg-pop" id="bg-pop" role="dialog" aria-label="Sessions in the background" hidden></div>
+<div class="bg-pop aw-pop" id="awake-pop" role="dialog" aria-label="Keep the Mac awake" hidden></div>
 <div class="tt-bar" id="tt-bar" role="status" hidden></div>
 <div class="wrap">
   <section class="overview" id="overview" aria-live="polite" hidden></section>
@@ -3676,6 +3685,62 @@ function renderUsage() {
       ${d.notes.map((n) => `<p class="ag-note warn">${esc(n)}</p>`).join('')}` : us.busy ? '' : '<div class="ag-note">No usage yet.</div>'}`;
 }
 $('usage-btn').addEventListener('click', () => openUsage(false));
+// ---- keep the Mac awake (macOS): caffeinate run by the dashboard for a while or until turned off, the display and
+// the closed lid as options; who keeps the Mac awake now (Claude Code while it works, a caffeinate in a terminal, …)
+const aw = { view: null, open: false, busy: false, err: '', minutes: 0, display: false, lid: false };
+async function awakeFetch(body) {
+  aw.busy = !!body; aw.err = ''; if (aw.open) awakeRender();
+  try {
+    const r = await fetch('/api/awake', { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json', 'x-osd-token': AGENT_TOKEN }, body: body ? JSON.stringify(body) : undefined });
+    if (r.status === 403 && !body) { aw.view = null; return awakeButtons(); } // not macOS
+    const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+    aw.view = d;
+  } catch (e) { aw.err = e.message; }
+  aw.busy = false; awakeButtons(); if (aw.open) awakeRender();
+}
+function awakeButtons() {
+  const v = aw.view, b = $('awake-btn');
+  b.hidden = !v || !!PROJECT; $('hm-awake').hidden = !v || !PROJECT; // the overview has the room; elsewhere ☰
+  b.classList.toggle('aw-on', !!v?.on);
+  b.title = v?.on ? `The Mac is kept awake${v.until ? ` until ${hhmm(v.until)}` : ' until you turn it off'}` : 'Keep the Mac awake (caffeinate), and who keeps it awake now';
+}
+function awakeRender() {
+  const v = aw.view, pop = $('awake-pop');
+  pop.hidden = !aw.open; if (!aw.open) return;
+  const opt = (m, l) => `<label class="aw-opt"><input type="radio" name="aw-m" value="${m}" ${aw.minutes === m ? 'checked' : ''}> ${l}</label>`;
+  const others = (v?.holders ?? []).filter((h) => h.by !== 'dashboard');
+  pop.innerHTML = `<div class="bg-head"><b>☕ Keep the Mac awake</b><button class="link" type="button" data-aw-close>Close ✕</button></div>
+    ${v?.on ? `<div class="aw-state"><span class="dot on"></span>Kept awake since ${hhmm(v.since)} ${v.until ? `until <b>${hhmm(v.until)}</b>` : '<b>until you turn it off</b>'}${v.display ? ' · display on' : ''}${v.lid ? ' · also with the lid closed' : ''}</div>
+      <div class="ag-row"><button class="btn" type="button" data-aw-stop ${aw.busy ? 'disabled' : ''}>Let it sleep again</button></div>`
+    : `<div class="aw-opts">${opt(60, 'for 1 hour')}${opt(240, 'for 4 hours')}${opt(0, 'until I turn it off')}</div>
+      <label class="aw-opt"><input type="checkbox" data-aw-display ${aw.display ? 'checked' : ''}> the display stays on too</label>
+      <label class="aw-opt ${v?.ac ? '' : 'off'}" title="${v?.ac ? '' : 'Only on mains power: on battery a closed lid sends the Mac to sleep anyway'}"><input type="checkbox" data-aw-lid ${aw.lid && v?.ac ? 'checked' : ''} ${v?.ac ? '' : 'disabled'}> also with the lid closed${v?.ac ? '' : ' (on mains power)'}</label>
+      <div class="ag-row"><button class="btn primary" type="button" data-aw-start ${aw.busy ? 'disabled' : ''}>Keep it awake</button></div>`}
+    ${aw.err ? `<div class="ag-note warn">✕ ${esc(aw.err)}</div>` : ''}
+    <div class="aw-h">Who keeps it awake now</div>
+    ${others.length ? `<ul class="aw-list">${others.map((h) => `<li><span>${esc(h.who)}${h.display ? ' · display' : ''}<span class="muted"> · for ${dur(Date.now() - h.since)}</span></span>${h.by === 'terminal' || h.by === 'other' ? `<button class="link" type="button" data-aw-kill="${h.pid}" title="Stop this caffeinate (then its terminal can be closed)">Stop</button>` : ''}</li>`).join('')}</ul>` : '<div class="ag-note">Nothing else. Claude Code keeps the Mac awake on its own while a session works.</div>'}
+    <p class="ag-note">Run by the dashboard as <code>caffeinate</code>: no terminal has to stay open, and it ends with the dashboard. Claude Code keeps the Mac awake on its own while a session works.</p>`;
+}
+$('awake-btn').addEventListener('click', (e) => { e.stopPropagation(); aw.open = !aw.open; $('awake-btn').setAttribute('aria-expanded', String(aw.open)); awakeRender(); if (aw.open) awakeFetch(); });
+$('awake-menu-btn').addEventListener('click', (e) => { e.stopPropagation(); hdrMenu(false); aw.open = true; awakeRender(); awakeFetch(); });
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  if (!aw.open) return;
+  if (!t.closest?.('#awake-pop')) { if (!t.closest?.('#awake-btn')) { aw.open = false; awakeRender(); } return; }
+  if (t.closest('[data-aw-close]')) { aw.open = false; return awakeRender(); }
+  if (t.closest('[data-aw-start]')) return awakeFetch({ action: 'start', minutes: aw.minutes, display: aw.display, lid: aw.lid && aw.view?.ac });
+  if (t.closest('[data-aw-stop]')) return awakeFetch({ action: 'stop' });
+  const k = t.closest('[data-aw-kill]');
+  if (k && confirm('Stop this caffeinate? The Mac may then go to sleep when idle (unless something else keeps it awake).')) return awakeFetch({ action: 'stop-other', pid: Number(k.dataset.awKill) });
+});
+document.addEventListener('change', (e) => {
+  if (!e.target.closest?.('#awake-pop')) return;
+  if (e.target.name === 'aw-m') aw.minutes = Number(e.target.value);
+  if (e.target.matches('[data-aw-display]')) aw.display = e.target.checked;
+  if (e.target.matches('[data-aw-lid]')) aw.lid = e.target.checked;
+});
+setTimeout(() => { if (AGENT_TOKEN && !REMOTE) { awakeFetch(); setInterval(() => { if (aw.view || aw.open) awakeFetch(); }, 60e3); } }, 0); // after the whole script (REMOTE comes later)
 $('usage-menu-btn').addEventListener('click', () => { hdrMenu(false); openUsage(false); });
 $('usage').addEventListener('click', (e) => {
   if (e.target === $('usage') || e.target.closest('[data-us-close]')) return $('usage').close();

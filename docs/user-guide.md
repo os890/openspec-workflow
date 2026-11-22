@@ -590,6 +590,18 @@ local command of Claude Code that does not use the model.
 
 ![The usage of the Claude plan: limits with their reset time, and what contributes (example numbers)](images/dashboard-usage.png)
 
+### Keep the Mac awake
+
+On macOS with `--agent`, the cup in the overview's header (on a project's page: **☰ › Keep the Mac awake**) keeps the
+Mac from going to sleep when idle: for 1 hour, for 4 hours or until you turn it off, optionally with the display on,
+and on mains power also with the lid closed. The dashboard runs `caffeinate` for it, so no terminal has to stay open;
+it ends together with the dashboard, and after a restart of the dashboard it is on again for the rest of its time.
+The cup is colored while it is on. Below, the popover lists who keeps the Mac awake right now: Claude Code does so on
+its own while a session works, and a `caffeinate` started in a terminal shows up with **Stop**, so that terminal can
+be closed.
+
+![Keeping the Mac awake for an hour, and who else keeps it awake](images/dashboard-awake.png)
+
 ### Archive and unfollow
 
 Every project the dashboard follows costs a little all the time: it watches `openspec/`, looks at the files of the

@@ -45,6 +45,13 @@ are labelled with the shortest end of their path that tells them apart (`example
 cards, in the picker, the title and the history panel; candidates to onboard likewise (also against followed
 projects), in the list, the chat and the progress dialog.
 
+**Keep the Mac awake** (macOS, with `--agent`; the cup on the overview, ☰ elsewhere): `POST /api/awake` (token) starts
+`/usr/bin/caffeinate -i [-d] [-s] [-t <seconds>] -w <dashboard pid>` as a child process (it ends with the dashboard,
+also when the dashboard is killed) or stops it; the setting is kept in `awake.json` in the state folder and restored
+after a restart for the rest of its time. `GET /api/awake` lists who holds a sleep assertion (`pmset -g assertions`),
+a `caffeinate` with its parent (the dashboard, a Claude Code session, a terminal); `stop-other` stops a `caffeinate`
+of someone else (only that command).
+
 **Usage** (with `--agent`; a gauge button on the overview, ☰ › Usage… elsewhere): `GET /api/usage` (token) runs
 `claude -p /usage` in the home folder and parses its text: the limits (`Current <name>: <n>% used · resets <when>`),
 the periods (`Last 24h · <n> requests · <n> sessions`) with their hints (`<n>%  <what> · <how>`) and `Top …:` lists,

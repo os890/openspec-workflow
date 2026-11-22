@@ -3080,6 +3080,58 @@ for (const root of startRoots) {
 const byId = new Map(projects.map((p) => [p.id, p]));
 const projectFor = (url) => byId.get(url.searchParams.get('project')) ?? projects[0];
 const parkedList = (m) => [...m.entries()].map(([root, x]) => ({ root, ...x, label: labelOf(root), exists: fs.existsSync(path.join(root, 'openspec')) })).sort((a, b) => b.at - a.at);
+// ---------------------------------------------------------------- keep the Mac awake (macOS, with --agent)
+// The dashboard runs caffeinate as its own child process (no terminal needed; it ends with the dashboard): for a while
+// (-t) or until turned off, the system (-i), optionally the display (-d) and, on mains power, with the lid closed (-s).
+// Claude Code keeps the Mac awake on its own while a session works (caffeinate -i -t 300). Who keeps it awake comes
+// from `pmset -g assertions`; a caffeinate someone started in a terminal can be stopped from here.
+const awake = { child: null, since: null, until: null, display: false, lid: false };
+const AWAKE_FILE = path.join(STATE_DIR, 'awake.json'); // kept across restarts of the dashboard (until its time is up)
+const awakeSave = () => { try { fs.mkdirSync(STATE_DIR, { recursive: true }); fs.writeFileSync(AWAKE_FILE, JSON.stringify(awake.child ? { since: awake.since, until: awake.until, display: awake.display, lid: awake.lid } : {})); } catch { /* not essential */ } };
+function awakeStart({ minutes, display, lid, since }) {
+  awakeStop(true);
+  // -w: caffeinate ends by itself when the dashboard does (also when it is killed)
+  const args = ['-i', ...(display ? ['-d'] : []), ...(lid ? ['-s'] : []), ...(minutes ? ['-t', String(Math.round(minutes * 60))] : []), '-w', String(process.pid)];
+  const child = spawn('/usr/bin/caffeinate', args, { stdio: 'ignore' });
+  child.on('exit', () => { if (awake.child === child) { Object.assign(awake, { child: null, since: null, until: null }); awakeSave(); } }); // its time is up
+  Object.assign(awake, { child, since: since ?? Date.now(), until: minutes ? Date.now() + minutes * 60e3 : null, display: !!display, lid: !!lid });
+  awakeSave();
+}
+function awakeStop(quiet) { if (awake.child) { const c = awake.child; awake.child = null; c.kill(); } Object.assign(awake, { since: null, until: null }); if (!quiet) awakeSave(); }
+if (AGENT && process.platform === 'darwin') { // after a restart: on again, for the rest of its time
+  const was = jsonOf(readSync(AWAKE_FILE), {});
+  if (was.since && (!was.until || was.until > Date.now() + 30e3)) awakeStart({ minutes: was.until ? (was.until - Date.now()) / 60e3 : 0, display: was.display, lid: was.lid, since: was.since });
+}
+process.on('exit', () => awake.child?.kill());
+async function awakeView() {
+  const out = (await runCmd('pmset', ['-g', 'assertions'])).out, batt = (await runCmd('pmset', ['-g', 'batt'])).out;
+  const holders = [];
+  for (const m of out.matchAll(/^\s*pid (\d+)\(([^)]+)\): \[[^\]]+\] (\d+:\d+:\d+) (\w+) named: "([^"]*)"/gm)) {
+    const [, pid, name, age, kind] = m;
+    if (!/Prevent(UserIdle)?(System|Display)Sleep|PreventSystemSleep/.test(kind) || name === 'powerd') continue;
+    let who = name, own = Number(pid) === awake.child?.pid, by = null;
+    if (name === 'caffeinate') {
+      const ppid = (await runCmd('ps', ['-o', 'ppid=', '-p', pid])).out.trim(), parent = ppid ? (await runCmd('ps', ['-o', 'comm=', '-p', ppid])).out.trim() : '';
+      const args = (await runCmd('ps', ['-o', 'args=', '-p', pid])).out.trim();
+      by = own ? 'dashboard' : /(^|\/)claude$/.test(parent) ? 'claude' : /(^|\/)-?(zsh|bash|fish|sh)$/.test(parent) ? 'terminal' : 'other';
+      who = own ? 'this dashboard' : by === 'claude' ? 'a Claude Code session (while it works)' : by === 'terminal' ? `caffeinate in a terminal (${args})` : `caffeinate (${args})`;
+    }
+    const [h, mi, se] = age.split(':').map(Number);
+    if (!holders.some((x) => x.pid === Number(pid))) holders.push({ pid: Number(pid), who, by, kind, since: Date.now() - ((h * 60 + mi) * 60 + se) * 1000, display: /Display/.test(kind) });
+  }
+  return { on: !!awake.child, since: awake.since, until: awake.until, display: awake.display, lid: awake.lid, ac: /AC Power/.test(batt), holders };
+}
+async function awakeAction(body) {
+  if (process.platform !== 'darwin') throw httpError(404, 'Only on macOS.');
+  if (body.action === 'start') awakeStart({ minutes: Number(body.minutes) || 0, display: !!body.display, lid: !!body.lid });
+  else if (body.action === 'stop') awakeStop();
+  else if (body.action === 'stop-other') { // a caffeinate someone started elsewhere (a terminal): only caffeinate, only ours to stop
+    const pid = Number(body.pid), name = (await runCmd('ps', ['-o', 'comm=', '-p', String(pid)])).out.trim();
+    if (!pid || !/(^|\/)caffeinate$/.test(name) || pid === awake.child?.pid) throw httpError(400, 'Not a caffeinate process of someone else.');
+    try { process.kill(pid); } catch (e) { throw httpError(409, e.message); }
+  }
+  return awakeView();
+}
 // ---------------------------------------------------------------- the plan's usage (overview › Usage, with --agent)
 // What /usage shows in Claude Code: the limits of the subscription (session, week, per model) with their reset time,
 // and what contributes to the usage (hints with shares, top skills, subagents, MCP servers). `claude -p /usage` prints
@@ -3767,6 +3819,11 @@ const handle = async (req, res) => {
       }
     }
     if (url.pathname === '/api/projects') return json(res, overview());
+    if (url.pathname === '/api/awake') {
+      if (!AGENT || req.headers['x-osd-token'] !== TOKEN || process.platform !== 'darwin') { res.writeHead(403); return res.end('forbidden'); }
+      try { return json(res, req.method === 'POST' ? await awakeAction(await readBody(req)) : await awakeView()); }
+      catch (e) { if (!e.status) throw e; res.writeHead(e.status, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: e.message })); }
+    }
     if (url.pathname === '/api/usage') {
       if (!AGENT || req.headers['x-osd-token'] !== TOKEN) { res.writeHead(403); return res.end('forbidden'); }
       try { return json(res, await usage(url.searchParams.has('fresh'))); }
