@@ -242,7 +242,8 @@ What makes it more than a status page:
 - **Several projects** at once with a live overview, and **onboarding** right from it: it finds folders with a
   `CLAUDE.md` or `AGENTS.md`, lets you chat with Claude about whether one is worth it, and sets up OpenSpec there
   in the background (nothing committed). Or **start a new project**: brainstorm it with Claude, and once you agree
-  it is created with its roadmap and followed from then on; an **expert mode** sets its quality gates, task checks,
+  it is created with its roadmap and followed from then on (the agreed brief stays in the project as
+  `openspec/brief.md`); an **expert mode** sets its quality gates, task checks,
   review topics, workflow steps, documentation, diagram format (Mermaid by default) and types, container engine,
   branches (main, per ticket or per milestone), version control (local, GitHub, GitLab, …, public or private) and
   license up front, takes attached files (a spec,

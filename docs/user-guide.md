@@ -718,8 +718,10 @@ goes into and describe the idea; Claude asks about the problem, the users, the s
 and the quality gate, and proposes a first milestone of tickets. Once you agree it shows the project as a card.
 **Create project…** asks for the folder name; **Create and set up** creates the folder and lets Claude write
 `CLAUDE.md`, the README and the OpenSpec setup with the roadmap from the brainstorming, in the background and without
-committing. From then on the dashboard follows the project, also after a restart; its first ticket sets up the
-skeleton.
+committing. The panel then shows the new project: the brainstorm stays on top, the setup follows, and the chat
+below knows the brief you agreed on, so you can ask it about the project and what the setup wrote. The brief is kept
+in the project as `openspec/brief.md`. From then on the dashboard follows the project, also after a restart; its first
+ticket sets up the skeleton.
 
 ![Brainstorming a new project](images/dashboard-new-project.png)
 
@@ -770,7 +772,9 @@ With the container check on, the dashboard adds the list of your local container
 only lists them; nothing is started), and Claude suggests what fits, e.g. the Postgres that is already running for
 the database and a mail catcher for the e-mails, instead of installing something on the host. The message shows
 📦 for it; hover it to see the list. Once the choices went with a message, the panel folds into one line, so the
-brainstorm has the room again; **Show** opens it.
+brainstorm has the room again; **Show** opens it. While the list is open, the row with **⚙ Expert mode** stays at the
+top as you scroll: **Done ▴** (or ⚙ Expert mode again) closes the list and keeps the choices on; only **Turn off**
+switches expert mode off, and then nothing of it goes with the brainstorm or with Create.
 
 ![Expert mode for a new project](images/dashboard-new-project-expert.png)
 

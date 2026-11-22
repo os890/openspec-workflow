@@ -1433,6 +1433,9 @@ body.board-max { overflow: hidden; }
 .disc-about { font-size: 13px; color: var(--muted); }
 .disc-path { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .np-row { padding-bottom: 6px; }
+/* the row with ⚙ Expert mode stays at the top while the list of choices scrolls (Done is always in reach) */
+.ag-bar > .np-row { position: sticky; top: 0; z-index: 2; background: var(--surface); padding-top: 4px; }
+:root[data-style="glass"] .ag-bar > .np-row { background: var(--g-surface-strong); }
 .xp-toggle[aria-pressed="true"] { font-weight: 700; }
 .np-expert-fold { font-size: 12.5px; color: var(--muted); border: 1px dashed var(--line); border-radius: 10px; padding: 6px 10px; margin: 2px 0 8px; }
 .np-expert { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 2px 0 8px; max-height: 42vh; overflow: auto; display: flex; flex-direction: column; gap: 8px; background: var(--surface); }
@@ -6811,7 +6814,7 @@ function xpHtml() {
   if (!xp.open) return '';
   if (xp.fold) {
     const n = Object.values(xp.groups).reduce((a, g) => a + g.on.size, 0);
-    return `<div class="np-expert-fold">⚙ Expert mode is on: ${n} choices in ${EXPERT.length} groups go with the brainstorm and with Create. <button class="link" type="button" data-xp-unfold>Show</button></div>`;
+    return `<div class="np-expert-fold">⚙ Expert mode is on: ${n} choices in ${EXPERT.length} groups go with the brainstorm and with Create. <button class="link" type="button" data-xp-unfold>Show</button> · <button class="link" type="button" data-xp-off>Turn off</button></div>`;
   }
   return `<div class="np-expert">${EXPERT.map(([k, label, items]) => {
     const g = xp.groups[k];
@@ -6823,11 +6826,14 @@ function xpHtml() {
 }
 document.addEventListener('click', (e) => {
   const t = e.target;
-  const tog = t.closest?.('[data-xp-toggle], [data-xp-unfold]');
+  const tog = t.closest?.('[data-xp-toggle], [data-xp-unfold], [data-xp-fold], [data-xp-off]');
   const chip = t.closest?.('[data-xp-item]');
   if (!tog && !chip) return;
   e.stopPropagation();
-  if (tog) { if (tog.matches('[data-xp-unfold]') || (xp.open && xp.fold)) xp.fold = false; else xp.open = !xp.open; }
+  // closing the list folds it: the choices stay on (they go with the brainstorm and with Create); only Turn off ends it
+  if (tog?.matches('[data-xp-off]')) Object.assign(xp, { open: false, fold: false });
+  else if (tog?.matches('[data-xp-fold]')) xp.fold = true;
+  else if (tog) { if (!xp.open) Object.assign(xp, { open: true, fold: false }); else xp.fold = !xp.fold; }
   else {
     const g = xp.groups[chip.dataset.xp], item = chip.dataset.xpItem;
     if (EXPERT.find(([k]) => k === chip.dataset.xp)[3]?.one) g.on = new Set([item]); // exactly one
@@ -6855,6 +6861,7 @@ function renderNewProject() {
   const cr = sc.create;
   morphHtml($('sc-bar'), `<div class="ag-row np-row"><label class="np-parent">Create in <input id="np-parent" value="${esc(sc.parentInput ?? '')}" spellcheck="false" autocomplete="off" ${jobs.length ? 'readonly title="Start a new brainstorm to choose another folder"' : ''}></label>
       <button class="link xp-toggle" type="button" data-xp-toggle aria-pressed="${xp.open}" title="Quality gates, task checks, review topics, workflow steps, documentation, diagram format and types, containers, version control and license for the new project">⚙ Expert mode</button>
+      ${xp.open && !xp.fold ? '<button class="link" type="button" data-xp-fold title="Close the list; the choices stay on">Done ▴</button><button class="link" type="button" data-xp-off title="Expert mode off: the choices no longer go with the brainstorm and with Create">Turn off</button>' : ''}
       ${jobs.length ? '<button class="link" type="button" data-np-fresh>New brainstorm</button>' : ''}</div>
     ${xpHtml()}
     ${cr ? `<div class="ag-row np-create"><span class="ag-note">Create</span><code>${esc((sc.parentInput ?? '').replace(/\/$/, ''))}/</code><input id="np-name" value="${esc(cr.name)}" spellcheck="false" autocomplete="off">
@@ -6901,7 +6908,11 @@ function renderScout() {
   const jobs = [...chat, ...(onboard ? [onboard] : [])].sort((a, b) => a.startedAt - b.startedAt);
   const th = $('ag-thread');
   const atEnd = th.scrollHeight - th.scrollTop - th.clientHeight < 60;
-  th.innerHTML = threadHtml({ jobs, last: jobs.at(-1), scout: true });
+  // created from a brainstorm: that conversation stays on top (read-only), the setup and this chat follow; the chat
+  // here knows the agreed brief
+  const bs = c.brainstorm ? (ui.overview?.discovery?.newChats.find((x) => x.parent === c.brainstorm.parent)?.jobs ?? []).filter((j) => j.sessionId === c.brainstorm.session) : [];
+  th.innerHTML = (bs.length ? `<div class="term-note"><span>The brainstorm this project was created from</span></div>${threadHtml({ jobs: bs, last: null, scout: true })}<div class="term-note"><span>Created · the setup, and a chat that knows the agreed brief</span></div>` : '')
+    + threadHtml({ jobs, last: jobs.at(-1), scout: true });
   if (atEnd || sc.stick) { th.scrollTop = th.scrollHeight; sc.stick = false; }
 }
 function nextCandidate(after) {

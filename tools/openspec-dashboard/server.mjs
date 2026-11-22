@@ -1837,6 +1837,15 @@ function createAgent(project) {
   }
   // ---- a project that is not followed yet: a chat to decide whether to onboard it, and the onboarding itself
   function scoutSystem() {
+    // a project just created from a brainstorm in the dashboard: this chat knows the agreed brief (kept in memory,
+    // later in openspec/brief.md) instead of starting from nothing
+    const brief = project.brief ?? (() => { try { return fs.readFileSync(path.join(project.root, 'openspec', 'brief.md'), 'utf8').slice(0, 30000); } catch { return null; } })();
+    if (brief) return [
+      `This project ("${project.name}") was just created in the OpenSpec dashboard from a brainstorming with the user. This is the brief you both agreed on there (the user's details, the stack, the milestones and tickets, and the workflow chosen in expert mode):`,
+      '', brief, '',
+      'A separate setup session onboards the project from exactly this brief (it may still be running): it writes CLAUDE.md, a README, openspec/config.yaml, roadmap.md with the milestones and backlog drafts for the tickets, and keeps the brief as openspec/brief.md. You are the chat next to it in the dashboard: answer the user\'s questions about the project and its setup, from the brief and from what the setup wrote so far (read the files; compare them with the brief when asked, and say plainly what is missing or differs). Work read-only; never change a file. If something has to change, say what, so the user can ask the project\'s sessions for it once it is followed.',
+      'Answer like in a chat: short, in Markdown, in the language the user writes in.',
+    ].join('\n');
     return [
       `You help the user decide whether to onboard the project in this folder ("${project.name}") to OpenSpec and the OpenSpec ticket workflow, so that the OpenSpec dashboard can follow it.`,
       'Onboarding means: an openspec/ folder with config.yaml (project context, the quality gate), specs for what clearly exists, roadmap.md with milestones and backlog drafts for the next tickets; after that, agents build ticket by ticket (specify, implement against the specs, review, archive). It pays off for a project that is still developed further, has a build and tests (or will get them), and has more than a handful of tickets ahead; it is overhead for a finished, tiny or throwaway project.',
@@ -1863,6 +1872,8 @@ function createAgent(project) {
       'If the user sends workflow details from expert mode (quality gates, task checks, review topics, workflow steps, documentation, diagram format and types, container engine, tools and services, branches, version control, license), plan with them: the quality gate command and the first ticket set up those gates, the documentation is planned as chosen and the chosen diagram types are drawn in the chosen format, tools that are not installed on the host run in containers of the chosen engine, and the brief gets a short "Workflow" section with them.',
       'If a list of the local containers and images is given, check it for services the project can use (a database, a message broker, a mail catcher, object storage, a local model, …) and suggest reusing one, by its image, instead of installing something on the host or pulling another image; say why it fits. It is a list only: do not start, stop or change containers.',
       'Revise the block when the user asks for changes. If it does not converge, say so plainly and write no block. Answer like in a chat: short, in Markdown, in the language the user writes in.',
+      'Where you are: the "New project" dialog of the OpenSpec dashboard; this conversation is the step before the project exists, and you only brainstorm (read-only). Once you write the project block, the dashboard shows a "Create and set up" button: it creates the folder <parent>/<name>, sets up git (as chosen in expert mode) and starts a separate setup session that onboards the project for OpenSpec from your brief and the expert-mode choices. So when the user asks to create, onboard or set up the project, write (or revise) the block and tell them to press "Create and set up"; do not try to do it yourself.',
+      'Expert mode (⚙ Expert mode in the dialog) sends its choices at the start of a message as "[Workflow details (expert mode): …]", with the first message and again when they change; they also go with Create. If the user refers to expert-mode settings and none arrived, say so plainly and ask them to check that ⚙ Expert mode is on.',
     ].join('\n');
   }
   const SKILL_MD = path.resolve(HERE, '..', '..', 'skills', 'openspec-ticket-workflow', 'SKILL.md');
@@ -1871,6 +1882,7 @@ function createAgent(project) {
     if (brief) return [
       'This project was just created: an empty folder, with git initialised unless the brief says it has no version control. Set it up for OpenSpec and the OpenSpec ticket workflow from the brief the user agreed on in a brainstorming:',
       '', brief, '',
+      'The dashboard keeps this brief as openspec/brief.md once you are done (do not write that file yourself); point to it in CLAUDE.md as the original brief the project was set up from.',
       'Start by writing your plan with your task tools (TaskCreate and TaskUpdate; TodoWrite in older versions): 5 to 12 steps in the order you will do them, in plain words with an activeForm (the dashboard shows them to the user as the progress). Keep them current: mark a step in_progress when you start it and completed when it is done; add a step when you find more to do.',
       'Create CLAUDE.md (purpose, stack, conventions, the quality gate, and that work goes ticket by ticket with the workflow) and a short README.md.',
       `Then set up OpenSpec: ${skill}.`,
@@ -1936,13 +1948,14 @@ function createAgent(project) {
     push(job, 'user', text);
     const base = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--tools', 'Read,Grep,Glob',
       '--permission-prompts', 'none', ...modelArgs(), ...addDirArgs()];
+    // the instructions go with every start, also a resumed one (Claude Code does not keep --append-system-prompt in the session)
+    const sys = mode === 'brainstorm' ? brainstormSystem(job.idea) : mode === 'scout' ? scoutSystem() : mode === 'newproject' ? newProjectSystem() : chatSystem();
     if (prev?.sessionId) {
       job.sessionId = prev.sessionId;
       job.resumedFrom = prev.id;
-      launch(job, [...base, '--resume', prev.sessionId], userLine(text), true);
+      launch(job, [...base, '--resume', prev.sessionId, '--append-system-prompt', sys], userLine(text), true);
     } else {
       job.sessionId = randomUUID();
-      const sys = mode === 'brainstorm' ? brainstormSystem(job.idea) : mode === 'scout' ? scoutSystem() : mode === 'newproject' ? newProjectSystem() : chatSystem();
       launch(job, [...base, '--session-id', job.sessionId, '-n', `dashboard ${mode === 'assistant' ? 'chat' : mode} ${project.name}`, '--append-system-prompt', sys], userLine(text), true);
     }
     return { job: job.id };
@@ -3639,6 +3652,11 @@ async function createRepo(c) {
 }
 const expandHome = (d) => path.resolve(String(d ?? '').trim().replace(/^~(?=$|\/)/, os.homedir()));
 const homeDisplay = (d) => (d.startsWith(os.homedir() + path.sep) ? '~' + d.slice(os.homedir().length) : d);
+// the agreed brief stays with the project: openspec/brief.md (written once, after the setup; never overwritten)
+function keepBrief(dir, brief) {
+  const f = path.join(dir, 'openspec', 'brief.md');
+  try { if (fs.existsSync(path.dirname(f)) && !fs.existsSync(f)) fs.writeFileSync(f, `# Project brief\n\nAgreed in the brainstorm in the OpenSpec dashboard on ${new Date().toISOString().slice(0, 10)}; the project was set up from it.\n\n${brief.trim()}\n`); } catch { /* not essential */ }
+}
 function newChatFor(dir) {
   let p = newChats.get(dir);
   if (!p) { p = { id: 'new-project', root: dir, name: path.basename(dir), clients: new Set(), state: null, addDirs: [attachDir(dir)] }; fs.mkdirSync(p.addDirs[0], { recursive: true }); p.agent = createAgent(p); newChats.set(dir, p); }
@@ -3764,9 +3782,13 @@ async function discoveryAction(body) {
     if (inv) brief += `\n\n## Local containers (${inv.engine}, when the project was created)\n\n${inv.text}\n`;
     disc.candidates.unshift({ path: dir, real: dir, name, display: homeDisplay(dir), markers: [], about: brief.split('\n').find((l) => l.trim() && !/^(#|[a-z ]+:)/i.test(l.trim()))?.trim().slice(0, 200) ?? null, lastCommit: null, created: true });
     const sp = scoutFor(dir);
+    sp.brief = brief; // the chat next to the setup knows what was agreed
+    // the brainstorm it came from: shown above the setup in the new project's view
+    const bs = newChats.get(parent)?.agent.view().jobs.filter((j) => j.kind === 'chat').at(-1);
+    if (bs?.sessionId) Object.assign(disc.candidates[0], { brainstorm: { parent, session: bs.sessionId } });
     if (attached.length) sp.addDirs = [attachDir(parent)]; // the onboarding reads the attachments where they are
     if (['github', 'gitlab', 'other'].includes(vcs)) disc.candidates[0].repo = { platform: vcs, name: platform, visibility };
-    const job = await sp.agent.onboard({ brief, onDone: () => adopt(dir) });
+    const job = await sp.agent.onboard({ brief, onDone: () => { keepBrief(dir, brief); return adopt(dir); } });
     overviewChanged();
     return { path: dir, job: job.id };
   }

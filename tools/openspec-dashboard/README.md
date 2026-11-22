@@ -152,9 +152,17 @@ local containers and images for services to reuse" on, the server adds the list 
 (`ps -a` and `images` of the chosen engine; nothing is started) to the message, so Claude suggests reusing e.g. a
 running database instead of installing one; the chat shows it as a 📦 chip with the list as its tooltip, and
 **Create** puts it into the brief as "Local containers" (the setup reuses what was chosen, without copying the list). Once the choices went with a
-message, the panel folds into one line (**Show** opens it again), so the brainstorm keeps its room. They are sent to the brainstorm with the next message when they change, and
+message, the panel folds into one line (**Show** opens it again), so the brainstorm keeps its room. Closing the list
+(**Done ▴** in the row with ⚙ Expert mode, which stays at the top while the list scrolls, or ⚙ Expert mode again)
+only folds it; **Turn off** (`xp.open = false`) is the only way to switch it off. They are sent to the brainstorm with the next message when they change, and
 with **Create** as the brief's "Workflow" section; the setup makes them binding in `openspec/config.yaml` (quality
-gate, task rules, review rules, ticket workflow) and CLAUDE.md, and the first ticket sets up the chosen gates.
+gate, task rules, review rules, ticket workflow) and CLAUDE.md, and the first ticket sets up the chosen gates. The brainstorm's instructions
+(`newProjectSystem`) explain the dialog (the project block, **Create and set up**, the setup session) and the
+`[Workflow details (expert mode): …]` line; every chat start, also a resumed one, gets its instructions again with
+`--append-system-prompt` (Claude Code does not keep them in the session). After **Create**, the new project's view
+keeps the brainstorm on top (the candidate's `brainstorm`: its parent and session) above the setup; the chat there
+(`scoutSystem`) gets the agreed brief instead of the onboarding questions, and once the setup is done the server keeps
+the brief as `openspec/brief.md` (`keepBrief`, written once, never overwritten; the setup points to it in CLAUDE.md).
 
 The folder, the skipped candidates and the projects added this way are remembered
 (`$XDG_STATE_HOME/openspec-dashboard/discovery.json`), so added projects are followed again after a restart. With
