@@ -569,7 +569,12 @@ With `--agent`, the gauge button in the overview's header (on a project's page: 
 shows in Claude Code, as a page to read at a glance: each limit of your plan (the session, the week, per model) as
 a bar with how much is used and when it resets, and what contributes to the usage over the last 24 hours and 7 days,
 each hint with its share (e.g. *Start fresh when you switch tasks · run /clear*) and the top skills, subagents and MCP
-servers. **↻ Refresh** asks again; otherwise it is kept for a minute. The dashboard runs `claude -p /usage` for it, a
+servers. Below, **Activity** shows what `/stats` shows in the CLI: the tokens per day by model (stacked, over 7 or 30
+days or all of them; all tokens, the cache reads included), the messages per day, and the totals: sessions since the
+first one, messages, the longest session and the tokens per model. Hover a day for its values. It comes from Claude
+Code's own statistics (`~/.claude/stats-cache.json`), which Claude Code updates only when `/stats` is opened; the
+days after that (usually today) the dashboard counts from the transcripts. **↻ Refresh** asks again; otherwise it is
+kept for a minute. The dashboard runs `claude -p /usage` for it, a
 local command of Claude Code that does not use the model.
 
 ![The usage of the Claude plan: limits with their reset time, and what contributes (example numbers)](images/dashboard-usage.png)

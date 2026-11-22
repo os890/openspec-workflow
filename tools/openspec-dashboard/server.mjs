@@ -3100,6 +3100,66 @@ function parseUsage(text) {
   }
   return out;
 }
+// The activity behind the CLI's /stats view: ~/.claude/stats-cache.json (tokens per day and model, messages,
+// sessions and tool calls per day, totals per model, hours, the longest session). Claude Code updates it only when
+// /stats is opened, so the days after lastComputedDate (today) are counted here from the transcripts written since:
+// each read from its end back to that day; an answer written in several lines counts once (by message id).
+const ymdOf = (t) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+function liveDays(sinceDay) {
+  const start = new Date(`${sinceDay}T00:00:00`).getTime(), days = new Map(), seen = new Set();
+  const files = [];
+  const walkDir = (d, depth) => { let es = []; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of es) { const f = path.join(d, e.name); if (e.isDirectory() && depth < 3) walkDir(f, depth + 1); else if (e.isFile() && e.name.endsWith('.jsonl')) { const st = fs.statSync(f, { throwIfNoEntry: false }); if (st && st.mtimeMs >= start) files.push({ f, size: st.size }); } } };
+  for (const base of CLAUDE_PROJECT_DIRS) walkDir(base, 0);
+  for (const { f, size } of files.slice(0, 2000)) {
+    const fd = fs.openSync(f, 'r');
+    try {
+      let end = size, rest = '', done = false;
+      const sessions = new Set();
+      while (end > 0 && !done) {
+        const len = Math.min(end, 1 << 20), b = Buffer.alloc(len); fs.readSync(fd, b, 0, len, end - len); end -= len;
+        const text = b.toString('utf8') + rest, cut = end > 0 ? text.indexOf('\n') : -1;
+        rest = cut >= 0 ? text.slice(0, cut) : ''; // a line cut at the chunk's start: read with the next chunk
+        const lines = (cut >= 0 ? text.slice(cut + 1) : text).split('\n');
+        for (let i = lines.length - 1; i >= 0; i--) {
+          const l = lines[i];
+          const ts = l.match(/"timestamp":"([^"]+)"/)?.[1];
+          if (!ts) continue;
+          const t = Date.parse(ts);
+          if (t < start) { done = true; break; }
+          if (!l.includes('"type":"assistant"') || !l.includes('"usage"')) continue;
+          let m; try { m = JSON.parse(l); } catch { continue; }
+          const msg = m.message ?? {}, u = msg.usage, model = msg.model;
+          if (!u || !model || model === '<synthetic>') continue;
+          const key = `${msg.id ?? ''}:${m.requestId ?? ''}`;
+          if (msg.id && seen.has(key)) continue;
+          seen.add(key);
+          const day = ymdOf(t), d = days.get(day) ?? days.set(day, { tokens: {}, messages: 0, tools: 0, sessions: new Set() }).get(day);
+          d.tokens[model] = (d.tokens[model] ?? 0) + (u.input_tokens ?? 0) + (u.output_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+          d.messages++; d.tools += (msg.content ?? []).filter((x) => x.type === 'tool_use').length;
+          if (m.sessionId && !f.includes(`${path.sep}subagents${path.sep}`)) d.sessions.add(m.sessionId);
+        }
+      }
+    } catch { /* unreadable: left out */ } finally { fs.closeSync(fd); }
+  }
+  return [...days].map(([date, d]) => ({ date, tokensByModel: d.tokens, messageCount: d.messages, toolCallCount: d.tools, sessionCount: d.sessions.size, live: true }));
+}
+let statsCache = null;
+function usageStats() {
+  if (statsCache && Date.now() - statsCache.at < 60e3) return statsCache.v;
+  const sc = jsonOf(readSync(path.join(os.homedir(), '.claude', 'stats-cache.json')), null);
+  if (!sc) return null;
+  const last = sc.lastComputedDate ?? '1970-01-01', next = ymdOf(new Date(`${last}T12:00:00`).getTime() + 86400e3);
+  const live = next <= ymdOf(Date.now()) ? liveDays(next) : [];
+  const byDay = new Map();
+  for (const d of sc.dailyModelTokens ?? []) byDay.set(d.date, { date: d.date, tokens: d.tokensByModel ?? {} });
+  for (const d of sc.dailyActivity ?? []) Object.assign(byDay.get(d.date) ?? byDay.set(d.date, { date: d.date, tokens: {} }).get(d.date), { messages: d.messageCount, sessions: d.sessionCount, tools: d.toolCallCount });
+  for (const d of live) byDay.set(d.date, { date: d.date, tokens: d.tokensByModel, messages: d.messageCount, sessions: d.sessionCount, tools: d.toolCallCount, live: true });
+  const v = { days: [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date)), computed: last, totals: { sessions: sc.totalSessions, messages: sc.totalMessages, first: sc.firstSessionDate, longest: sc.longestSession ? { duration: sc.longestSession.duration, messages: sc.longestSession.messageCount, t: sc.longestSession.timestamp } : null },
+    models: Object.fromEntries(Object.entries(sc.modelUsage ?? {}).map(([k, u]) => [k, (u.inputTokens ?? 0) + (u.outputTokens ?? 0) + (u.cacheReadInputTokens ?? 0) + (u.cacheCreationInputTokens ?? 0)])), hours: sc.hourCounts ?? {} };
+  statsCache = { at: Date.now(), v };
+  return v;
+}
 let usageCache = null;
 async function usage(fresh) {
   if (!AGENT) throw httpError(404, 'Start the dashboard with --agent for this.');
@@ -3112,7 +3172,7 @@ async function usage(fresh) {
     child.on('error', (e) => { clearTimeout(timer); reject(httpError(502, e.code === 'ENOENT' ? `${CLAUDE} was not found.` : e.message)); });
     child.on('close', () => { clearTimeout(timer); resolve(out); });
   });
-  const v = { ...parseUsage(text), at: Date.now() };
+  const v = { ...parseUsage(text), at: Date.now(), stats: (() => { try { return usageStats(); } catch { return null; } })() };
   if (!v.limits.length && !v.periods.length) throw httpError(502, `No usage in the answer of Claude Code: ${text.trim().slice(0, 300)}`);
   usageCache = { at: Date.now(), v };
   return v;

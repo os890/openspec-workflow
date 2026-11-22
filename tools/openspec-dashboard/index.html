@@ -1477,6 +1477,10 @@ body.board-max { overflow: hidden; }
 .us-hint { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
 .us-share { font-weight: 700; font-variant-numeric: tabular-nums; }
 .us-tops { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.us-h .dg-seg { margin-left: 10px; vertical-align: 2px; font-weight: 400; }
+.us-svg { margin-top: 4px; }
+.us-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.us-totals .us-models { grid-column: 1 / -1; gap: 6px; }
 .us-chip { font-size: 12px; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; }
 :root[data-theme="dark"] .us-pct.mid { color: #f2c94c; } :root[data-theme="dark"] .us-pct.hi { color: #f5a35c; }
 .lan-pair { display: flex; gap: 18px; align-items: flex-start; margin-top: 10px; flex-wrap: wrap; }
@@ -3187,11 +3191,18 @@ function depsChart(s, shownNames, times, W) {
 const tip = document.createElement('div');
 tip.className = 'ch-tip'; tip.hidden = true; document.body.appendChild(tip);
 function showTip(e, lines) {
+  const host = e.target.closest?.('dialog[open]') ?? document.body; // a modal dialog lies above the page: the tip goes into it
+  if (tip.parentNode !== host) host.appendChild(tip);
   tip.innerHTML = lines.map((l, i) => `<div class="${i ? '' : 'h'}">${esc(l)}</div>`).join('');
   tip.hidden = false;
   const r = tip.getBoundingClientRect();
-  tip.style.left = `${Math.min(innerWidth - r.width - 8, e.clientX + 14)}px`;
-  tip.style.top = `${e.clientY + 16 + r.height > innerHeight ? e.clientY - r.height - 10 : e.clientY + 16}px`;
+  // within the page, or within the dialog it is in (kept inside its box; a transformed dialog is the frame for "fixed")
+  const box = host === document.body ? { left: 0, top: 0, right: innerWidth, bottom: innerHeight } : host.getBoundingClientRect();
+  const frame = host !== document.body && getComputedStyle(host).transform !== 'none' ? box : { left: 0, top: 0 };
+  const x = e.clientX + 14 + r.width > box.right - 8 ? e.clientX - r.width - 14 : e.clientX + 14;
+  const y = e.clientY + 16 + r.height > box.bottom - 8 ? e.clientY - r.height - 10 : e.clientY + 16;
+  tip.style.left = `${Math.max(box.left + 4, x) - frame.left}px`;
+  tip.style.top = `${Math.max(box.top + 4, y) - frame.top}px`;
 }
 document.addEventListener('pointermove', (e) => {
   const hit = e.target.closest?.('[data-xhover]');
@@ -3208,7 +3219,7 @@ document.addEventListener('pointermove', (e) => {
     return showTip(e, row.lines);
   }
   const t = e.target.closest?.('[data-tip]');
-  if (t && t.closest('.charts')) return showTip(e, t.dataset.tip.split('\n'));
+  if (t && t.closest('.charts, .us-dialog')) return showTip(e, t.dataset.tip.split('\n'));
   tip.hidden = true;
 });
 document.documentElement.addEventListener('mouseleave', () => { tip.hidden = true; });
@@ -3592,6 +3603,56 @@ async function openUsage(fresh) {
   } catch (e) { us.err = e.message; }
   us.busy = false; renderUsage();
 }
+// ---- the activity behind /stats: tokens per day by model (stacked), messages per day, totals
+const US_COLORS = ['--cf-specified', '--cf-complete', '--cf-progress', '--cf-archived', '--cf-draft']; // fixed order, by total
+const modelName = (m) => { const x = String(m).replace(/^claude-/, '').replace(/-\d{8}$/, ''); const k = x.match(/^([a-z]+)-(\d+)(?:-(\d+))?$/); return k ? `${k[1][0].toUpperCase()}${k[1].slice(1)} ${k[2]}${k[3] ? '.' + k[3] : ''}` : x; };
+const bigNum = (n) => (n >= 1e9 ? `${+(n / 1e9).toFixed(n >= 1e10 ? 0 : 1)}B` : n >= 1e6 ? `${+(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
+function usageStatsHtml(st) {
+  if (!st?.days?.length) return '';
+  const range = us.range ?? 30, today = new Date(); today.setHours(12, 0, 0, 0);
+  const keys = []; for (let i = range === 'all' ? Math.max(0, Math.ceil((today - new Date(st.days[0].date + 'T12:00:00')) / 86400e3)) : range - 1; i >= 0; i--) keys.push(ymdLocal(new Date(today.getTime() - i * 86400e3)));
+  const by = new Map(st.days.map((d) => [d.date, d])), days = keys.map((k) => by.get(k) ?? { date: k, tokens: {} });
+  // the models in this range, largest first; a sixth and further fold into "Other"
+  const tot = {}; for (const d of days) for (const [m, n] of Object.entries(d.tokens)) tot[m] = (tot[m] ?? 0) + n;
+  const ms = Object.keys(tot).filter((m) => tot[m] > 0).sort((a, b) => tot[b] - tot[a]);
+  const shown = ms.slice(0, ms.length > 5 ? 4 : 5), other = ms.filter((m) => !shown.includes(m));
+  const series = [...shown.map((m, i) => ({ key: m, name: modelName(m), color: `var(${US_COLORS[i]})`, of: (d) => d.tokens[m] ?? 0 })), ...(other.length ? [{ key: 'other', name: `Other (${other.length})`, color: 'var(--faint)', of: (d) => other.reduce((a, m) => a + (d.tokens[m] ?? 0), 0) }] : [])];
+  const W = 760, H = 190, L = 44, R = 8, T = 8, B = 22, n = days.length, bw = (W - L - R) / n;
+  const sum = (d) => series.reduce((a, x) => a + x.of(d), 0), max = Math.max(1, ...days.map(sum));
+  const mag = 10 ** Math.floor(Math.log10(max / 4)), step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((x) => max / x <= 5);
+  const y = (v) => T + (1 - v / (step * Math.ceil(max / step))) * (H - T - B), top = step * Math.ceil(max / step);
+  let grid = ''; for (let v = 0; v <= top; v += step) grid += `<line class="ch-grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="ch-ax" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${bigNum(v)}</text>`;
+  const every = Math.ceil(n / 8);
+  const label = (k) => new Date(k + 'T12:00:00').toLocaleDateString([], { day: 'numeric', month: 'short' });
+  let bars = '';
+  days.forEach((d, i) => {
+    let acc = 0; const x = L + i * bw + Math.min(2, bw * 0.15), w = Math.max(1, bw - Math.min(4, bw * 0.3));
+    for (const sr of series) { const v = sr.of(d); if (!v) continue; const y0 = y(acc), y1 = y(acc + v); acc += v; bars += `<rect x="${x.toFixed(1)}" y="${(y1 + 0.5).toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(0.5, y0 - y1 - 1).toFixed(1)}" rx="${Math.min(3, w / 3).toFixed(1)}" fill="${sr.color}"/>`; }
+    const tip = [label(d.date) + (d.live ? ' (today, counted here)' : ''), ...series.filter((sr) => sr.of(d)).map((sr) => `${sr.name}: ${bigNum(sr.of(d))} tokens`), d.messages != null ? `${d.messages.toLocaleString()} messages · ${d.sessions ?? 0} sessions · ${(d.tools ?? 0).toLocaleString()} tool calls` : 'no activity'];
+    bars += `<rect class="ch-hit" x="${(L + i * bw).toFixed(1)}" y="${T}" width="${bw.toFixed(1)}" height="${H - T - B}" ${tipAttr(tip)}/>`;
+    if ((i % every === 0 && n - 1 - i >= every * 0.7) || i === n - 1) bars += `<text class="ch-ax" x="${(L + i * bw + bw / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle">${label(d.date)}</text>`;
+  });
+  // messages per day: one series, small
+  const H2 = 90, maxM = Math.max(1, ...days.map((d) => d.messages ?? 0)), y2 = (v) => 6 + (1 - v / maxM) * (H2 - 6 - 18);
+  let act = `<line class="ch-grid" x1="${L}" x2="${W - R}" y1="${y2(0)}" y2="${y2(0)}"/><text class="ch-ax" x="${L - 6}" y="${y2(maxM) + 8}" text-anchor="end">${bigNum(maxM)}</text>`;
+  days.forEach((d, i) => { const v = d.messages ?? 0, x = L + i * bw + Math.min(2, bw * 0.15), w = Math.max(1, bw - Math.min(4, bw * 0.3)); if (v) act += `<rect x="${x.toFixed(1)}" y="${y2(v).toFixed(1)}" width="${w.toFixed(1)}" height="${(y2(0) - y2(v)).toFixed(1)}" rx="${Math.min(3, w / 3).toFixed(1)}" fill="var(--accent)" fill-opacity=".75"/>`;
+    act += `<rect class="ch-hit" x="${(L + i * bw).toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H2 - 18}" ${tipAttr([label(d.date), `${(d.messages ?? 0).toLocaleString()} messages`, `${d.sessions ?? 0} sessions · ${(d.tools ?? 0).toLocaleString()} tool calls`])}/>`; });
+  const all = Object.entries(st.models ?? {}).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]), allMax = all[0]?.[1] ?? 1;
+  const t = st.totals ?? {}, inRange = days.reduce((a, d) => a + sum(d), 0);
+  return `<h3 class="us-h">Activity <span class="dg-seg" role="group" aria-label="Days">${[[7, '7 days'], [30, '30 days'], ['all', 'All']].map(([v, l]) => `<button type="button" data-us-range="${v}" aria-pressed="${String(range) === String(v)}">${l}</button>`).join('')}</span></h3>
+    <p class="ag-note">Tokens per day by model, as in <code>/stats</code> of the CLI (all tokens, the cache reads included): ${bigNum(inRange)} in ${range === 'all' ? 'all' : `the last ${range}`} days. Up to ${esc(st.computed)} from Claude Code's own statistics, the days after it counted here from the transcripts. Hover a day for its values.</p>
+    <div class="ch-legend">${series.map((sr) => `<span><i style="background:${sr.color}"></i>${esc(sr.name)} <b class="ch-num">${bigNum(tot[sr.key] ?? other.reduce((a, m) => a + tot[m], 0))}</b></span>`).join('')}</div>
+    <svg class="ch-svg us-svg" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Tokens per day by model over ${n} days">${grid}${bars}</svg>
+    <div class="us-sub" style="margin-top:8px">Messages per day</div>
+    <svg class="ch-svg us-svg" viewBox="0 0 ${W} ${H2}" width="100%" role="img" aria-label="Messages per day">${act}</svg>
+    <div class="us-totals">
+      <div class="cq-tile"><span class="cq-l">Sessions</span><span class="cq-v ch-num">${(t.sessions ?? 0).toLocaleString()}</span><span class="cq-s">since ${t.first ? new Date(t.first).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</span></div>
+      <div class="cq-tile"><span class="cq-l">Messages</span><span class="cq-v ch-num">${(t.messages ?? 0).toLocaleString()}</span></div>
+      <div class="cq-tile"><span class="cq-l">Longest session</span><span class="cq-v ch-num">${t.longest ? dur(t.longest.duration) : '—'}</span><span class="cq-s">${t.longest ? `${t.longest.messages.toLocaleString()} messages` : ''}</span></div>
+      <div class="cq-tile us-models"><span class="cq-l">Tokens by model, all time</span>${all.slice(0, 6).map(([m, v]) => `<div class="cl-row"><span class="cl-name">${esc(modelName(m))}</span><span class="cl-track"><i style="width:${Math.max(1.5, (v / allMax) * 100)}%"></i></span><span class="cl-n ch-num">${bigNum(v)}</span></div>`).join('')}</div>
+    </div>`;
+}
+const ymdLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 function renderUsage() {
   const d = us.data, lvl = (p) => (p >= 85 ? 'hi' : p >= 60 ? 'mid' : '');
   const limit = (l) => `<div class="us-limit"><div class="us-row"><b>${esc(l.label[0].toUpperCase() + l.label.slice(1))}</b><span class="us-pct ${lvl(l.pct)}">${l.pct}% used</span></div>
@@ -3605,6 +3666,7 @@ function renderUsage() {
     ${d ? `${d.plan ? `<p class="ag-note">${esc(d.plan)}${d.at ? ` · as of ${hhmm(d.at)}` : ''}</p>` : ''}
       <div class="us-limits">${d.limits.map(limit).join('')}</div>
       ${d.periods.length ? `<h3 class="us-h">What contributes to your usage</h3>${d.scope ? `<p class="ag-note">${esc(d.scope)}</p>` : ''}<div class="us-periods">${d.periods.map(period).join('')}</div>` : ''}
+      ${usageStatsHtml(d.stats)}
       ${d.notes.map((n) => `<p class="ag-note warn">${esc(n)}</p>`).join('')}` : us.busy ? '' : '<div class="ag-note">No usage yet.</div>'}`;
 }
 $('usage-btn').addEventListener('click', () => openUsage(false));
@@ -3612,6 +3674,7 @@ $('usage-menu-btn').addEventListener('click', () => { hdrMenu(false); openUsage(
 $('usage').addEventListener('click', (e) => {
   if (e.target === $('usage') || e.target.closest('[data-us-close]')) return $('usage').close();
   if (e.target.closest('[data-us-refresh]')) openUsage(true);
+  const rg = e.target.closest('[data-us-range]'); if (rg) { us.range = rg.dataset.usRange === 'all' ? 'all' : Number(rg.dataset.usRange); renderUsage(); }
 });
 $('theme').addEventListener('click', () => {
   const root = document.documentElement;

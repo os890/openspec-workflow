@@ -48,7 +48,11 @@ projects), in the list, the chat and the progress dialog.
 **Usage** (with `--agent`; a gauge button on the overview, ☰ › Usage… elsewhere): `GET /api/usage` (token) runs
 `claude -p /usage` in the home folder and parses its text: the limits (`Current <name>: <n>% used · resets <when>`),
 the periods (`Last 24h · <n> requests · <n> sessions`) with their hints (`<n>%  <what> · <how>`) and `Top …:` lists,
-the plan line and warnings; kept for a minute (`?fresh` asks again).
+the plan line and warnings; kept for a minute (`?fresh` asks again). `stats` adds the activity of `/stats`:
+`~/.claude/stats-cache.json` (`dailyModelTokens`, `dailyActivity`, `modelUsage`, totals, the longest session) up to
+its `lastComputedDate`; the days after it are counted from the transcripts changed since (also the subagents'), each
+read from its end back to that day; an answer written in several lines counts once (message id and request id),
+tokens are input, output, cache read and cache creation, as in the CLI.
 
 **Daily digest** (overview, below the cards): `GET /api/digest?days=1|7` computes per followed project, from the
 charts' timeline (`git log` of `openspec/` merged with the recorded history), the window since the start of the
