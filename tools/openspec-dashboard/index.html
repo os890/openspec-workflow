@@ -3717,6 +3717,10 @@ function awakeRender() {
       <label class="aw-opt"><input type="checkbox" data-aw-display ${aw.display ? 'checked' : ''}> the display stays on too</label>
       <label class="aw-opt ${v?.ac ? '' : 'off'}" title="${v?.ac ? '' : 'Only on mains power: on battery a closed lid sends the Mac to sleep anyway'}"><input type="checkbox" data-aw-lid ${aw.lid && v?.ac ? 'checked' : ''} ${v?.ac ? '' : 'disabled'}> also with the lid closed${v?.ac ? '' : ' (on mains power)'}</label>
       <div class="ag-row"><button class="btn primary" type="button" data-aw-start ${aw.busy ? 'disabled' : ''}>Keep it awake</button></div>`}
+    ${v?.helper ? `<div class="aw-h">Keep the screen on too · ${esc(v.helper.name)}</div>
+      ${v.helper.error ? `<div class="ag-note warn">✕ ${esc(v.helper.error)}</div>` : v.helper.active
+        ? `<div class="aw-state"><span class="dot on"></span>${esc(v.helper.name)} keeps the screen on${v.helper.until ? ` until <b>${esc(v.helper.until)}</b>` : ''}</div><div class="ag-row"><button class="btn" type="button" data-aw-helper-stop ${aw.busy ? 'disabled' : ''}>Stop ${esc(v.helper.name)}</button></div>`
+        : `<div class="ag-row"><button class="btn" type="button" data-aw-helper-start ${aw.busy ? 'disabled' : ''} title="Starts ${esc(v.helper.name)} for the time chosen above (until turned off: 12 hours)">Start ${esc(v.helper.name)}${v.on && v.until ? ` until ${hhmm(v.until)}` : ` for ${aw.minutes ? (aw.minutes >= 60 ? `${aw.minutes / 60} h` : `${aw.minutes} min`) : '12 h'}`}</button><span class="ag-note">keeps the screen from locking (the Mac awake is not enough for that)</span></div>`}` : ''}
     ${aw.err ? `<div class="ag-note warn">✕ ${esc(aw.err)}</div>` : ''}
     <div class="aw-h">Who keeps it awake now</div>
     ${others.length ? `<ul class="aw-list">${others.map((h) => `<li><span>${esc(h.who)}${h.display ? ' · display' : ''}<span class="muted"> · for ${dur(Date.now() - h.since)}</span></span>${h.by === 'terminal' || h.by === 'other' ? `<button class="link" type="button" data-aw-kill="${h.pid}" title="Stop this caffeinate (then its terminal can be closed)">Stop</button>` : ''}</li>`).join('')}</ul>` : '<div class="ag-note">Nothing else. Claude Code keeps the Mac awake on its own while a session works.</div>'}
@@ -3731,6 +3735,8 @@ document.addEventListener('click', (e) => {
   if (t.closest('[data-aw-close]')) { aw.open = false; return awakeRender(); }
   if (t.closest('[data-aw-start]')) return awakeFetch({ action: 'start', minutes: aw.minutes, display: aw.display, lid: aw.lid && aw.view?.ac });
   if (t.closest('[data-aw-stop]')) return awakeFetch({ action: 'stop' });
+  if (t.closest('[data-aw-helper-start]')) return awakeFetch({ action: 'helper-start', minutes: aw.view?.on && aw.view.until ? Math.max(1, Math.round((aw.view.until - Date.now()) / 60e3)) : aw.minutes || 720 });
+  if (t.closest('[data-aw-helper-stop]')) return awakeFetch({ action: 'helper-stop' });
   const k = t.closest('[data-aw-kill]');
   if (k && confirm('Stop this caffeinate? The Mac may then go to sleep when idle (unless something else keeps it awake).')) return awakeFetch({ action: 'stop-other', pid: Number(k.dataset.awKill) });
 });
@@ -5123,12 +5129,14 @@ const setTabs = () => `<div class="set-tabs" role="tablist"><button type="button
 // settings › General: the file manager for the folder button in the header (kept in the dashboard's settings file)
 async function renderGeneralSettings() {
   if (!st.view) { try { st.view = await settingsFetch('GET'); } catch (e) { st.note = '✕ ' + e.message; } }
-  const cur = st.view?.settings?.files?.open ?? '', curT = st.view?.settings?.terminal?.open ?? '';
+  const cur = st.view?.settings?.files?.open ?? '', curT = st.view?.settings?.terminal?.open ?? '', curH = st.view?.settings?.awake?.helper ?? '';
   $('settings').innerHTML = `<div class="set-head"><h2 id="set-title">Settings</h2><button class="link" type="button" data-set-close>Close ✕</button></div>${setTabs()}
     <div class="set-gen"><label><b>Open project folders with</b><input id="set-fm" value="${esc(cur)}" placeholder="the system's file manager" spellcheck="false" autocomplete="off"></label>
     <p class="ag-note">For the folder button in the header. Empty: the system's file manager (Finder, Explorer, xdg-open). On macOS the name of an app, e.g. <code>Finder</code> or another file manager, opens the folder with <code>open -a &lt;app&gt;</code>. Anything else: a command with <code>{dir}</code> for the folder, e.g. <code>my-file-manager --path {dir}</code>.</p>
     <label><b>Start new sessions in</b><input id="set-term" value="${esc(curT)}" placeholder="${/Mac/.test(navigator.platform) ? 'Terminal' : 'the first terminal found'}" spellcheck="false" autocomplete="off"></label>
     <p class="ag-note">For <b>＋ New session</b> in the terminal sessions. Empty: on macOS a new Terminal window (the dashboard can write into it), on Linux the first terminal found (x-terminal-emulator, GNOME Terminal, Konsole, …). Anything else: a command with <code>{cmd}</code>, the shell command that starts Claude Code in the project's folder, e.g. <code>wezterm start -- sh -lc {cmd}</code>. Both are kept in the dashboard's settings file.</p>
+    <label><b>App that keeps the screen on</b><input id="set-helper" value="${esc(curH)}" placeholder="none" spellcheck="false" autocomplete="off"></label>
+    <p class="ag-note">Optional, for the ☕ popover: an app that keeps the screen from locking (e.g. by nudging the pointer), as the path of a macOS <code>.app</code> or a command. It has to take <code>-n &lt;duration&gt;</code> (e.g. <code>-n 90m</code>) to start in the background, <code>--status</code> (saying "… until HH:MM" while it runs) and <code>--stop</code>.</p>
     <div class="ag-row set-actions"><button class="btn primary" type="button" data-set-fm-save>Save</button><span class="ag-note" id="set-fm-note">${esc(st.fmNote ?? '')}</span></div></div>`;
 }
 // ---- settings › Phone and tablet: the dashboard in the local network, for paired devices (QR code with a secret key)
@@ -5477,7 +5485,7 @@ $('settings').addEventListener('click', async (e) => {
   const tab = t.closest('[data-set-tab]');
   if (tab) { clearTimeout(st.pmTimer); st.tab = tab.dataset.setTab; return st.tab === 'podman' ? openPodman() : st.tab === 'write' ? renderWriteSettings() : st.tab === 'general' ? renderGeneralSettings() : st.tab === 'lan' ? renderLanSettings() : st.view ? renderSettings() : openSettings(false); }
   if (t.closest('[data-set-fm-save]')) {
-    try { st.view = await settingsFetch('POST', { files: { open: $('set-fm').value }, terminal: { open: $('set-term').value } }); st.fmNote = '✓ Saved'; } catch (err) { st.fmNote = '✕ ' + err.message; }
+    try { st.view = await settingsFetch('POST', { files: { open: $('set-fm').value }, terminal: { open: $('set-term').value } }); st.view = await settingsFetch('POST', { awake: { helper: $('set-helper').value } }); st.fmNote = '✓ Saved'; } catch (err) { st.fmNote = '✕ ' + err.message; }
     return renderGeneralSettings();
   }
   if (t.closest('[data-pm-restart]')) {

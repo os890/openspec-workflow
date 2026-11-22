@@ -77,7 +77,7 @@ if (AGENT && !['127.0.0.1', 'localhost', '::1'].includes(HOST)) {
 const STATE_DIR = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state'), 'openspec-dashboard');
 // Local models chosen in the dashboard's settings dialog (⚙); they win over the command-line defaults once saved.
 const SETTINGS_FILE = path.join(STATE_DIR, 'settings.json');
-const settings = { rephrase: { provider: 'auto' }, stt: { provider: 'auto' }, podman: { autostart: [] }, files: { open: '' }, terminal: { open: '' }, lan: { on: false, write: false, key: null } };
+const settings = { rephrase: { provider: 'auto' }, stt: { provider: 'auto' }, podman: { autostart: [] }, files: { open: '' }, terminal: { open: '' }, lan: { on: false, write: false, key: null }, awake: { helper: '' } };
 try { const f = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); for (const k of Object.keys(settings)) Object.assign(settings[k], f[k]); } catch { /* defaults */ }
 const writeSettings = () => { fs.mkdirSync(STATE_DIR, { recursive: true }); fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2) + '\n'); };
 const WORKSPACE_EXCLUDES = new Set(['.git', 'target', 'node_modules', 'node', '.angular', 'dist', 'coverage',
@@ -2653,6 +2653,7 @@ async function saveSettings(body) {
     writeSettings(); lanSync();
     return settingsView(false);
   }
+  if (body.awake) { settings.awake = { helper: typeof body.awake.helper === 'string' ? body.awake.helper.trim().slice(0, 500) : '' }; writeSettings(); helperCache = null; return settingsView(false); }
   if (body.files || body.terminal) {
     if (body.files) settings.files = { open: typeof body.files.open === 'string' ? body.files.open.trim().slice(0, 500) : '' };
     if (body.terminal) settings.terminal = { open: typeof body.terminal.open === 'string' ? body.terminal.open.trim().slice(0, 500) : '' };
@@ -3103,6 +3104,50 @@ if (AGENT && process.platform === 'darwin') { // after a restart: on again, for 
   if (was.since && (!was.until || was.until > Date.now() + 30e3)) awakeStart({ minutes: was.until ? (was.until - Date.now()) / 60e3 : 0, display: was.display, lid: was.lid, since: was.since });
 }
 process.on('exit', () => awake.child?.kill());
+// A helper app that keeps the screen on (Settings › General): a macOS .app or a command that takes `-n <duration>` to
+// start in the background, `--status` (says "active … until HH:MM", exit 0 while it runs) and `--stop`. An .app is
+// started through macOS (open -a, so its own permissions apply) and asked through its launcher.
+let helperCache = null;
+function screenHelper() {
+  const h = String(settings.awake?.helper ?? '').trim();
+  if (!h) return null;
+  if (/\.app\/?$/.test(h)) {
+    const plist = readSync(path.join(h, 'Contents', 'Info.plist'));
+    const key = (k) => plist.match(new RegExp(`<key>${k}</key>\\s*<string>([^<]*)</string>`))?.[1];
+    const exe = key('CFBundleExecutable');
+    if (!exe) return { name: path.basename(h, '.app'), missing: true };
+    return { app: h, name: key('CFBundleName') || path.basename(h, '.app'), launcher: path.join(h, 'Contents', 'MacOS', exe) };
+  }
+  return { name: path.basename(splitCmd(h)[0] ?? h), command: splitCmd(h) };
+}
+async function helperStatus(fresh) {
+  const hp = screenHelper();
+  if (!hp) return null;
+  if (hp.missing) return { name: hp.name, error: 'The app was not found (Settings › General).' };
+  if (!fresh && helperCache && Date.now() - helperCache.at < 10e3) return helperCache.v;
+  const [cmd, ...pre] = hp.launcher ? [hp.launcher] : hp.command;
+  const r = await new Promise((resolve) => execFile(cmd, [...pre, '--status'], { timeout: 15000 }, (err, out, errOut) => resolve({ code: err?.code ?? 0, text: `${out ?? ''}${errOut ?? ''}`.trim() })));
+  const v = { name: hp.name, active: r.code === 0 && /active|running until|until/i.test(r.text) && !/not running/i.test(r.text), until: r.text.match(/until\s+(\d{1,2}:\d{2}(?::\d{2})?)/)?.[1] ?? null, text: r.text.split('\n')[0].slice(0, 200) };
+  helperCache = { at: Date.now(), v };
+  return v;
+}
+async function helperRun(action, minutes) {
+  const hp = screenHelper();
+  if (!hp || hp.missing) throw httpError(409, 'No helper app set (Settings › General).');
+  if (action === 'start') {
+    const dur = `${Math.max(1, Math.round(minutes || 60))}m`;
+    if (hp.app) await new Promise((resolve, reject) => execFile('open', ['-a', hp.app, '--args', '-n', dur], { timeout: 15000 }, (err, out, errOut) => (err ? reject(httpError(502, String(errOut || err.message).trim().slice(0, 200))) : resolve())));
+    else await launch(hp.command[0], [...hp.command.slice(1), '-n', dur]);
+    await new Promise((r) => setTimeout(r, 2500)); // it checks itself and goes to the background
+    helperCache = null;
+    const st = await helperStatus(true);
+    if (!st?.active) throw httpError(409, `${hp.name} did not start. It may need a permission first (System Settings › Privacy & Security, e.g. Accessibility for moving the pointer; macOS may show a dialog for it), or see its own messages.`);
+  } else {
+    const [cmd, ...pre] = hp.launcher ? [hp.launcher] : hp.command;
+    await new Promise((resolve) => execFile(cmd, [...pre, '--stop'], { timeout: 15000 }, () => resolve()));
+  }
+  helperCache = null;
+}
 async function awakeView() {
   const out = (await runCmd('pmset', ['-g', 'assertions'])).out, batt = (await runCmd('pmset', ['-g', 'batt'])).out;
   const holders = [];
@@ -3119,12 +3164,14 @@ async function awakeView() {
     const [h, mi, se] = age.split(':').map(Number);
     if (!holders.some((x) => x.pid === Number(pid))) holders.push({ pid: Number(pid), who, by, kind, since: Date.now() - ((h * 60 + mi) * 60 + se) * 1000, display: /Display/.test(kind) });
   }
-  return { on: !!awake.child, since: awake.since, until: awake.until, display: awake.display, lid: awake.lid, ac: /AC Power/.test(batt), holders };
+  return { on: !!awake.child, since: awake.since, until: awake.until, display: awake.display, lid: awake.lid, ac: /AC Power/.test(batt), holders, helper: await helperStatus().catch(() => null) };
 }
 async function awakeAction(body) {
   if (process.platform !== 'darwin') throw httpError(404, 'Only on macOS.');
   if (body.action === 'start') awakeStart({ minutes: Number(body.minutes) || 0, display: !!body.display, lid: !!body.lid });
   else if (body.action === 'stop') awakeStop();
+  else if (body.action === 'helper-start') await helperRun('start', Number(body.minutes) || 60);
+  else if (body.action === 'helper-stop') await helperRun('stop');
   else if (body.action === 'stop-other') { // a caffeinate someone started elsewhere (a terminal): only caffeinate, only ours to stop
     const pid = Number(body.pid), name = (await runCmd('ps', ['-o', 'comm=', '-p', String(pid)])).out.trim();
     if (!pid || !/(^|\/)caffeinate$/.test(name) || pid === awake.child?.pid) throw httpError(400, 'Not a caffeinate process of someone else.');
