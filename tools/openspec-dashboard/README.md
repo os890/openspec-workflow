@@ -50,11 +50,7 @@ projects), in the list, the chat and the progress dialog.
 also when the dashboard is killed) or stops it; the setting is kept in `awake.json` in the state folder and restored
 after a restart for the rest of its time. `GET /api/awake` lists who holds a sleep assertion (`pmset -g assertions`),
 a `caffeinate` with its parent (the dashboard, a Claude Code session, a terminal); `stop-other` stops a `caffeinate`
-of someone else (only that command). An optional helper that keeps the screen on (`awake.helper` in `settings.json`,
-Settings › General: an `.app` or a command) follows a small contract: `-n <duration>` starts it in the background,
-`--status` says "… until HH:MM" (exit 0 while it runs), `--stop` ends it; an `.app` is started with `open -a <app>
---args -n <duration>` (its own permissions apply) and asked through its launcher (`Contents/MacOS/<CFBundleExecutable>`).
-`helper-start`/`helper-stop` in `POST /api/awake`; a start that does not lead to a running helper is reported.
+of someone else (only that command).
 
 **Usage** (with `--agent`; a gauge button on the overview, ☰ › Usage… elsewhere): `GET /api/usage` (token) runs
 `claude -p /usage` in the home folder and parses its text: the limits (`Current <name>: <n>% used · resets <when>`),

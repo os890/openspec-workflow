@@ -3136,11 +3136,12 @@ async function helperRun(action, minutes) {
   if (!hp || hp.missing) throw httpError(409, 'No helper app set (Settings › General).');
   if (action === 'start') {
     const dur = `${Math.max(1, Math.round(minutes || 60))}m`;
-    if (hp.app) await new Promise((resolve, reject) => execFile('open', ['-a', hp.app, '--args', '-n', dur], { timeout: 15000 }, (err, out, errOut) => (err ? reject(httpError(502, String(errOut || err.message).trim().slice(0, 200))) : resolve())));
+    if (hp.app) await new Promise((resolve, reject) => execFile('open', ['-n', '-a', hp.app, '--args', '-n', dur], { timeout: 15000 }, (err, out, errOut) => (err ? reject(httpError(502, String(errOut || err.message).trim().slice(0, 200))) : resolve())));
     else await launch(hp.command[0], [...hp.command.slice(1), '-n', dur]);
-    await new Promise((r) => setTimeout(r, 2500)); // it checks itself and goes to the background
-    helperCache = null;
-    const st = await helperStatus(true);
+    // it checks itself and starts itself again in the background, which can take more than ten seconds: asked every
+    // second, up to 30
+    let st = null;
+    for (let i = 0; i < 30 && !st?.active; i++) { await new Promise((r) => setTimeout(r, 1000)); st = await helperStatus(true); }
     if (!st?.active) throw httpError(409, `${hp.name} did not start. It may need a permission first (System Settings › Privacy & Security, e.g. Accessibility for moving the pointer; macOS may show a dialog for it), or see its own messages.`);
   } else {
     const [cmd, ...pre] = hp.launcher ? [hp.launcher] : hp.command;

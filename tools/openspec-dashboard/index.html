@@ -3720,6 +3720,7 @@ function awakeRender() {
     ${v?.helper ? `<div class="aw-h">Keep the screen on too · ${esc(v.helper.name)}</div>
       ${v.helper.error ? `<div class="ag-note warn">✕ ${esc(v.helper.error)}</div>` : v.helper.active
         ? `<div class="aw-state"><span class="dot on"></span>${esc(v.helper.name)} keeps the screen on${v.helper.until ? ` until <b>${esc(v.helper.until)}</b>` : ''}</div><div class="ag-row"><button class="btn" type="button" data-aw-helper-stop ${aw.busy ? 'disabled' : ''}>Stop ${esc(v.helper.name)}</button></div>`
+        : aw.helperStarting ? `<div class="aw-state"><span class="ag-spin"></span>Starting ${esc(v.helper.name)}… (it checks itself first, this can take a few seconds)</div>`
         : `<div class="ag-row"><button class="btn" type="button" data-aw-helper-start ${aw.busy ? 'disabled' : ''} title="Starts ${esc(v.helper.name)} for the time chosen above (until turned off: 12 hours)">Start ${esc(v.helper.name)}${v.on && v.until ? ` until ${hhmm(v.until)}` : ` for ${aw.minutes ? (aw.minutes >= 60 ? `${aw.minutes / 60} h` : `${aw.minutes} min`) : '12 h'}`}</button><span class="ag-note">keeps the screen from locking (the Mac awake is not enough for that)</span></div>`}` : ''}
     ${aw.err ? `<div class="ag-note warn">✕ ${esc(aw.err)}</div>` : ''}
     <div class="aw-h">Who keeps it awake now</div>
@@ -3735,7 +3736,7 @@ document.addEventListener('click', (e) => {
   if (t.closest('[data-aw-close]')) { aw.open = false; return awakeRender(); }
   if (t.closest('[data-aw-start]')) return awakeFetch({ action: 'start', minutes: aw.minutes, display: aw.display, lid: aw.lid && aw.view?.ac });
   if (t.closest('[data-aw-stop]')) return awakeFetch({ action: 'stop' });
-  if (t.closest('[data-aw-helper-start]')) return awakeFetch({ action: 'helper-start', minutes: aw.view?.on && aw.view.until ? Math.max(1, Math.round((aw.view.until - Date.now()) / 60e3)) : aw.minutes || 720 });
+  if (t.closest('[data-aw-helper-start]')) { aw.helperStarting = true; return awakeFetch({ action: 'helper-start', minutes: aw.view?.on && aw.view.until ? Math.max(1, Math.round((aw.view.until - Date.now()) / 60e3)) : aw.minutes || 720 }).finally(() => { aw.helperStarting = false; awakeRender(); }); }
   if (t.closest('[data-aw-helper-stop]')) return awakeFetch({ action: 'helper-stop' });
   const k = t.closest('[data-aw-kill]');
   if (k && confirm('Stop this caffeinate? The Mac may then go to sleep when idle (unless something else keeps it awake).')) return awakeFetch({ action: 'stop-other', pid: Number(k.dataset.awKill) });

@@ -601,12 +601,7 @@ its own while a session works, and a `caffeinate` started in a terminal shows up
 be closed.
 
 Keeping the Mac awake does not stop the screen saver, nor the screen lock that comes with it: those follow the idle
-time of macOS. An app that keeps the screen on (e.g. by nudging the pointer now and then, which counts as activity)
-can be added in **⚙ Settings › General › App that keeps the screen on**, as the path of a macOS `.app` or a command
-that takes `-n <duration>` to start in the background, `--status` and `--stop`. The popover then has **Keep the
-screen on too**: it starts the app for the chosen time (until the Mac sleeps again, or 12 hours), shows until when
-it runs, and stops it. A `.app` is started through macOS, so the permissions it was given apply (moving the pointer
-needs Accessibility); when it does not start, the popover says so.
+time of macOS.
 
 ![Keeping the Mac awake for an hour, and who else keeps it awake](images/dashboard-awake.png)
 
