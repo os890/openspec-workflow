@@ -1824,7 +1824,9 @@ body.remote #folder-btn, body.remote #hm-install { display: none !important; }
 .ag-tools { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .ag-tools [data-ag-send] { margin-left: auto; }
 .em-arrow { display: inline-flex; align-items: center; justify-content: center; width: 1.05em; height: 1.05em; border-radius: .26em; color: #fff; font: 800 .82em/1 system-ui, sans-serif; vertical-align: -.1em; }
-.rx .em-arrow { font-size: .78em; width: 1.25em; height: 1.25em; vertical-align: -.2em; } /* in the round button: inside the circle like an emoji */
+/* in the round button: centered like an emoji, same size as the other buttons */
+.rx:has(> .em-arrow) { display: inline-flex; align-items: center; justify-content: center; height: calc(1.5em + 4px); min-width: 32px; vertical-align: middle; }
+.rx > .em-arrow { width: 14px; height: 14px; font-size: 10.5px; border-radius: 3.5px; vertical-align: 0; }
 .em-arrow.green { background: #2ea44f; } .em-arrow.blue { background: #2f81f7; }
 .qk { display: inline-flex; align-items: center; gap: 4px; }
 .qk-bar { display: inline-flex; gap: 3px; align-items: center; flex-wrap: wrap; }
