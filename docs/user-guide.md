@@ -319,6 +319,8 @@ thread shows each one short, e.g. **👀 Status**.
 
 ![Quick messages under the input box](images/dashboard-quick-messages.png)
 
+![The app a session started: Open the app in its answer and next to Done](images/dashboard-open-app.png)
+
 Claude gets the answer's first sentence (or the part you selected) as the reference, so it knows which answer you
 mean even when the conversation has moved on, without the whole answer being sent again. Reactions show as small
 badges on the answer, quotes as a quote above your text.
@@ -392,6 +394,10 @@ opens the same details. Agents that are done stay in the stack for an hour; ✕ 
 bar says how many are still running. The dashboard reads them from Claude Code's own records; nothing needs to be
 set up.
 
+![Two agents working in the background, fanned out in the lower left corner](images/dashboard-agents.png)
+
+![The details of an agent: its kind, steps and time, and its result](images/dashboard-agent-details.png)
+
 **When Claude asks you something.** A question of Claude's (its menu with options in the terminal) shows up in the
 thread as a card: the question, its options as buttons (one or several, as the question allows), a field for your own
 answer, and **Send answer**. It goes to the terminal as if you answered there: a single choice picks the option in
@@ -401,6 +407,8 @@ question at a time. For the further questions the card has one field. When Claud
 **recommended** badge), **👍 Recommended** takes them in one click: the recommended option (or all recommended ones
 when several may be chosen), and with several questions its recommendation for each. Answered questions stay in the
 thread with their answer. A permission prompt is not such a question: answer that in the terminal.
+
+![Claude's question as a card: the options, the recommended one marked, an own answer, 👍 Recommended](images/dashboard-ask.png)
 
 **How full its context is.** Next to the session's state, a small bar shows how much of the context window the
 session uses, e.g. **45k / 200k**: amber from 60 %, orange from 80 %, when Claude Code will soon compact the
