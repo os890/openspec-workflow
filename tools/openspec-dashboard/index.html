@@ -330,7 +330,13 @@ span.ch-warn { color: var(--st-progress); }
 .agent-panel.term-look .ask-opt, .agent-panel.term-look .ask-text { background: #0d1117; color: #d6dde6; border-color: #30363d; }
 .agent-panel.term-look .ask-opt[aria-pressed="true"] { border-color: #58a6ff; background: #13233b; box-shadow: inset 0 0 0 1px #58a6ff; }
 .agent-panel.term-look .ask-h { color: #f5a35c; } .agent-panel.term-look .ask-card.done .ask-h, .agent-panel.term-look .ask-opt span { color: #8b949e; }
-#ag-thread.has-agents { padding-bottom: 72px; }
+#ag-thread.has-agents { padding-bottom: 44px; }
+/* collapsed: one small line (state, task, +n), so it covers little of the conversation; fanned out: full cards */
+.as-card.mini { min-width: 0; max-width: 240px; padding: 4px 9px; gap: 7px; font-size: 12px; border-radius: 999px; }
+.as-card.mini .as-txt span { display: none; }
+.as-card.mini .as-txt b { font-weight: 600; }
+.as-card.mini .as-x { display: none; }
+.as-stack.many:not(.open) .as-card.mini { box-shadow: 0 4px 12px -6px rgba(0, 0, 0, .35), 3px 3px 0 -1px var(--as-bg), 3px 3px 0 0 var(--as-line), 6px 6px 0 -1px var(--as-bg), 6px 6px 0 0 var(--as-line); }
 .as-anchor { position: relative; height: 0; flex: none; z-index: 5; }
 .as-stack { position: absolute; left: 14px; bottom: 10px; display: flex; flex-direction: column-reverse; gap: 6px; max-width: min(340px, calc(100% - 28px)); }
 .as-stack.open { flex-direction: column; max-height: 300px; overflow: auto; padding: 8px; border-radius: 14px; background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid var(--line); box-shadow: var(--shadow-hover); }
@@ -3731,7 +3737,7 @@ function agentStackHtml() {
   const list = (T?.agents ?? []).filter((a) => !agHidden.has(a.agent) && (a.state === 'working' || now - (a.end ?? a.start ?? 0) < 3600e3))
     .sort((x, y) => (x.state === 'working') - (y.state === 'working') || (x.start ?? 0) - (y.start ?? 0)).reverse();
   if (!list.length) return '';
-  const card = (a, top) => `<div class="as-card ${AG_STATE[a.state][0]}" role="button" tabindex="0" data-sa-open="${esc(a.agent)}" title="${esc(a.description)} · ${esc(AG_STATE[a.state][1])}">
+  const card = (a, top) => `<div class="as-card ${AG_STATE[a.state][0]} ${top ? 'mini' : ''}" role="button" tabindex="0" data-sa-open="${esc(a.agent)}" title="${esc(a.description)} · ${esc(AG_STATE[a.state][1])}">
       <span class="as-ico">${agIcon(a)}</span><span class="as-txt"><b>${esc(a.description || 'Agent')}</b><span>${esc(a.state === 'working' && a.last ? a.last : agMeta(a))}</span></span>
       ${a.state !== 'working' ? `<button type="button" class="as-x" data-sa-hide="${esc(a.agent)}" title="Remove it from the stack" aria-label="Remove">✕</button>` : ''}${top && list.length > 1 && !agStack.open ? `<span class="as-more" data-sa-fan title="Show all ${list.length}">+${list.length - 1}</span>` : ''}</div>`;
   const working = list.filter((a) => a.state === 'working').length;
