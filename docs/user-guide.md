@@ -443,7 +443,7 @@ happens when it suits you, not in the middle of a task. While it compacts (after
 from the dashboard), *the press* runs behind the conversation, in the Matrix look: the conversation is a box of its
 words under a hydraulic press, and every press squeezes it smaller; its words get tinier and denser and turn into
 green code, until it is a small, glowing cube. The words squeezed out tumble into a bin, /dev/null, which counts
-them. The conversation fades back meanwhile (nothing new comes until the compaction is done). Once the
+them; at the end it puts on agent shades, grows legs, runs under the press and is flattened too. The conversation fades back meanwhile (nothing new comes until the compaction is done). Once the
 compaction is done, the cube shrinks into the gauge and the context before and after shows briefly (e.g.
 184k → 22k). With reduced motion it is a still picture. The window size is not in Claude Code's records: a session
 that has been larger than 200k tokens (or the model says so) counts with 1M; otherwise the gauge uses
