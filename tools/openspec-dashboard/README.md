@@ -139,7 +139,9 @@ project's panel offers **Create it on GitHub** afterwards: `gh repo create <name
 other platforms it shows what to run.
 
 **⚙ Expert mode** in that panel sets the workflow the project starts with: quality gates, what every task is
-checked for, what every change is reviewed for, the workflow steps, the documentation to keep, the diagram format
+checked for, what every change is reviewed for, the workflow steps (e.g. the long-term check, on by default: a fresh
+agent checks whether the quick way of a change hurts the structure and maintainability in the long run), the
+documentation to keep, the diagram format
 (Mermaid, PlantUML or both; one choice), the branches (everything on main, a branch per ticket or per milestone,
 merged when it is done; one choice) and the diagram types to draw (C4 context and containers, sequence, ER,
 state, deployment, …), the container engine (Podman, Docker or none; one choice), how tools
@@ -170,7 +172,17 @@ followed (`?overview` in the address).
 - **Board**: all changes in six columns derived from the files, filterable by milestone. **⤢ Full screen**
   (or `#board` in the address) shows only the board, still live; clicking a card opens its details in a side
   panel (`#board:<change>` links to it directly), `Esc` closes it. **○ Focus** hides the archived changes and
-  folds empty columns into narrow strips, so the open work gets the space.
+  the milestone filters whose changes are all done (unless it is the one picked), and folds empty columns into
+  narrow strips, so the open work gets the space. With `--agent`, hovering a milestone filter shows **▶**: a dialog
+  at the top of the chat panel picks the session (the project's running ones, idle first, the picked one shown
+  below in read mode, or a new one in a Terminal window) and the prompt (default `/goal start/continue with
+  milestone <id> "<title>" until it is finished and merged into main …`, editable); **Send** types it into the
+  session's terminal (a slash command only works typed, not through the hook, so only sessions in macOS Terminal
+  that are not asking something can be picked). The picked session and prompt (as a template with `{id}` and
+  `{title}`) are remembered per project in this browser (`osd-msgo:<project>:<n>` in localStorage). A new session
+  started by ▶ is tagged with the milestone (`POST /api/agent/tag`, kept 30 days in `session-tags.json` in the state
+  folder): the session lists show it as "▶ <id> <title>" instead of its last prompt. `MS_GO` in
+  `index.html` holds the shortcuts, so more can follow.
 - **Backlog**: the roadmap as a list per milestone, like the backlog of an issue tracker, with area, prerequisites,
   progress and status per change. The change you opened last stays highlighted, so you find your place again.
   With `--agent`, changes that have not started can be reordered, and new tickets and ideas can be added or
@@ -414,13 +426,28 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     card) takes the options whose label says "(Recommended)" (all of them for several choices), and with further
     questions asks for its recommendation for each. Answered questions come from the
     transcript (the tool call and its result).
+  - **Slash autocomplete** (write mode, `/` at the start of the input box): `POST /api/agent/commands` (`{ folder }`
+    for a "session only" folder) returns the commands and skills the session knows: a fixed list of Claude Code's most
+    important built-in ones, then from disk the custom commands (`commands/**/*.md`, a subfolder gives `dir:name`)
+    and skills (`skills/*/SKILL.md`, symlinks followed, not those with `user-invocable: false`) of the folder's
+    `.claude/`, of `~/.claude/`, of the enabled plugins in `plugins/installed_plugins.json` (`plugin:name`) and the
+    skills synced from claude.ai (`skills/synced/<bucket>/`, as `anthropic-skills:name`); name, kind, source,
+    description and `argument-hint` from the frontmatter, cached for 30 s per folder. Commands are blue, skills green.
+  - **Permission prompts** (a command, an edit, a fetch, also a sub-agent's): read from the Terminal tab the same
+    way (`ask.kind: 'permission'`): the "Do you want to …?" line, its numbered options, and above it up to the last
+    horizontal rule what it wants to do (`title`, e.g. "Bash command · from the general-purpose agent", and `detail`:
+    the command or file and Claude Code's warning; the id includes them). An option is typed as its digit; an own
+    answer picks the "No" option and, once the session is idle, types `[Declined: <title>] <your words>`.
   - **Context gauge**: the session list, the transcript and `/api/sessions/status` carry `ctx` (`used`, `window`,
     `compactions`): `used` from the last main-chain assistant message's `usage` (input + cache creation + cache read
     + output tokens) or, after a `compact_boundary`, its `postTokens`; `window` is 1M when the model id has `[1m]` or
     the transcript was ever above 200k tokens (the largest `usage` and `preTokens` of the whole transcript, read once
     in the background in 4 MB steps and then only what was added), 200k when Claude Code compacted it on its own
     below that, else `null` (the page uses `osd-term-view.ctxWin`, 200k by default). **Compact now** (from 70 %,
-    while the session waits at its prompt in macOS Terminal) types `/compact`. A `compact_boundary` shows in the
+    while the session waits at its prompt in macOS Terminal) types `/compact`. A `/compact` sent from the page (typed
+    or Compact now) starts *the press* behind the thread (a canvas in the Matrix look; the wait rain stays off
+    meanwhile) until the transcript has one more `compact_boundary` (`ctx.compactions`), else until the session
+    waits again (or 20 minutes); the finale flies the cube into the gauge and shows the context before → after. A `compact_boundary` shows in the
     thread as a divider with the tokens before and after; the summary Claude Code adds after it is left out.
   - **⤢ Maximize** gives the chat the whole window (`Esc` restores it, a second `Esc` closes it).
   - **Reactions and quotes**: each of Claude's answers has a faint ⋯; hovering the answer (or tapping ⋯) shows a

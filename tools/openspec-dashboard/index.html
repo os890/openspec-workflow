@@ -221,6 +221,21 @@ svg text { fill: var(--muted); font-family: var(--font-sans); font-size: 10.5px;
 .ms-filter button:hover { color: var(--ink); }
 .ms-filter button[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
 .ms-filter button[aria-pressed="true"] b { color: var(--surface); }
+/* the shortcuts of a milestone (▶ …): small round badges on the pill's top right edge, shown on hover or keyboard
+   focus; positioned over the pill, so showing them never moves the other pills */
+.ms-item { position: relative; display: inline-flex; }
+.ms-go { position: absolute; top: -9px; right: -6px; display: none; gap: 3px; z-index: 2; }
+.ms-item:hover .ms-go, .ms-item:focus-within .ms-go { display: inline-flex; }
+.ms-go [data-ms-go] { width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 11px; line-height: 1; cursor: pointer; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.ms-go [data-ms-go]:hover, .ms-go [data-ms-go]:focus-visible { background: var(--accent); color: var(--surface); outline: none; }
+/* ▶ of a milestone: its dialog above the session's thread (read mode) */
+.ask-detail { margin: 0 0 8px; padding: 6px 8px; max-height: 14em; overflow: auto; white-space: pre-wrap; word-break: break-word; font: 12px/1.45 var(--mono, ui-monospace, Menlo, monospace); background: var(--surface-2); border-radius: 8px; }
+.ms-pick { border: 1px solid var(--accent); border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; display: grid; gap: 6px; }
+.ms-pick .ag-row { flex-wrap: wrap; align-items: center; gap: 6px; }
+.ms-pick-l { display: grid; gap: 4px; font-size: 12.5px; color: var(--muted); }
+.ms-pick-l .link { justify-self: start; }
+.ms-pick select, .ms-pick textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line, transparent); border-radius: 8px; padding: 6px 8px; }
+.ms-pick textarea { resize: vertical; min-height: 4.5em; }
 .cols { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
 .col { background: color-mix(in srgb, var(--st) 7%, var(--surface-2)); border-radius: var(--radius-sm); min-width: 0; display: flex; flex-direction: column; }
 .col-head { padding: 12px 12px 6px; }
@@ -1603,6 +1618,10 @@ body.remote #folder-btn, body.remote #hm-install { display: none !important; }
 .agent-panel .wait-rain { position: absolute; z-index: 0; pointer-events: none; opacity: .32; }
 .agent-panel.term-look .wait-rain { opacity: 1; background: #0d1117; }
 .agent-panel.rain-on #ag-thread { position: relative; z-index: 1; }
+.agent-panel .press-canvas { opacity: 1; background: #0d1117; }
+/* while the press runs the conversation steps back (nothing new comes until the compaction is done) */
+.agent-panel.press-on #ag-thread { opacity: .22; transition: opacity .6s; }
+.agent-panel.press-on #ag-thread .term-state { opacity: 1; }
 .agent-panel.term-look.rain-on #ag-thread { background: rgba(13, 17, 23, .62); }
 /* "Your messages" in the write mode: the style's color or an own color (in both color modes) */
 .agent-panel.term-writing.me-theme #ag-thread .msg.me:not(.rx-sent), .agent-panel.term-writing.me-custom #ag-thread .msg.me:not(.rx-sent) { background: var(--me-bg); color: var(--me-fg); box-shadow: none; }
@@ -1766,6 +1785,21 @@ body.remote #folder-btn, body.remote #hm-install { display: none !important; }
 .sys { align-self: center; font-size: 11.5px; color: var(--muted); text-align: center; max-width: 90%; flex: none; }
 .sys summary { cursor: pointer; } .sys > div { white-space: pre-wrap; text-align: left; margin-top: 4px; }
 .sys.err { color: var(--st-blocked); }
+/* "/" in a write session's input box: the commands and skills it knows, above the box; commands and skills in
+   their own colors */
+.ag-compose { position: relative; }
+.slash-pop { position: absolute; left: var(--agp); right: var(--agp); bottom: calc(100% - 6px); z-index: 30; max-height: 300px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-hover, var(--shadow)); padding: 4px; display: grid; gap: 1px; }
+.slash-it { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; align-items: baseline; text-align: left; border: 0; background: none; color: var(--ink); padding: 5px 8px; border-radius: 8px; cursor: pointer; font: inherit; font-size: 12.5px; }
+.slash-it[aria-selected="true"], .slash-it:hover { background: var(--surface-2); }
+.slash-it b { font-family: var(--mono, ui-monospace, Menlo, monospace); font-weight: 600; }
+.slash-it .slash-h { color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slash-it .slash-k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; padding: 1px 6px; border-radius: 999px; white-space: nowrap; }
+.slash-it .slash-d { grid-column: 1 / -1; color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slash-command b { color: var(--st-specified); }
+.slash-command .slash-k { color: var(--st-specified); background: color-mix(in srgb, var(--st-specified) 14%, transparent); }
+.slash-skill b { color: var(--st-complete); }
+.slash-skill .slash-k { color: var(--st-complete); background: color-mix(in srgb, var(--st-complete) 14%, transparent); }
+.slash-none { color: var(--muted); font-size: 12px; padding: 6px 8px; }
 .ag-compose { display: flex; flex-direction: column; gap: 8px; align-items: stretch; padding: 10px var(--agp) 4px; border-top: 1px solid var(--line); }
 .ag-compose textarea { flex: 1; min-height: 42px; max-height: 160px; resize: vertical; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); color: var(--ink); padding: 9px 12px; font: inherit; font-size: 13.5px; }
 .ag-route { padding: 0 var(--agp) 12px; }
@@ -2125,10 +2159,142 @@ function setWaitRain(on) {
   wait.raf = requestAnimationFrame(loop);
 }
 const WAIT_RAIN_AFTER = 30e3;
+// ---- /compact in the write mode: "the press", in the Matrix look, behind the conversation while the session compacts
+// its context. The conversation is a box of its words under a hydraulic press; every press squeezes it smaller, its
+// words get tinier, denser and turn into code, until it is a small, glowing cube. It starts when /compact is sent
+// from here (typed, picked, or "Compact now") and ends when the transcript has the compaction (its compact_boundary:
+// one more in ctx.compactions), else once the session waits again (or after 20 minutes); the finale shrinks the cube
+// into the context gauge and shows the context before → after.
+let press = null;
+const PRESS_GLYPHS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワ0123456789<>{}=+*';
+function compactMark(sid, text) {
+  if (!/^\/compact\b/.test(String(text ?? '').trim())) return;
+  const L = termLog.get(sid); if (!L) return;
+  L.compact = { since: Date.now(), before: L.ctx?.used ?? null, n: L.ctx?.compactions ?? 0 };
+}
+function pressWords() {
+  const seen = new Set(), out = [];
+  for (const m of String($('ag-thread')?.innerText ?? '').match(/[A-Za-zÄÖÜäöüß][\w.-]{3,15}/g) ?? []) { const w = m.replace(/[.-]+$/, ''); if (w.length > 3 && !seen.has(w.toLowerCase())) { seen.add(w.toLowerCase()); out.push(w); } }
+  return out.length > 12 ? out.slice(-400) : ['context', 'tokens', 'summary', 'tests', 'spec', 'ticket', 'refactor', 'diff', 'review', 'tasks', 'design', 'commit'];
+}
+function setPress(on, fin) {
+  if (!on) {
+    if (!press) return;
+    if (fin && !press.end && !press.still) { press.end = { t: performance.now(), ...fin }; return; } // the finale, then gone
+    if (fin && press.still) { press.end = { t: performance.now(), ...fin }; press.draw?.(); setTimeout(() => setPress(false), 2200); return; }
+    cancelAnimationFrame(press.raf); press.canvas.remove(); $('agent')?.classList.remove('rain-on', 'press-on'); press = null;
+    return;
+  }
+  const th = $('ag-thread'), panel = $('agent');
+  if (press || !th || !panel) return;
+  setWaitRain(false);
+  const canvas = document.createElement('canvas');
+  canvas.className = 'wait-rain press-canvas'; canvas.setAttribute('aria-hidden', 'true');
+  panel.appendChild(canvas); panel.classList.add('rain-on', 'press-on');
+  const g = canvas.getContext('2d'), dpr = Math.min(2, devicePixelRatio || 1);
+  const text = pressWords().join(' '); // the conversation, as the box's content
+  const GREEN = '#00d65a', BRIGHT = '#b6ffcf', FONT = 'ui-monospace, Menlo, monospace';
+  let w = 0, h = 0;
+  const place = () => {
+    const t = $('ag-thread'); if (!t) return;
+    Object.assign(canvas.style, { top: `${t.offsetTop}px`, left: `${t.offsetLeft}px`, width: `${t.clientWidth}px`, height: `${t.clientHeight}px` });
+    if (w !== t.clientWidth || h !== t.clientHeight) { w = t.clientWidth; h = t.clientHeight; canvas.width = w * dpr; canvas.height = h * dpr; }
+  };
+  const glyph = () => PRESS_GLYPHS[Math.floor(Math.random() * PRESS_GLYPHS.length)];
+  const ease = (x) => (x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2);
+  // s: the box's size, 1 at the start; every press squeezes it by a fifth, down to a small cube (then by a little)
+  let s = 1, from = 1, presses = 0, cycle = { phase: 'wait', t: performance.now() }, flash = 0, bounce = 0, scroll = 0;
+  const PH = { wait: 900, down: 620, squeeze: 460, up: 720 };
+  const geo = (size) => {
+    const floor = h * 0.86, top = h * 0.07, pw = Math.min(w * 0.82, 420);
+    const bw0 = pw * 0.92, bh0 = (floor - top - 40) * 0.8;
+    return { floor, top, pw, cx: w / 2, bw: bw0 * (0.3 + 0.7 * size), bh: Math.max(26, bh0 * size) };
+  };
+  const draw = (now = performance.now()) => {
+    place(); if (!w || !h) return;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+    const end = press.end, et = end ? Math.min(1, (now - end.t) / 1800) : 0;
+    // the press cycle: wait, down onto the box, squeeze it, up again
+    let cp = Math.min(1, (now - cycle.t) / PH[cycle.phase]);
+    if (!end && !press.still && cp >= 1) {
+      if (cycle.phase === 'wait') cycle = { phase: 'down', t: now };
+      else if (cycle.phase === 'down') { from = s; s = s > 0.16 ? s * 0.8 : Math.max(0.1, s * 0.97); cycle = { phase: 'squeeze', t: now }; }
+      else if (cycle.phase === 'squeeze') { presses++; flash = 1; bounce = 1; cycle = { phase: 'up', t: now }; }
+      else cycle = { phase: 'wait', t: now };
+      cp = 0;
+    }
+    const size = cycle.phase === 'squeeze' ? from + (s - from) * ease(cp) : s;
+    const G = geo(size), rest = G.top;
+    // the box under the plate; in the finale it shrinks into the context gauge
+    let bw = G.bw, bh = G.bh, cx = G.cx, cy = G.floor - bh / 2;
+    if (cycle.phase === 'squeeze') bw *= 1 + 0.07 * Math.sin(cp * Math.PI); // it bulges while it is pressed
+    bounce *= 0.9; flash *= 0.92;
+    const sy = 1 - Math.sin(bounce * Math.PI) * 0.12 * bounce;
+    if (end) {
+      const gauge = document.querySelector('#agent .ctx'), r = gauge?.getBoundingClientRect(), c0 = canvas.getBoundingClientRect();
+      const gx = r ? r.left + r.width / 2 - c0.left : w - 40, gy = r ? r.top + r.height / 2 - c0.top : 8, k = ease(Math.min(1, et * 1.4));
+      cx += (gx - cx) * k; cy += (gy - cy) * k; bw *= 1 - 0.92 * k; bh *= 1 - 0.92 * k;
+    }
+    g.save(); g.translate(cx, cy + (bh - bh * sy) / 2); g.scale(1 + (1 - sy) * 0.5, sy);
+    g.shadowColor = GREEN; g.shadowBlur = 8 + flash * 28 + (1 - size) * 10;
+    g.fillStyle = 'rgba(0, 36, 14, 0.92)'; g.fillRect(-bw / 2, -bh / 2, bw, bh);
+    g.strokeStyle = GREEN; g.lineWidth = 1.5; g.strokeRect(-bw / 2, -bh / 2, bw, bh); g.shadowBlur = 0;
+    // its content: the conversation's words, smaller, denser and more code the smaller it gets
+    g.beginPath(); g.rect(-bw / 2 + 3, -bh / 2 + 3, bw - 6, bh - 6); g.clip();
+    const fs = Math.max(4, 12.5 * Math.sqrt(size)), lh = fs * 1.15, cw = fs * 0.62, cols = Math.max(1, Math.floor((bw - 8) / cw));
+    const code = Math.min(0.9, 0.05 + (1 - size) * 0.95 + flash * 0.3);
+    if (!end) scroll += 0.15;
+    g.font = `${fs}px ${FONT}`; g.textAlign = 'left'; g.textBaseline = 'top';
+    for (let row = 0, y = -bh / 2 + 4; y < bh / 2; row++, y += lh) {
+      const at = ((row + Math.floor(scroll)) * cols) % Math.max(1, text.length);
+      let line = text.slice(at, at + cols); if (line.length < cols) line += text.slice(0, cols - line.length);
+      line = [...line].map((c) => (c !== ' ' && Math.random() < code ? glyph() : c)).join('');
+      g.fillStyle = Math.random() < 0.06 + flash * 0.4 ? BRIGHT : GREEN; g.globalAlpha = 0.6 + Math.random() * 0.4;
+      g.fillText(line, -bw / 2 + 5, y);
+    }
+    g.globalAlpha = 1; g.restore();
+    // the floor, the rod and the plate (on the box while it presses)
+    const onBox = G.floor - G.bh - 15;
+    let plate = cycle.phase === 'down' ? rest + (onBox - rest) * ease(cp) : cycle.phase === 'squeeze' ? onBox : cycle.phase === 'up' ? onBox + (rest - onBox) * ease(cp) : rest;
+    if (end) plate = rest - et * (rest + 30);
+    g.strokeStyle = GREEN; g.globalAlpha = 0.7; g.lineWidth = 2; g.beginPath(); g.moveTo(G.cx - G.pw / 2 - 10, G.floor + 1); g.lineTo(G.cx + G.pw / 2 + 10, G.floor + 1); g.stroke();
+    g.fillStyle = GREEN; g.font = `10px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (let x = G.cx - G.pw / 2 - 6; x < G.cx + G.pw / 2 + 10; x += 9) g.fillText(glyph(), x, G.floor + 10);
+    g.globalAlpha = 1;
+    g.fillStyle = 'rgba(0, 214, 90, 0.35)'; g.fillRect(G.cx - 5, 0, 10, Math.max(0, plate));
+    g.shadowColor = GREEN; g.shadowBlur = cycle.phase === 'squeeze' ? 20 : 6;
+    g.fillStyle = 'rgba(0, 30, 12, 0.96)'; g.fillRect(G.cx - G.pw / 2, plate, G.pw, 14);
+    g.strokeStyle = GREEN; g.strokeRect(G.cx - G.pw / 2, plate, G.pw, 14); g.shadowBlur = 0;
+    g.fillStyle = BRIGHT; g.font = `bold 10px ${FONT}`; g.fillText(end ? 'DONE' : 'COMPACTING', G.cx, plate + 7.5); // no percentage: Claude Code does not report its progress
+    // the finale: the context before → after
+    if (end) {
+      const pop = et < 0.25 ? ease(et / 0.25) : 1, fade = et > 0.75 ? 1 - (et - 0.75) / 0.25 : 1;
+      const label = end.before && end.after ? `${kTok(end.before)} → ${kTok(end.after)}` : 'compacted ✓';
+      g.globalAlpha = Math.max(0, fade); g.font = `bold ${Math.round(18 + 16 * pop)}px ${FONT}`; g.shadowColor = GREEN; g.shadowBlur = 16; g.fillStyle = BRIGHT;
+      g.fillText(label, w / 2, h * 0.42); g.shadowBlur = 0; g.globalAlpha = 1;
+      if (et >= 1 && !press.still) setPress(false);
+    }
+  };
+  press = { canvas, raf: 0, end: null, draw, still: matchMedia('(prefers-reduced-motion: reduce)').matches };
+  place();
+  if (press.still) { s = 0.45; draw(); return; } // reduced motion: one still picture
+  const loop = (t) => { if (!press) return; press.raf = requestAnimationFrame(loop); draw(t); };
+  press.raf = requestAnimationFrame(loop);
+}
+// started and ended with the session's state (polled every 2 s with its transcript)
+setInterval(() => {
+  const T = ag.term ? termLog.get(ag.term) : null, C = T?.compact;
+  const here = !!(ag.open && ag.panel === 'chat' && ag.convo === 'terminal' && ag.termWrite && $('ag-thread'));
+  if (!C) { if (press && !press.end) setPress(false); return; }
+  const compacted = (T.ctx?.compactions ?? 0) > C.n;
+  const idle = Date.now() - C.since > 10e3 && T.state !== 'working' && !(T.sentAt && Date.now() - T.sentAt < 20e3);
+  if (compacted || idle || Date.now() - C.since > 20 * 60e3) { T.compact = null; return setPress(false, { before: C.before, after: compacted ? T.ctx?.used : null }); }
+  if (here) setPress(true); else if (press && !press.end) setPress(false);
+}, 1000);
 setInterval(() => {
   const T = ag.term ? termLog.get(ag.term) : null;
   const since = T?.waitStart;
-  const on = !!(ag.open && ag.panel === 'chat' && ag.convo === 'terminal' && ag.termWrite && termView.matrix !== false && $('ag-thread')
+  const on = !!(!press && !T?.compact && ag.open && ag.panel === 'chat' && ag.convo === 'terminal' && ag.termWrite && termView.matrix !== false && $('ag-thread')
     && T && (T.state === 'working' || (T.sentAt && Date.now() - T.sentAt < 20000)) && since && Date.now() - since > (termView.rainAfter ?? WAIT_RAIN_AFTER / 1000) * 1000);
   setWaitRain(on);
 }, 1000);
@@ -2638,6 +2804,8 @@ const COLS = [
   ['archived',    'Archived',    'Merged into openspec/specs',            '--st-archived'],
 ];
 const columnOf = (c) => (c.status === 'proposed' || c.status === 'missing') ? (c.blockedBy.length ? 'blocked' : 'ready') : c.status;
+// a milestone is done when it has changes and all of them are (○ Focus hides its filter, unless it is the one picked)
+const msDone = (s, m) => { const cs = s.changes.filter((c) => c.milestone === m.id); return cs.length > 0 && cs.every(isDone); };
 
 function renderBoard(s) {
   if (ui.drag) { ui.pendingBoard = true; return; } // never replace the list under a drag
@@ -2689,9 +2857,9 @@ function renderBoard(s) {
       <span class="muted num" style="font-size:12.5px">${s.changes.filter(isDone).length} of ${s.changes.filter(isTicket).length} changes done · ${s.totals.done}/${s.totals.total} tasks${focus && byCol.archived.length ? ` · ${byCol.archived.length} archived hidden` : ''}</span>
       ${s.changes.filter((c) => c.status === 'parking').map((c) => `<button type="button" class="btn" data-pick="${esc(c.name)}" title="Parking lot: deferred items, never archived">Parking lot · ${c.tasks ? `${c.tasks.total - c.tasks.done} open` : esc(c.name)}</button>`).join('')}
       ${(() => { const n = s.changes.filter((c) => c.status === 'idea').length; return n ? `<button type="button" class="btn" data-board-view="backlog" title="Ideas that still need refinement before they are planned">💡 ${n} idea${n > 1 ? 's' : ''}</button>` : ''; })()}
-      <span class="ms-filter">${msBtn('', '<b>All</b>', s.changes.filter(isTicket))}${s.milestones.map((m) => msBtn(m.id, `<b>${esc(m.id)}</b><span class="ms-name">${esc(m.title)}</span>`, s.changes.filter((c) => c.milestone === m.id), m.title)).join('')}</span>
+      <span class="ms-filter">${msBtn('', '<b>All</b>', s.changes.filter(isTicket))}${s.milestones.filter((m) => !focus || ui.ms === m.id || !msDone(s, m)).map((m) => msItem(m, msBtn(m.id, `<b>${esc(m.id)}</b><span class="ms-name">${esc(m.title)}</span>`, s.changes.filter((c) => c.milestone === m.id), m.title))).join('')}</span>
       <span class="board-actions">${AGENT_TOKEN ? '<button class="btn board-toggle" type="button" data-chat-btn aria-controls="agent">Chat</button>' : ''}
-      <button class="btn board-toggle" type="button" data-board-focus aria-pressed="${ui.boardFocus}" title="${ui.boardFocus ? 'Show the archived changes again' : ui.boardView === 'charts' ? 'Open work only: no archived band in the flow, no archived changes in the cycle times and the dependency graph' : 'Hide archived tickets and fold empty columns, so the open tickets get the space'}">${ui.boardFocus ? '◉ Focus' : '○ Focus'}</button>
+      <button class="btn board-toggle" type="button" data-board-focus aria-pressed="${ui.boardFocus}" title="${ui.boardFocus ? 'Show the archived changes again' : ui.boardView === 'charts' ? 'Open work only: no archived band in the flow, no archived changes in the cycle times and the dependency graph' : 'Hide archived tickets and done milestones and fold empty columns, so the open tickets get the space'}">${ui.boardFocus ? '◉ Focus' : '○ Focus'}</button>
       <button class="btn board-toggle" type="button" data-max aria-pressed="${max}" title="${max ? 'Back to the dashboard (Esc)' : 'Show the board across the whole window'}">${max ? 'Exit full screen ✕' : '⤢ Full screen'}</button></span>
     </div>
     ${now}
@@ -3571,6 +3739,94 @@ function pick(name) {
   render();
   $('focus').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+// ---- the shortcuts of a milestone (board, on hover over its filter pill): ▶ opens a dialog at the top of the chat
+// panel to hand the milestone to Claude Code: which session gets it (one of this project's sessions, shown below in
+// read mode, or a new one in a Terminal window) and the prompt, which can be changed. The message is typed into the
+// session's terminal (a slash command such as /goal only works typed, not through the hook). What was picked (the
+// session, the prompt with the milestone as {id} and {title}) is remembered per project for the next ▶
+const MS_GO = [
+  ['▶', 'Start / continue', '/goal start/continue with milestone {id} "{title}" until it is finished and merged into main as soon as all acceptance criteria are done and quality gates passed'],
+];
+const msFill = (tpl, m) => tpl.replaceAll('{id}', m.id).replaceAll('{title}', m.title);
+// the prompt as a template again: the milestone's title and id become {title} and {id}, for the other milestones
+const msTpl = (text, m) => (m.title ? text.split(m.title).join('{title}') : text).split(m.id).join('{id}');
+const msMemKey = (k) => `osd-msgo:${PROJECT ?? ''}:${k}`;
+const msMem = (k) => { try { return JSON.parse(localStorage.getItem(msMemKey(k)) ?? 'null') ?? {}; } catch { return {}; } };
+const msItem = (m, btn) => (AGENT_TOKEN ? `<span class="ms-item">${btn}<span class="ms-go">${MS_GO.map(([e, label], k) => `<span role="button" tabindex="0" data-ms-go="${esc(m.id)}" data-ms-act="${k}" aria-label="${esc(`${label} ${m.id}`)}" title="${esc(`${label}: hand ${m.id} to a Claude Code session (asks which one, and the prompt, first)`)}">${e}</span>`).join('')}</span></span>` : btn);
+// idle: it runs, can be typed into, and waits at its prompt (not working, not asking); the polled state is the newer one
+const termStateOf = (x) => termLog.get(x.sessionId)?.state ?? (x.asking ? 'asking' : x.waiting ? 'waiting' : 'working');
+const termIdle = (x) => !x.ended && x.typeable && termStateOf(x) === 'waiting';
+// why a session cannot get it (typed into its terminal), or '' when it can; a working one gets it after its turn
+const msWhyNot = (x) => (x.ended ? 'ended' : !x.typeable ? 'not in macOS Terminal, cannot be typed into' : termStateOf(x) === 'asking' ? 'asks something in its terminal' : '');
+async function msTypeTo(sid, text) {
+  Object.assign(ag, { term: sid, termWrite: true, termDetails: false, msPick: null, note: '' });
+  openChat('terminal');
+  try {
+    await agentPost('type', { session: sid, text });
+    typedHere.add(text); const L = termLog.get(sid); if (L) { L.sentAt = Date.now(); L.waitStart = L.sentAt; }
+    ag.stick = true; termPoll(true);
+  } catch (err) { ag.note = '✕ ' + err.message; }
+  renderAgentLive();
+}
+async function msGo(id, k) {
+  const m = ui.state?.milestones.find((x) => x.id === id), act = MS_GO[k];
+  if (!m || !act || !AGENT_TOKEN) return;
+  try { ag.view = await (await fetch(withProject('/api/agent'))).json(); } catch { /* the last known sessions */ }
+  const mem = msMem(k), ss = termSessions().filter((x) => !x.ended);
+  // the remembered choice while it can still get it; else the latest idle session; else a new one
+  const sel = mem.session === 'new' ? 'new' : ss.find((x) => x.sessionId === mem.session && !msWhyNot(x))?.sessionId ?? ss.find(termIdle)?.sessionId ?? 'new';
+  ag.msPick = { k, m, text: msFill(mem.prompt ?? act[2], m), sel, back: { term: ag.term, termWrite: ag.termWrite } };
+  Object.assign(ag, { term: sel === 'new' ? ag.term : sel, termWrite: false, termDetails: false, note: '', stick: true });
+  openChat('terminal'); termPoll(true);
+  setTimeout(() => document.querySelector('[data-msp-send]')?.focus(), 50);
+}
+// the dialog above the session's thread
+function msPickHtml() {
+  const p = ag.msPick, act = MS_GO[p.k], ss = termSessions().filter((x) => !x.ended).sort((a, b) => termIdle(b) - termIdle(a) || b.t - a.t);
+  const x = ss.find((y) => y.sessionId === p.sel), why = x ? msWhyNot(x) : p.sel === 'new' ? '' : 'it has ended';
+  const opt = (y) => { const w = msWhyNot(y); return `<option value="${esc(y.sessionId)}" ${y.sessionId === p.sel ? 'selected' : ''} ${w ? 'disabled' : ''}>${esc(termLabel(y))}${w ? ` · ${esc(w)}` : termIdle(y) ? ' · idle' : ''}</option>`; };
+  const changed = msTpl(p.text, p.m) !== act[2];
+  return `<div class="ms-pick" role="dialog" aria-label="${esc(`${act[1]} ${p.m.id}`)}">
+    <div class="ag-row"><b>${act[0]} ${esc(act[1])} ${esc(p.m.id)} ${esc(p.m.title)}</b></div>
+    <label class="ms-pick-l">Session
+      <select data-msp-sel>${ss.map(opt).join('')}<option value="new" ${p.sel === 'new' ? 'selected' : ''}>＋ New session (a Terminal window in this project's folder)</option></select></label>
+    <div class="ag-note">${p.sel === 'new' ? 'Claude Code starts in a new Terminal window; the prompt is typed there once it runs.' : why ? `✕ This session cannot get it: ${esc(why)}.` : x && !termIdle(x) ? 'It is working: Claude Code takes the prompt after its current turn. Its thread is below, in read mode.' : 'Idle, waiting at its prompt. Its thread is below, in read mode.'}</div>
+    <label class="ms-pick-l">Prompt ${changed ? '<button class="link" type="button" data-msp-default title="Back to the default prompt">Default</button>' : ''}
+      <textarea data-msp-text data-keep-children rows="4">${esc(p.text)}</textarea></label>
+    <div class="ag-row"><span class="ag-note">Remembered for ${esc(act[0])} in this project (the milestone's id and title are filled in).</span>
+      <button class="btn primary" type="button" data-msp-send ${why || !p.text.trim() ? 'disabled' : ''} style="margin-left:auto">${p.sel === 'new' ? 'Start and send' : 'Send'}</button><button class="btn" type="button" data-msp-cancel>Cancel</button></div></div>`;
+}
+document.addEventListener('click', (e) => {
+  const p = ag.msPick, t = e.target;
+  if (!p || !t.closest?.('[data-msp-send], [data-msp-cancel], [data-msp-default]')) return;
+  e.stopPropagation();
+  if (t.closest('[data-msp-default]')) { p.text = msFill(MS_GO[p.k][2], p.m); const ta = document.querySelector('[data-msp-text]'); if (ta) ta.value = p.text; return renderAgentLive(); }
+  if (t.closest('[data-msp-cancel]')) { Object.assign(ag, { ...p.back, msPick: null }); return renderAgentLive(); }
+  const text = p.text.trim(), tpl = msTpl(text, p.m);
+  try { localStorage.setItem(msMemKey(p.k), JSON.stringify({ session: p.sel, prompt: tpl === MS_GO[p.k][2] ? null : tpl })); } catch { /* not remembered */ }
+  if (p.sel === 'new') { ag.msPick = null; return termNew(text, { milestone: p.m.id, title: p.m.title }); }
+  msTypeTo(p.sel, text);
+}, true);
+document.addEventListener('change', (e) => {
+  const s = e.target.closest?.('[data-msp-sel]'); if (!s || !ag.msPick) return;
+  ag.msPick.sel = s.value;
+  if (s.value !== 'new') { ag.term = s.value; ag.stick = true; termPoll(true); }
+  renderAgentLive();
+});
+document.addEventListener('input', (e) => {
+  const ta = e.target.closest?.('[data-msp-text]'); if (!ta || !ag.msPick) return;
+  ag.msPick.text = ta.value;
+  const send = document.querySelector('[data-msp-send]'), x = termSessions().find((y) => y.sessionId === ag.msPick.sel);
+  if (send) send.disabled = !ta.value.trim() || (ag.msPick.sel !== 'new' && (!x || !!msWhyNot(x)));
+});
+document.addEventListener('click', (e) => {
+  const go = e.target.closest?.('[data-ms-go]');
+  if (go) { e.stopPropagation(); return msGo(go.dataset.msGo, Number(go.dataset.msAct)); }
+}, true);
+document.addEventListener('keydown', (e) => {
+  const go = e.target.closest?.('[data-ms-go]');
+  if (go && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); msGo(go.dataset.msGo, Number(go.dataset.msAct)); }
+});
 document.addEventListener('click', (e) => {
   const ms = e.target.closest('[data-ms]');
   if (ms) { ui.ms = ms.dataset.ms; try { localStorage.setItem('osd-ms', ui.ms); } catch {} return renderBoard(ui.state); }
@@ -3863,7 +4119,9 @@ function ctxHtml(c, short) {
   const tip = `Context: ${c.used.toLocaleString()} of ${kTok(w)} tokens in use (${pct} %)${c.window ? '' : ', window as set in Settings › Write mode'}${c.compactions ? ` · compacted ${c.compactions}× so far` : ''}. Claude Code compacts the conversation when it is nearly full.`;
   return `<span class="ctx ${pct >= 80 ? 'hi' : pct >= 60 ? 'mid' : ''}" title="${esc(tip)}" aria-label="${esc(tip)}"><span class="ctx-bar"><i style="width:${Math.max(3, pct)}%"></i></span>${short ? `${pct} %` : `${kTok(c.used)} / ${kTok(w)}`}</span>`;
 }
-const termLabel = (x) => `${x.hookless && !x.ended && !x.typeable ? '◌ ' : x.ended ? '' : x.listening || x.listen ? '👂 ' : x.waiting ? '' : '● '}${x.prompt ? `“${x.prompt.replace(/\s+/g, ' ').slice(0, 48)}${x.prompt.length > 48 ? '…' : ''}”` : 'session'} · ${x.ended ? 'ended' : x.waiting ? 'waiting' : 'working'} · ${ago(x.t)} · ${x.sessionId.slice(0, 8)}${x.hookless && !x.ended && !x.typeable ? ' · read-only' : ''}`;
+// a session a milestone's ▶ started: named after the milestone (its title as the board has it now), not its last prompt
+const termMs = (x) => (x?.milestone ? `▶ ${x.milestone} ${ui.state?.milestones?.find((m) => m.id === x.milestone && !x.elsewhere)?.title ?? x.milestoneTitle ?? ''}`.trim() : '');
+const termLabel = (x) => `${x.hookless && !x.ended && !x.typeable ? '◌ ' : x.ended ? '' : x.listening || x.listen ? '👂 ' : x.waiting ? '' : '● '}${termMs(x) || (x.prompt ? `“${x.prompt.replace(/\s+/g, ' ').slice(0, 48)}${x.prompt.length > 48 ? '…' : ''}”` : 'session')} · ${x.ended ? 'ended' : x.waiting ? 'waiting' : 'working'} · ${ago(x.t)} · ${x.sessionId.slice(0, 8)}${x.hookless && !x.ended && !x.typeable ? ' · read-only' : ''}`;
 function termThreadHtml(sid) {
   const T = termLog.get(sid);
   if (!T) return '<div class="ag-empty">Loading the session…</div>';
@@ -4000,10 +4258,11 @@ function askDoneHtml(e, res, byMessage) {
 const askReady = (q) => { const a = askOf(q.id); return (a.text.trim() || a.picks.size) && (q.tabs.length < 2 || a.rest.trim()); };
 function askCardHtml(q, canAnswer) {
   const st = askState.get(q.id) ?? {}, a = askOf(q.id), off = !canAnswer || st.sent || st.busy;
-  return `<div class="ask-card" data-ask="${esc(q.id)}"><div class="ask-h">❓ Claude asks you${q.tabs.length > 1 ? ` (${q.tabs.length} questions)` : ''}</div>
-    <div class="ask-block">${q.tabs[0] ? `<span class="ask-tag">${esc(q.tabs[0])}</span>` : ''}<div class="ask-q">${esc(q.question)}${q.multi ? ' <span class="muted">(several possible)</span>' : ''}</div>
+  const perm = q.kind === 'permission'; // a permission prompt (a command, an edit, …), maybe of a sub-agent: what it wants to do, then its options
+  return `<div class="ask-card" data-ask="${esc(q.id)}"><div class="ask-h">${perm ? `🔐 It asks for permission${q.title ? `: ${esc(q.title)}` : ''}` : `❓ Claude asks you${q.tabs.length > 1 ? ` (${q.tabs.length} questions)` : ''}`}</div>
+    <div class="ask-block">${perm && q.detail ? `<pre class="ask-detail">${esc(q.detail)}</pre>` : ''}${q.tabs[0] ? `<span class="ask-tag">${esc(q.tabs[0])}</span>` : ''}<div class="ask-q">${esc(q.question)}${q.multi ? ' <span class="muted">(several possible)</span>' : ''}</div>
       <div class="ask-opts">${q.options.map((o, k) => { const rec = /\(recommended\)/i.test(o.label); return `<button type="button" class="ask-opt ${rec ? 'rec' : ''}" data-ask-opt="${k}" aria-pressed="${a.picks.has(k)}" ${off ? 'disabled' : ''}><b>${k + 1}. ${esc(o.label.replace(/\s*\(recommended\)/i, ''))}${rec ? ' <i class="ask-rec">recommended</i>' : ''}</b>${o.description ? `<span>${esc(o.description)}</span>` : ''}</button>`; }).join('')}</div>
-      <input class="ask-text" data-ask-text value="${esc(a.text)}" placeholder="…or your own answer" ${off ? 'disabled' : ''}></div>
+      ${!perm || q.chat ? `<input class="ask-text" data-ask-text value="${esc(a.text)}" placeholder="${perm ? '…or decline and tell it what to do instead' : '…or your own answer'}" ${off ? 'disabled' : ''}>` : ''}</div>
     ${q.tabs.length > 1 ? `<div class="ask-block"><div class="ask-q">${esc(q.tabs.slice(1).join(', '))} <span class="muted">· the terminal shows one question at a time; your answers to the others go along as text</span></div><input class="ask-text" data-ask-rest value="${esc(a.rest)}" placeholder="Your answers to ${esc(q.tabs.slice(1).join(', '))}" ${off ? 'disabled' : ''}></div>` : ''}
     ${canAnswer ? `<div class="ag-row">${q.options.some((o) => /\(recommended\)/i.test(o.label)) || q.tabs.length > 1 ? `<button class="btn" type="button" data-ask-rec ${off ? 'disabled' : ''} title="${q.tabs.length > 1 ? 'Take its recommended option for every question' : q.multi ? 'Take all the options it recommends' : 'Take the option it recommends'}">👍 Recommended</button>` : ''}<button class="btn primary" type="button" data-ask-send ${askReady(q) && !off ? '' : 'disabled'}>${st.busy ? '<span class="ag-spin"></span>Answering…' : st.sent ? '✓ Sent' : 'Send answer'}</button>${st.err ? `<span class="ag-note warn">✕ ${esc(st.err)}</span>` : '<span class="ag-note">goes to its terminal as if you answered it there</span>'}</div>`
       : '<div class="ag-note">Answer it in its terminal, or <b>✎ Write to it</b> to answer here.</div>'}</div>`;
@@ -4038,10 +4297,12 @@ function termStateHtml(T, items, canAnswer) {
     const lastUser = [...items].reverse().find((e) => e.kind === 'user' || e.kind === 'mine');
     const afterText = items.slice(items.lastIndexOf([...items].reverse().find((e) => e.kind === 'text')) + 1);
     const step = [...afterText].reverse().find((e) => e.kind === 'tool');
-    return `<div class="msg them typing term-state"><span class="ag-spin"></span>${sent ? 'Sent · it starts in a moment…' : `Working${step ? `: ${esc(step.text)}` : '…'}`}${!sent && lastUser?.t ? ` <span class="muted">· since ${hhmm(lastUser.t)}</span>` : ''}</div>`;
+    // "since": when the step in progress started (its tool call), not the whole turn; the turn's start goes in the tooltip
+    const stepT = step?.t ?? lastUser?.t, turn = lastUser?.t && stepT !== lastUser.t ? ` title="Working on your message since ${hhmm(lastUser.t)}"` : '';
+    return `<div class="msg them typing term-state"><span class="ag-spin"></span>${T.compact ? `Compacting the conversation${T.compact.before ? ` (${kTok(T.compact.before)} in use)` : ''}…` : sent ? 'Sent · it starts in a moment…' : `Working${step ? `: ${esc(step.text)}` : '…'}`}${!sent && stepT ? ` <span class="muted"${turn}>· since ${hhmm(stepT)}</span>` : ''}</div>`;
   }
   if (T.state === 'listening') return '<div class="term-done"><span class="dot on"></span>Listening: waiting for your message</div>';
-  if (T.state === 'asking') return '<div class="term-done term-ask">? Needs you: it asks something in its terminal (a permission, a choice)</div>';
+  if (T.state === 'asking') return '<div class="term-done term-ask">? Needs you: it asks something in its terminal that cannot be answered here; answer it there</div>';
   if (T.state === 'waiting' && items.length) { // the app the last answer started: its button next to "Done"
     const i = items.findLastIndex((e) => e.kind === 'text' && !e.sub), ask = items.slice(0, Math.max(0, i)).findLast((e) => e.kind === 'user' || e.kind === 'mine');
     const app = i >= 0 ? appOf(items[i].text, isStart(ask?.kind === 'mine' ? ask.m.text : ask?.text)) : null;
@@ -4141,7 +4402,7 @@ const bgSave = () => { try { localStorage.setItem('osd-bg', JSON.stringify(bgLis
 const bgState = new Map(); // session id -> { state, t, last, cwd }
 let bgOpen = false;
 function bgAdd(x) {
-  const label = x.prompt ? x.prompt.replace(/\s+/g, ' ').slice(0, 70) : x.sessionId.slice(0, 8);
+  const label = termMs(x) || (x.prompt ? x.prompt.replace(/\s+/g, ' ').slice(0, 70) : x.sessionId.slice(0, 8));
   const e = { sessionId: x.sessionId, kind: x.kind ?? 'term', convo: x.convo ?? null, label, projectId: x.elsewhere ? x.projectId ?? null : PROJECT, projectLabel: x.elsewhere ? x.projectLabel ?? x.display ?? null : (ui.state?.projectLabel ?? ui.state?.project ?? null), at: Date.now(), seen: true }; // a change (done, an issue) makes it new
   const i = bgList.findIndex((y) => y.sessionId === x.sessionId);
   if (i >= 0) bgList.splice(i, 1);
@@ -4217,7 +4478,7 @@ document.addEventListener('click', (e) => {
     location.href = u.toString();
   }
 }, true);
-function closeAgent() { if (EMBED) return; cancelRecording(); ag.open = false; $('agent').hidden = true; document.body.classList.remove('ag-open', 'ag-max'); updateAgentBtn(); }
+function closeAgent() { if (EMBED) return; cancelRecording(); ag.open = false; ag.msPick = null; $('agent').hidden = true; document.body.classList.remove('ag-open', 'ag-max'); updateAgentBtn(); }
 // a session picker that was left alone during updates (it had the focus): bring it up to date when it loses it
 document.addEventListener('focusout', (e) => { if (e.target.matches?.('#agent select')) setTimeout(() => ag.open && renderAgentLive(), 0); });
 // ---- side by side: two terminal sessions next to each other, each half the page itself with ?embed (its own picker,
@@ -4623,7 +4884,12 @@ function brainstormMd(text, key, idea) {
     </div>`;
   }).join('');
 }
+// a milestone's ▶ with several idle sessions: its picker on top, the picked session in read mode below
 function barHtml(c) {
+  const b = barInner(c);
+  return c?.terminal && ag.msPick ? msPickHtml() + b : b;
+}
+function barInner(c) {
   if (!c) return '';
   if (c.terminal) {
     const ext = recentExternal()[0];
@@ -4672,7 +4938,7 @@ function barHtml(c) {
     const quickAdopt = xo && ag.termWrite ? `<button class="btn" type="button" data-ag-adopt="${xo.openspec ? 'follow' : 'onboard'}" data-quick title="${xo.openspec ? 'It has an openspec/ folder: follow it as a project and continue this session there' : 'Set up OpenSpec in this folder (in the background, nothing committed) and follow it'}">${xo.openspec ? 'Follow now' : 'Onboard as project'}</button>` : '';
     // writing: the details fold into one line, so the conversation gets the panel ("Details" brings them back)
     const look = `<button class="link term-v" type="button" data-term-look aria-pressed="${termView.look > 0}" title="${['Terminal colors for the conversation (your messages stay highlighted)', 'Terminal colors for the whole panel', 'Back to the normal colors'][termView.look]}">${['▣ Terminal', '▣ Terminal: conversation', '▣ Terminal: all'][termView.look]}</button><button class="link term-v" type="button" data-term-fs="-1" title="Smaller text" aria-label="Smaller text">A−</button><button class="link term-v" type="button" data-term-fs="0" ${termView.fs === TERM_FS ? 'disabled' : ''} title="Default text size (${TERM_FS}px)" aria-label="Default text size">A</button><button class="link term-v" type="button" data-term-fs="1" title="Larger text" aria-label="Larger text">A+</button>`;
-    if (ag.termWrite && !ag.termDetails) return `<div class="ag-row term-compact"><span class="ag-note">✎ Writing to <b>${esc(xo ? xo.display : x2.prompt ? `“${x2.prompt.replace(/\s+/g, ' ').slice(0, 40)}${x2.prompt.length > 40 ? '…' : ''}”` : x2.sessionId.slice(0, 8))}</b> · ${state}</span>${gauge ? `<span class="term-ctx">${gauge.replace(/^ · /, '')}</span>` : ''}
+    if (ag.termWrite && !ag.termDetails) return `<div class="ag-row term-compact"><span class="ag-note">✎ Writing to <b>${esc(xo ? xo.display : termMs(x2) ? termMs(x2) : x2.prompt ? `“${x2.prompt.replace(/\s+/g, ' ').slice(0, 40)}${x2.prompt.length > 40 ? '…' : ''}”` : x2.sessionId.slice(0, 8))}</b> · ${state}</span>${gauge ? `<span class="term-ctx">${gauge.replace(/^ · /, '')}</span>` : ''}
         <span class="term-vs" style="margin-left:auto">${look}</span><button class="link" type="button" data-ag-term-details aria-expanded="false" title="Show the session picker and the details again">Details ▾</button>
         <span class="term-btns"><button class="btn" type="button" data-ag-bg title="Keep it working in the background: the button with the number in the header shows how it is doing and when it is done">⤓ Background</button>${cur && !x2.hookless && !x2.typeable ? `<button class="btn" type="button" data-ag-term-listen aria-pressed="${!!x2.listen}" title="When it is about to stop, it waits for your message instead (the terminal shows the hook running; Esc there takes the session back)">${x2.listen ? '👂 Listening · stop' : '👂 Keep it listening'}</button>` : ''}${quickAdopt}<button class="btn" type="button" data-ag-term-write aria-pressed="true" title="Back to read-only">Read only</button></span></div>${termLog.get(x2.sessionId)?.err ? `<div class="ag-note warn">✕ ${esc(termLog.get(x2.sessionId).err)}</div>` : ''}`;
     return `${top}
@@ -4705,13 +4971,34 @@ function ticketItem(j) {
     : alive(j) ? `<div class="ag-note"><span class="ag-spin"></span>${last ? esc(last.text) : 'thinking…'}</div>` : '';
   return `<div class="ag-item">${head}<div class="ag-q">${esc(j.text)}</div>${body}${j.error ? `<div class="ag-err">✕ ${esc(j.error)}</div>` : ''}</div>`;
 }
+// "New session": a Terminal window with Claude Code in the project's folder; say: a first message, typed into it once
+// it is joined (e.g. ▶ of a milestone)
+// tag: the milestone whose ▶ started it (its label in the session lists)
+function termNew(say = null, tag = null) {
+  if (ag.newAt) return;
+  ag.newAt = Date.now(); ag.newSay = say; ag.newTag = tag; ag.note = ''; renderAgentLive();
+  return agentPost('new-session', {}).then(async (r) => {
+    if (r && r.trusted === false) { ag.note = 'The new Terminal window asks first whether you trust this folder (Claude Code asks once per folder): answer it there, then the session shows up here.'; renderAgentLive(); }
+    while (ag.newAt) { // the session list comes with the page's updates; asked for directly until the new one is there
+      await new Promise((r) => setTimeout(r, 1500));
+      try { ag.view = await (await fetch(withProject('/api/agent'))).json(); } catch { /* next round */ }
+      renderAgentLive();
+    }
+  }).catch((err) => { ag.newAt = 0; ag.newSay = null; ag.note = '✕ ' + err.message; renderAgentLive(); });
+}
 // after "New session": join the session that started since then, in write mode (or give up after a minute)
 function termAutoJoin() {
   if (!ag.newAt) return;
   // joined once the server knows it can type into it (a moment after it shows up), so the first message is typed
   const x = termSessions().find((y) => !y.ended && (y.startedAt ?? 0) >= ag.newAt - 3000 && (y.typeable || Date.now() - ag.newAt > 15e3));
-  if (x) { Object.assign(ag, { newAt: 0, note: '', term: x.sessionId, termWrite: true, termDetails: false, stick: true }); termPoll(true); }
-  else if (Date.now() - ag.newAt > (ag.note ? 180e3 : 60e3)) { ag.newAt = 0; ag.note = '✕ The new session did not show up within a minute: is the terminal window asking something (e.g. whether you trust the folder)?'; }
+  if (x) {
+    const say = ag.newSay, tag = ag.newTag;
+    if (tag) { Object.assign(x, tag); agentPost('tag', { session: x.sessionId, ...tag }).catch(() => { /* labelled by its prompt instead */ }); }
+    Object.assign(ag, { newAt: 0, newSay: null, newTag: null, note: '', term: x.sessionId, termWrite: true, termDetails: false, stick: true }); termPoll(true);
+    if (say) agentPost('type', { session: x.sessionId, text: say }).then(() => { typedHere.add(say); const L = termLog.get(x.sessionId); if (L) { L.sentAt = Date.now(); L.waitStart = L.sentAt; } termPoll(true); })
+      .catch((err) => { ag.note = `✕ ${err.message} · not sent: ${say}`; renderAgentLive(); });
+  }
+  else if (Date.now() - ag.newAt > (ag.note ? 180e3 : 60e3)) { ag.newAt = 0; ag.newSay = null; ag.note = '✕ The new session did not show up within a minute: is the terminal window asking something (e.g. whether you trust the folder)?'; }
 }
 function renderAgentLive() {
   termAutoJoin();
@@ -4781,7 +5068,7 @@ async function agentSend(force = false, direct = null) {
       if (c?.terminal) {
         const xo = (ag.view?.elsewhere ?? []).find((y) => y.sessionId === ag.term && !y.projectId);
         const tx = termSessions().find((y) => y.sessionId === ag.term) ?? xo;
-        if (tx?.typeable) { await agentPost('type', { session: ag.term, text }); typedHere.add(text.replace(/\s*\n\s*/g, ' ').trim()); const L = termLog.get(ag.term); if (L) { L.sentAt = Date.now(); L.waitStart = L.sentAt; } ag.stick = true; termPoll(true); }
+        if (tx?.typeable) { await agentPost('type', { session: ag.term, text }); compactMark(ag.term, text); typedHere.add(text.replace(/\s*\n\s*/g, ' ').trim()); const L = termLog.get(ag.term); if (L) { L.sentAt = Date.now(); L.waitStart = L.sentAt; } ag.stick = true; termPoll(true); }
         else await agentPost('message', { text, to: 'inbox', session: ag.term || undefined, ...(xo ? { folder: xo.folder } : {}) });
       }
       else if (c?.session) await agentPost('message', { change: c.last.change, text, job: c.last.id });
@@ -4870,20 +5157,10 @@ document.addEventListener('click', (e) => {
   }
   if (t.closest('[data-ag-term-details]')) { ag.termDetails = !ag.termDetails; renderAgentLive(); return; }
   if (t.closest('[data-ag-term-write]')) { ag.termDetails = false; ag.termWrite = !ag.termWrite; renderAgentLive(); if (ag.termWrite) $('ag-text')?.focus(); return; }
-  if (t.closest('[data-ag-term-new]')) {
-    ag.newAt = Date.now(); ag.note = ''; renderAgentLive();
-    return agentPost('new-session', {}).then(async (r) => {
-      if (r && r.trusted === false) { ag.note = 'The new Terminal window asks first whether you trust this folder (Claude Code asks once per folder): answer it there, then the session shows up here.'; renderAgentLive(); }
-      while (ag.newAt) { // the session list comes with the page's updates; asked for directly until the new one is there
-        await new Promise((r) => setTimeout(r, 1500));
-        try { ag.view = await (await fetch(withProject('/api/agent'))).json(); } catch { /* next round */ }
-        renderAgentLive();
-      }
-    }).catch((err) => { ag.newAt = 0; ag.note = '✕ ' + err.message; renderAgentLive(); });
-  }
+  if (t.closest('[data-ag-term-new]')) return termNew();
   if (t.closest('[data-ctx-compact]')) {
     const L = termLog.get(ag.term);
-    return agentPost('type', { session: ag.term, text: '/compact' }).then(() => { if (L) { L.sentAt = Date.now(); L.waitStart = L.sentAt; } ag.stick = true; termPoll(true); }).catch((err) => { ag.note = '✕ ' + err.message; renderAgentLive(); });
+    return agentPost('type', { session: ag.term, text: '/compact' }).then(() => { compactMark(ag.term, '/compact'); if (L) { L.sentAt = Date.now(); L.waitStart = L.sentAt; } ag.stick = true; termPoll(true); }).catch((err) => { ag.note = '✕ ' + err.message; renderAgentLive(); });
   }
   if (t.closest('[data-ag-term-listen]')) { const x = termSessions().find((y) => y.sessionId === ag.term) ?? (ag.view?.elsewhere ?? []).find((y) => y.sessionId === ag.term); return agentPost('listen', { session: ag.term, on: !x?.listen }).catch((err) => { ag.note = '✕ ' + err.message; renderAgentLive(); }); }
   const convo = t.closest('[data-ag-convo]');
@@ -4907,6 +5184,58 @@ document.addEventListener('input', (e) => {
   if (e.target.id !== 'ag-text') return;
   ag.drafts[ag.panel === 'chat' ? 'chat-' + ag.convo : 'ticket-' + ag.mode] = e.target.value;
 });
+// ---- "/" at the start of a write session's input box: autocomplete of the slash commands and skills the session
+// knows (Claude Code's important built-in ones, the custom commands and skills of the user, the folder and the
+// plugins; from the server, per folder), while the first word is typed. ↑/↓ pick, Tab or Enter take it, Esc closes
+const slash = { lists: new Map(), items: [], i: 0, open: false, q: null };
+const slashOn = () => ag.open && ag.panel === 'chat' && ag.convo === 'terminal' && ag.termWrite && !!ag.term;
+const slashFolder = () => (ag.view?.elsewhere ?? []).find((y) => y.sessionId === ag.term && !y.projectId)?.folder ?? '';
+function slashClose() { slash.open = false; document.getElementById('slash-pop')?.remove(); }
+async function slashUpdate() {
+  const ta = $('ag-text'), m = ta && slashOn() ? ta.value.match(/^\/(\S*)$/) : null;
+  if (!m) return slashClose();
+  const key = slashFolder();
+  if (!slash.lists.has(key)) {
+    slash.lists.set(key, null); // loading
+    try { slash.lists.set(key, (await agentPost('commands', key ? { folder: key } : {})).commands ?? []); } catch { slash.lists.delete(key); return slashClose(); }
+    if (!$('ag-text')?.value.match(/^\/\S*$/)) return slashClose();
+  }
+  const all = slash.lists.get(key); if (!all) return;
+  const q = m[1].toLowerCase(), base = (n) => n.toLowerCase().replace(/^[^:]+:/, ''); // "plugin:name": also by its name
+  const starts = all.filter((x) => x.name.toLowerCase().startsWith(q) || base(x.name).startsWith(q));
+  const inside = q ? all.filter((x) => !starts.includes(x) && x.name.toLowerCase().includes(q)) : [];
+  if (slash.q !== q) slash.i = 0;
+  slash.q = q; slash.items = [...starts, ...inside].slice(0, 40); slash.open = true;
+  slash.i = Math.min(slash.i, Math.max(0, slash.items.length - 1));
+  let pop = document.getElementById('slash-pop');
+  if (!pop) { pop = document.createElement('div'); pop.id = 'slash-pop'; pop.className = 'slash-pop'; pop.setAttribute('role', 'listbox'); ta.closest('.ag-compose')?.prepend(pop); }
+  pop.innerHTML = slash.items.length ? slash.items.map((x, k) => `<button type="button" role="option" class="slash-it slash-${x.kind}" data-slash="${k}" aria-selected="${k === slash.i}" title="${esc(x.description)}"><b>/${esc(x.name)}</b><span class="slash-h">${esc(x.hint)}</span><span class="slash-k">${x.kind} · ${esc(x.source)}</span>${x.description ? `<span class="slash-d">${esc(x.description)}</span>` : ''}</button>`).join('')
+    : '<div class="slash-none">No command or skill starts like this; Enter sends it as it is.</div>';
+  pop.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+}
+function slashTake(k) {
+  const x = slash.items[k], ta = $('ag-text'); if (!x || !ta) return;
+  ta.value = `/${x.name} `; ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+  slashClose(); ta.dispatchEvent(new Event('input', { bubbles: true }));
+}
+document.addEventListener('input', (e) => { if (e.target.id === 'ag-text') slashUpdate(); });
+document.addEventListener('click', (e) => {
+  const it = e.target.closest?.('[data-slash]');
+  if (it) { e.preventDefault(); return slashTake(Number(it.dataset.slash)); }
+  if (slash.open && !e.target.closest?.('#slash-pop, #ag-text')) slashClose();
+});
+document.addEventListener('keydown', (e) => { // capture: before Enter sends the message
+  if (!slash.open || e.target.id !== 'ag-text' || e.isComposing) return;
+  const n = slash.items.length;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); return slashClose(); }
+  if (!n) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); slash.i = (slash.i + (e.key === 'ArrowDown' ? 1 : -1) + n) % n; return slashUpdate(); }
+  if ((e.key === 'Tab' || e.key === 'Enter') && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+    // Enter on a name typed in full sends it (e.g. /compact); otherwise it takes the picked one
+    if (e.key === 'Enter' && slash.items.some((x) => x.name.toLowerCase() === slash.q)) return slashClose();
+    e.preventDefault(); e.stopPropagation(); slashTake(slash.i);
+  }
+}, true);
 document.addEventListener('keydown', (e) => {
   if (e.target.id !== 'ag-text' || e.key !== 'Enter' || e.isComposing) return;
   const chatSend = ag.panel === 'chat' && !e.shiftKey;          // messenger: Enter sends, Shift+Enter new line
@@ -6147,7 +6476,7 @@ const EXPERT = [
   ['gates', 'Quality gates', [['Build and unit tests', 1], ['Linting and formatting', 1], ['Type checks / null safety', 1], ['Integration tests against real dependencies', 0], ['End-to-end tests', 0], ['Coverage threshold', 0], ['Mutation testing', 0], ['Architecture rules (module boundaries)', 0], ['Dependency vulnerability scan', 0], ['License check', 0], ['Performance budgets', 0]]],
   ['task', 'Checked for every task', [['A test proves it (the verify criterion)', 1], ['Quality gate green before ticking it', 0], ['No TODOs or commented-out code', 0], ['Docs updated when behaviour changes', 0]]],
   ['review', 'Reviewed for every change', [['Matches the specs and their scenarios', 1], ['Security (input validation, secrets, access)', 1], ['Error handling and logging', 1], ['Test quality (meaningful assertions, not flaky)', 1], ['Readability and maintainability', 1], ['Performance', 0], ['Accessibility', 0], ['API compatibility (no unintended breaking changes)', 0], ['Data migrations and backward compatibility', 0]]],
-  ['flow', 'Workflow steps', [['One commit per ticket', 1], ['Acceptance check by a fresh agent', 1], ['Diff review by a fresh agent, findings validated', 1], ['Docs update by a fresh agent', 1], ['Diagram update', 0], ['Parking lot for deferred findings', 1]]],
+  ['flow', 'Workflow steps', [['One commit per ticket', 1], ['Acceptance check by a fresh agent', 1], ['Diff review by a fresh agent, findings validated', 1], ['Long-term check by a fresh agent: does the quick way hurt structure and maintainability?', 1], ['Docs update by a fresh agent', 1], ['Diagram update', 0], ['Parking lot for deferred findings', 1]]],
   ['docs', 'Documentation', [['README: setup, usage and the quality gate', 1], ['CLAUDE.md / AGENTS.md kept current', 1], ['Architecture overview', 0], ['Decision records (ADRs)', 1], ['API reference (e.g. OpenAPI)', 0], ['User guide', 0], ['Changelog', 0], ['Diagrams of the architecture and the main flows', 1]]],
   ['diagrams', 'Diagram format', [['Mermaid', 1], ['PlantUML', 0], ['Mermaid and PlantUML', 0]], ONE],
   ['diagramTypes', 'Diagram types', [['System context (C4 level 1)', 1], ['Containers (C4 level 2)', 1], ['Components (C4 level 3)', 0], ['Sequence diagrams of the main flows', 1], ['Data model (ER)', 1], ['State machines', 0], ['Activity / flow charts', 0], ['Deployment', 0], ['Class diagrams', 0]]],

@@ -46,7 +46,8 @@ Work through the steps in order. Do not skip a step; if a step does not apply (n
    and move the draft in as `proposal.md`. Write `design.md`, the spec deltas and `tasks.md`
    (`/openspec-continue-change` or `/openspec-ff-change`). Every task ends with `verify: <test, command or
    observable behaviour>`; spec scenarios are the ticket's acceptance criteria; the last task is "quality gate is
-   green". Run `openspec validate <name>` and fix what it reports.
+   green". Run `openspec validate <name>` and fix what it reports. Design it to fit the existing structure: the
+   quickest way to the ticket's goal is not the right one when it leaves the code harder to change.
 2. **Implement with tests** (`/openspec-apply-change`). Tick a task in `tasks.md` only when its `verify:`
    criterion is met, not when the code is written.
 3. **Quality gate.** Run it. Red: fix and repeat. Never lower a threshold, skip a check or weaken a test to get
@@ -60,7 +61,10 @@ Work through the steps in order. Do not skip a step; if a step does not apply (n
    - defer → parking lot or a roadmap candidate, with the reason.
    Continue only when every scenario is satisfied with evidence or recorded as a deviation.
 5. **Diff review.** Stage the ticket's changes. Start a fresh agent with the "Diff review" prompt; it sees only
-   the staged diff and the change's artifacts.
+   the staged diff and the change's artifacts. If the project's workflow includes the long-term check
+   (`openspec/config.yaml` or the agent instructions), start another fresh agent with the "Long-term check" prompt
+   as well: does doing the change this way, now and quickly, hurt the structure and maintainability in the long
+   run? The diff review looks at the lines; this check looks at the direction the change takes the code.
 6. **Validate the findings.** Start another fresh agent with the "Findings validation" prompt and the raw
    findings. It confirms or rejects each finding and classifies confirmed ones as `pareto` (high value, low
    effort) or `minor`.
@@ -69,6 +73,14 @@ Work through the steps in order. Do not skip a step; if a step does not apply (n
      and add the improvement as a candidate row to the roadmap;
    - belongs to a planned change → add it to that change's backlog draft;
    - pure code-quality minor → parking lot.
+
+   And the long-term check's verdict:
+   - `sound` → nothing to do;
+   - `tactical` → an acceptable shortcut for now: record it in the parking lot under "Trade-offs to revisit" (what the
+     sound solution would be, and when it has to be done at the latest, e.g. before a named roadmap change) and, when
+     it needs a change of its own, as a roadmap candidate;
+   - `harmful` → do not commit it like this: restructure it when that fits the ticket (it costs less now than later);
+     when it would grow the ticket considerably, stop and ask the user (restructure now, or accept it as tactical).
 8. **Docs.** Decide whether user docs, architecture docs or decision records are affected. If so, start a fresh
    docs agent, then a separate fresh diagram agent for diagrams, each with its prompt. Diagrams are validated by
    rendering them.

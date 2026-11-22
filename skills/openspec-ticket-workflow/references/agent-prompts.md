@@ -35,6 +35,30 @@ Answer with one finding per entry: file:line, what is wrong, why it matters, sug
 value (high/low) and effort (high/low). Answer "0 findings" if there are none. No praise, no summary.
 ```
 
+## Long-term check (step 5, when the project's workflow includes it)
+
+```text
+Check whether OpenSpec change `<name>` takes the code in a direction that is sound in the long run, or whether
+it reaches the ticket's goal quickly at the cost of the structure and maintainability. Work read-only: do not
+edit files, do not fix anything.
+
+Inputs: the staged diff (`git diff --staged`), openspec/changes/<name>/ (proposal.md, design.md, specs/), the
+code around what the diff touches, the architecture and conventions (<pointer to CLAUDE.md / AGENTS.md /
+architecture docs / decision records>) and openspec/roadmap.md with the backlog drafts (what is planned next).
+
+1. Structure: does the change put things where they belong, or does it bypass layers and module boundaries, add
+   coupling or a dependency in the wrong direction, special-case a general concept, or copy instead of reuse?
+2. Consistency: does it follow the patterns the code already uses for the same problem, or add a second way?
+3. Change ahead: will the planned changes of the roadmap build on it, or have to rework it? Does it fix the cause
+   or a symptom? Does it lock in a data format, an API or a dependency that is hard to change later?
+4. Cost: for each problem, the sound alternative, the effort now (low/high) and what it costs later if left.
+
+Answer with one entry per problem (what, where: file or design decision, why it hurts in the long run, the
+sound alternative, effort now, cost later), then one verdict: `sound`, `tactical` (an acceptable shortcut
+for now, with what has to be revisited and by when) or `harmful` (should not be committed like this).
+Answer "sound, 0 problems" if there are none. No praise, no summary of the code.
+```
+
 ## Findings validation (step 6)
 
 ```text

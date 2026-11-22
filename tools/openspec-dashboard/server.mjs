@@ -80,6 +80,11 @@ const SETTINGS_FILE = path.join(STATE_DIR, 'settings.json');
 const settings = { rephrase: { provider: 'auto' }, stt: { provider: 'auto' }, podman: { autostart: [] }, files: { open: '' }, terminal: { open: '' }, lan: { on: false, write: false, key: null }, awake: { helper: '' } };
 try { const f = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); for (const k of Object.keys(settings)) Object.assign(settings[k], f[k]); } catch { /* defaults */ }
 const writeSettings = () => { fs.mkdirSync(STATE_DIR, { recursive: true }); fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2) + '\n'); };
+// the sessions a milestone's ▶ started in a new Terminal window: session id -> { milestone, title, t }, so the session
+// lists show "▶ M2 <title>" instead of its last prompt; kept for 30 days
+const TAGS_FILE = path.join(STATE_DIR, 'session-tags.json');
+const sessionTags = (() => { try { return JSON.parse(fs.readFileSync(TAGS_FILE, 'utf8')) ?? {}; } catch { return {}; } })();
+const tagOf = (sid) => (sessionTags[sid] ? { milestone: sessionTags[sid].milestone, milestoneTitle: sessionTags[sid].title } : {});
 const WORKSPACE_EXCLUDES = new Set(['.git', 'target', 'node_modules', 'node', '.angular', 'dist', 'coverage',
   '.idea', '.vscode', 'test-results', 'playwright-report', '.mvn', '.gradle', 'build', '.venv', '__pycache__']);
 
@@ -1083,6 +1088,59 @@ const cleanUser = (t) => {
 // transcripts in ~/.claude/projects/<folder>/ (for the ended ones). They can be followed read-only; writing needs the hook.
 // OPENSPEC_DASHBOARD_CLAUDE_DIR points this at another folder than ~/.claude (used for the documentation screenshots).
 const CLAUDE_DIR = process.env.OPENSPEC_DASHBOARD_CLAUDE_DIR || path.join(os.homedir(), '.claude');
+// ---- the slash commands a session in a folder knows, for the autocomplete of the write mode: Claude Code's most
+// important built-in commands and skills (a fixed list), and from disk the custom commands (commands/**/*.md, a
+// subfolder gives "dir:name") and skills (skills/*/SKILL.md, not the ones with user-invocable: false) of the user
+// (~/.claude), of the folder (.claude) and of the enabled plugins ("plugin:name"); skills synced from claude.ai
+// (~/.claude/skills/synced/<bucket>/) are "anthropic-skills:name"
+const BUILTIN_SLASH = [
+  ['clear', 'command', 'Start a new conversation (clears the context)'], ['compact', 'command', 'Summarize the conversation so far to free context', '[instructions]'],
+  ['context', 'command', 'Show what fills the context window'], ['model', 'command', 'Switch the model (a menu in the terminal, or /model <name>)', '[model]'],
+  ['memory', 'command', 'Edit the memory files (CLAUDE.md)'], ['init', 'skill', 'Write a CLAUDE.md with the codebase documentation'],
+  ['review', 'command', 'Review a pull request'], ['code-review', 'skill', 'Review the current diff for correctness bugs', '[level] [target]'],
+  ['security-review', 'skill', 'Security review of the pending changes'], ['simplify', 'skill', 'Review the changed code for reuse and simplification, then fix'],
+  ['rewind', 'command', 'Go back to an earlier point of the conversation and the code'], ['resume', 'command', 'Resume another conversation'],
+  ['agents', 'command', 'Manage sub-agents'], ['permissions', 'command', 'Allow and deny rules for tools'], ['mcp', 'command', 'MCP servers'],
+  ['hooks', 'command', 'Hooks on tool events'], ['config', 'command', 'Settings (a menu in the terminal)'], ['status', 'command', 'Version, model, account, connections'],
+  ['usage', 'command', 'Plan usage and its limits'], ['cost', 'command', 'Token use and cost of this session'], ['todos', 'command', 'The current task list'],
+  ['export', 'command', 'Export the conversation'], ['add-dir', 'command', 'Add a working folder', '<path>'], ['fast', 'command', 'Toggle fast mode'],
+  ['loop', 'skill', 'Run a prompt or command on an interval', '[interval] <prompt>'], ['schedule', 'skill', 'Scheduled cloud agents (routines)'],
+  ['run', 'skill', 'Launch the app to see a change working'], ['doctor', 'command', 'Check the installation'], ['help', 'command', 'Help and all commands'],
+];
+function frontmatter(md) {
+  const m = String(md).match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  const out = {};
+  if (m) for (const l of m[1].split(/\r?\n/)) { const kv = l.match(/^([\w-]+):\s*(.*)$/); if (kv) out[kv[1]] = kv[2].replace(/^(['"])(.*)\1$/, '$2').trim(); }
+  return out;
+}
+const slashCache = new Map(); // folder -> { t, list }
+function slashCommands(folder) {
+  const c = slashCache.get(folder);
+  if (c && Date.now() - c.t < 30e3) return c.list;
+  const list = BUILTIN_SLASH.map(([name, kind, description, hint]) => ({ name, kind, description, hint: hint ?? '', source: 'built-in' }));
+  const seen = new Set(list.map((x) => x.name));
+  const add = (x) => { if (seen.has(x.name)) return; seen.add(x.name); list.push(x); };
+  const ls = (d) => { try { return fs.readdirSync(d, { withFileTypes: true }); } catch { return []; } };
+  const read = (p) => { try { return fs.readFileSync(p, 'utf8').slice(0, 4000); } catch { return null; } };
+  const isDir = (dir, e) => e.isDirectory() || (e.isSymbolicLink() && !!fs.statSync(path.join(dir, e.name), { throwIfNoEntry: false })?.isDirectory()); // e.g. .claude/skills/x -> ../../.agents/skills/x
+  const skills = (dir, source, prefix = '') => { for (const e of ls(dir)) { if (!isDir(dir, e)) continue; const md = read(path.join(dir, e.name, 'SKILL.md')); if (md === null) continue; const fm = frontmatter(md); if (fm['user-invocable'] === 'false') continue; add({ name: prefix + (fm.name || e.name), kind: 'skill', description: (fm.description ?? '').slice(0, 160), hint: fm['argument-hint'] ?? '', source }); } };
+  const commands = (dir, source, prefix = '') => { for (const e of ls(dir)) { const p = path.join(dir, e.name); if (isDir(dir, e)) commands(p, source, `${prefix}${e.name}:`); else if (e.name.endsWith('.md')) { const fm = frontmatter(read(p) ?? ''); add({ name: prefix + e.name.slice(0, -3), kind: 'command', description: (fm.description ?? '').slice(0, 160), hint: fm['argument-hint'] ?? '', source }); } } };
+  skills(path.join(folder, '.claude', 'skills'), 'project'); commands(path.join(folder, '.claude', 'commands'), 'project');
+  skills(path.join(CLAUDE_DIR, 'skills'), 'user'); commands(path.join(CLAUDE_DIR, 'commands'), 'user');
+  for (const b of ls(path.join(CLAUDE_DIR, 'skills', 'synced'))) if (b.isDirectory()) skills(path.join(CLAUDE_DIR, 'skills', 'synced', b.name), 'claude.ai', 'anthropic-skills:');
+  try { // installed plugins that are enabled in the user's settings
+    const inst = JSON.parse(fs.readFileSync(path.join(CLAUDE_DIR, 'plugins', 'installed_plugins.json'), 'utf8'))?.plugins ?? {};
+    let enabled = {}; try { enabled = JSON.parse(fs.readFileSync(path.join(CLAUDE_DIR, 'settings.json'), 'utf8'))?.enabledPlugins ?? {}; } catch { /* none */ }
+    for (const [id, v] of Object.entries(inst)) {
+      if (enabled[id] === false) continue;
+      const dir = (Array.isArray(v) ? v[0] : v)?.installPath; if (!dir) continue;
+      const pn = id.split('@')[0];
+      skills(path.join(dir, 'skills'), `plugin ${pn}`, `${pn}:`); commands(path.join(dir, 'commands'), `plugin ${pn}`, `${pn}:`);
+    }
+  } catch { /* no plugins */ }
+  slashCache.set(folder, { t: Date.now(), list });
+  return list;
+}
 const CLAUDE_PROJECT_DIRS = [...new Set([path.join(os.homedir(), '.claude', 'projects'), path.join(CLAUDE_DIR, 'projects')])];
 const realOf = (d) => { try { return fs.realpathSync(d); } catch { return path.resolve(d); } };
 const encDir = (d) => path.join(CLAUDE_DIR, 'projects', String(d).replace(/[^a-zA-Z0-9]/g, '-'));
@@ -1328,10 +1386,30 @@ const askQuestions = (input) => (Array.isArray(input?.questions) ? input.questio
 }));
 // While the menu is open, the question is not in the transcript yet (Claude Code writes it with the answer): it is
 // read from the session's terminal screen.
+// a permission prompt of Claude Code (a command, an edit, a fetch, also one a sub-agent asks for): "Do you want to …?"
+// with numbered options, below what it wants to do (between the last horizontal rule and the question)
+function screenPermission(ls) {
+  const qi = ls.findLastIndex((l) => /^\s*Do you want to .+\?\s*$/.test(l));
+  if (qi < 0 || ls.slice(qi).some((l) => /Enter to select/.test(l))) return null;
+  const optRe = /^\s*(?:❯\s*)?(\d+)\.\s+(.*?)\s*$/, options = [];
+  for (let i = qi + 1; i < ls.length; i++) {
+    const m = ls[i].match(optRe);
+    if (m && Number(m[1]) === options.length + 1) { options.push({ n: Number(m[1]), label: m[2], description: '' }); continue; }
+    if (options.length && /^\s{4,}\S/.test(ls[i]) && !optRe.test(ls[i])) { options.at(-1).label += ' ' + ls[i].trim(); continue; } // a wrapped label
+    if (options.length) break;
+  }
+  if (options.length < 2) return null;
+  const top = ls.slice(0, qi).findLastIndex((l) => /^\s*─{10,}\s*$/.test(l));
+  const body = ls.slice(top + 1, qi).map((l) => l.replace(/\s+$/, '')).filter((l) => l.trim() && !/^\s*[╌─]{10,}$/.test(l));
+  const title = (body.shift() ?? '').trim();
+  const detail = body.map((l) => l.replace(/^\s?│ ?/, '').replace(/^ /, '')).join('\n').slice(0, 2000);
+  const no = options.find((o) => /^No\b/i.test(o.label));
+  return { kind: 'permission', question: ls[qi].trim(), title, detail, multi: false, tabs: [], options: options.map(({ label }) => ({ label, description: '' })), chat: no ? no.n : null };
+}
 function screenAsk(screen) {
   const ls = String(screen ?? '').replace(/\s+$/, '').split('\n').slice(-60);
   const foot = ls.findLastIndex((l) => /Enter to select/.test(l));
-  if (foot < 0) return null;
+  if (foot < 0) return screenPermission(ls);
   const optRe = /^\s*(?:❯\s*)?(\d+)\.\s+(.*?)\s*$/;
   const first = ls.findIndex((l, i) => i < foot && optRe.test(l) && ls.slice(0, i).every((x) => !/Enter to select/.test(x)) && i > foot - 40);
   if (first < 0) return null;
@@ -1361,7 +1439,7 @@ function screenAsk(screen) {
   return { question, multi, tabs, options: options.map(({ label, description }) => ({ label, description: description === label || description === label.replace(/\s*\(recommended\)/i, '') ? '' : description })), chat };
 }
 const agentCache = new Map(); // agent transcript -> what was read of it (by modification time)
-const askIdOf = (a) => createHash('sha1').update(`${a.question}|${a.options.map((o) => o.label).join('|')}`).digest('hex').slice(0, 12);
+const askIdOf = (a) => createHash('sha1').update(`${a.question}|${a.options.map((o) => o.label).join('|')}${a.kind ? `|${a.title}|${a.detail}` : ''}`).digest('hex').slice(0, 12);
 const screenAskCache = new Map(); // pid -> { t, ask }
 async function screenAskOf(pid, fresh) {
   const c = screenAskCache.get(pid);
@@ -1459,8 +1537,8 @@ function createAgent(project) {
       stt: { available: stt.available, image: stt.image, language: STT_LANGUAGE },
       rephrase: rephraseState(),
       hookInstall: `node ${displayPath(hookFile)} install ${displayPath(root)}`,
-      elsewhere: elsewhere().map(({ transcript: tr, ...x }) => ({ ...x, transcript: !!tr })),
-      sessions: allSessions().map((x) => ({ ...x, transcript: !!x.transcript, listen: !x.hookless && fs.existsSync(listenFile(root, x.sessionId)) && (jsonOf(readSync(listenFile(root, x.sessionId)), {})?.until ?? 0) > now })),
+      elsewhere: elsewhere().map(({ transcript: tr, ...x }) => ({ ...x, ...tagOf(x.sessionId), transcript: !!tr })),
+      sessions: allSessions().map((x) => ({ ...x, ...tagOf(x.sessionId), transcript: !!x.transcript, listen: !x.hookless && fs.existsSync(listenFile(root, x.sessionId)) && (jsonOf(readSync(listenFile(root, x.sessionId)), {})?.until ?? 0) > now })),
       messages: inbox.messages,
       jobs: jobs.slice(-25).map(({ child, planIds, ...j }) => ({ ...j, log: j.log.slice(-250) })),
     };
@@ -1913,10 +1991,11 @@ function createAgent(project) {
     if (!said) throw httpError(400, 'Pick an option or write an answer.');
     if (others.length && !String(rest ?? '').trim()) throw httpError(400, `It asks more: ${others.join(', ')}. Add those answers too.`);
     if (!others.length && !q.multi && !(a.text?.trim()) && picks.length === 1) { await termScript(q.tty, 'type', String(picks[0] + 1)); screenAskCache.delete(x.pid); return { answered: 'direct' }; }
+    if (q.kind === 'permission' && !q.chat) throw httpError(400, 'This prompt has no "No" option to answer with your own words: pick one of its options.');
     await termScript(q.tty, 'type', String(q.chat)); // "Chat about this": the menu closes
     screenAskCache.delete(x.pid);
     // then the answers as a message, once the session waits for one again
-    const msg = `[Answers to your question${others.length ? 's' : ''}] ${q.question} → ${said}${others.length ? ` · ${others.join(', ')}: ${String(rest).trim().slice(0, 1000)}` : ''}`;
+    const msg = q.kind === 'permission' ? `[Declined: ${q.title || q.question}] ${said}` : `[Answers to your question${others.length ? 's' : ''}] ${q.question} → ${said}${others.length ? ` · ${others.join(', ')}: ${String(rest).trim().slice(0, 1000)}` : ''}`;
     for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 1000));
       runningCache.t = 0;
@@ -2122,7 +2201,7 @@ function createAgent(project) {
     const state = x.listening ? 'listening' : r ? (r.asking ? 'asking' : r.waiting ? 'waiting' : 'working') : x.ended || x.elsewhere || x.hookless ? 'ended' : x.waiting ? 'waiting' : 'working';
     // a question of Claude's that waits in its terminal (a menu): read from the screen
     const ask = r?.asking && r.typeable ? await screenAskOf(r.pid) : null;
-    return { entries, next: start + Math.max(end, from0), cut, size, state, shell: !!r?.shell, agents: agentsOf(file), ask: ask && { id: ask.id, question: ask.question, multi: ask.multi, tabs: ask.tabs, options: ask.options }, context: transcriptInfo(file)?.ctx ?? null };
+    return { entries, next: start + Math.max(end, from0), cut, size, state, shell: !!r?.shell, agents: agentsOf(file), ask: ask && { id: ask.id, kind: ask.kind, title: ask.title, detail: ask.detail, chat: !!ask.chat, question: ask.question, multi: ask.multi, tabs: ask.tabs, options: ask.options }, context: transcriptInfo(file)?.ctx ?? null };
   }
 
   function control({ job: jobId, action }) {
@@ -2178,7 +2257,19 @@ function createAgent(project) {
   const busy = () => jobs.some((j) => j.child && ['starting', 'running'].includes(j.status) && j.kind !== 'chat');
   sttListeners.add(() => changed(0));
   rpListeners.add(() => changed(0));
-  return { view, ask, chat, start, message, control, cancel, brief, jobState, startWatching, stopWatching, busy, onboard, listen, transcript, hook, type, newSession, answer, agentSteps };
+  // the slash commands for the autocomplete of the write mode (the project's folder, or a "session only" one)
+  function commands({ folder } = {}) { return { commands: slashCommands(folderOf({ folder })) }; }
+  // a milestone's ▶ started this session: remember the milestone for its label
+  function tag({ session, milestone, title } = {}) {
+    if (!/^[0-9a-f-]{8,64}$/i.test(String(session ?? '')) || !String(milestone ?? '').trim()) throw httpError(400, 'session and milestone are needed');
+    const now = Date.now();
+    for (const [k, v] of Object.entries(sessionTags)) if (now - (v.t ?? 0) > 30 * 864e5) delete sessionTags[k];
+    sessionTags[session] = { milestone: String(milestone).trim().slice(0, 40), title: String(title ?? '').trim().slice(0, 120), project: root, t: now };
+    try { fs.mkdirSync(STATE_DIR, { recursive: true }); fs.writeFileSync(TAGS_FILE, JSON.stringify(sessionTags)); } catch { /* shown until the dashboard restarts */ }
+    changed(0);
+    return { tagged: true };
+  }
+  return { view, ask, chat, start, message, control, cancel, brief, jobState, startWatching, stopWatching, busy, onboard, listen, transcript, hook, type, newSession, answer, agentSteps, tag, commands };
 }
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => { for (const c of children) { try { c.kill('SIGTERM'); } catch { /* gone */ } } process.exit(0); });
@@ -3696,7 +3787,7 @@ async function readBody(req, max = 100_000) {
   for await (const chunk of req) { raw += chunk; if (raw.length > max) throw httpError(413, 'Too large.'); }
   try { return JSON.parse(raw || '{}'); } catch { throw httpError(400, 'Expected JSON.'); }
 }
-const AGENT_ACTIONS = { ask: 'ask', chat: 'chat', start: 'start', message: 'message', control: 'control', cancel: 'cancel', listen: 'listen', transcript: 'transcript', hook: 'hook', type: 'type', 'new-session': 'newSession', answer: 'answer', 'agent-steps': 'agentSteps' };
+const AGENT_ACTIONS = { ask: 'ask', chat: 'chat', start: 'start', message: 'message', control: 'control', cancel: 'cancel', listen: 'listen', transcript: 'transcript', hook: 'hook', type: 'type', 'new-session': 'newSession', answer: 'answer', 'agent-steps': 'agentSteps', tag: 'tag', commands: 'commands' };
 
 // ---------------------------------------------------------------- phones and tablets (Settings › Phone and tablet)
 // Off by default. On, the dashboard also listens on this computer's addresses in the local network (same port), and

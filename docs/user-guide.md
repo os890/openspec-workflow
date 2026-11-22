@@ -174,8 +174,19 @@ Click a card to open its details next to the board; `Esc` closes them. A link to
 
 ![Board with the details of a change](images/dashboard-board-details.png)
 
-**○ Focus** hides the archived changes and folds empty columns into narrow strips, so the open work gets the space
-(`?focus` in a link):
+**▶ on a milestone** (shown when you hover its filter above the board; with `--agent`) hands the milestone to Claude
+Code. It first opens a dialog at the top of the chat panel. **Session** lists the project's running sessions (idle
+ones first) and **＋ New session** (a Terminal window in the project's folder). The session you pick shows below in
+read mode, so you can see what it is doing. **Prompt** holds the message, by default `/goal start/continue with
+milestone <id> "<title>" until it is finished and merged into main as soon as all acceptance criteria are done and
+quality gates passed`, and you can change it. **Send** types the prompt into the session's terminal; a working
+session takes it after its current turn. Your choice of session and prompt is remembered for ▶ in this project,
+with the milestone's id and title filled in for the next one. The message is typed, so the session must run in
+macOS Terminal. A new session started this way is listed by its milestone (**▶ M2 Migrate from PP**) instead of its
+last prompt.
+
+**○ Focus** hides the archived changes and the milestones that are done, and folds empty columns into narrow strips,
+so the open work gets the space (`?focus` in a link):
 
 ![Board in focus mode](images/dashboard-board-focus.png)
 
@@ -300,6 +311,13 @@ tap ⋯) and a row of buttons appears:
   and 🔄 has it tried again (e.g. a failed run, after you changed something);
 - ↩ quotes the answer in your next message; select a part of it first to quote just that part.
 
+**/ in the input box** of a session you write to lists the slash commands and skills it knows, as you type: Claude
+Code's most important built-in ones (`/compact`, `/context`, `/model`, `/code-review`, …), your own commands and
+skills (`~/.claude`), the project's (`.claude/`, e.g. the `openspec-*` skills), those of enabled plugins and the
+skills synced from claude.ai. Commands are blue, skills green; each shows where it comes from and what it does.
+↑/↓ pick one, Tab or Enter takes it (Enter on a name typed in full sends it), Esc closes the list. Skills that
+are only for agents (`user-invocable: false`) are left out.
+
 **⋯ under the input box** opens quick messages that are not about one answer but sent with one click as they are.
 They are handy while a session works: the message reaches it mid-turn, and it answers before it continues. The
 thread shows each one short, e.g. **👀 Status**.
@@ -350,8 +368,8 @@ counts the running sessions. The drop-down
 lists the Claude Code sessions of the project (in a terminal or an IDE), the latest on top, with the last prompt you typed there,
 whether it is working or waiting for input, and when it last did something; ended ones stay in the list for 12
 hours. Pick one to join it: you see what it does, live (your prompts, Claude's replies and its steps). The end of
-the thread says where it stands: **Working: <its current step> · since <time>** while it works (an answer is on its
-way), **✓ Done · waiting for your next message** once it has answered (also when a command it started, e.g. the app,
+the thread says where it stands: **Working: <its current step> · since <time>** while it works (the time that step started; hover it for
+when it started on your message; an answer is on its way), **✓ Done · waiting for your next message** once it has answered (also when a command it started, e.g. the app,
 keeps running in the background; the line then says so), or **Session ended**. Following a session
 needs no setup: the dashboard finds the running sessions in Claude Code's own records (`~/.claude/sessions`) and
 reads their transcripts.
@@ -406,7 +424,13 @@ follow as a message (`[Answers to your questions] Which color? → Purple · Siz
 question at a time. For the further questions the card has one field. When Claude marks options as recommended (they get a small
 **recommended** badge), **👍 Recommended** takes them in one click: the recommended option (or all recommended ones
 when several may be chosen), and with several questions its recommendation for each. Answered questions stay in the
-thread with their answer. A permission prompt is not such a question: answer that in the terminal.
+thread with their answer.
+
+**When it asks for permission.** A permission prompt (run a command, edit a file, …, also one that a sub-agent asks
+for) shows up as a card too: **🔐 It asks for permission**, with what it wants to do (the command, the file, Claude
+Code's warning) and the prompt's options (Yes, Yes and don't ask again, No). A click on an option and **Send answer**
+picks it in the terminal. Your own words in the field decline it (No) and go to the session as what it should do
+instead. Other prompts that the dashboard cannot read still say "Needs you": answer those in the terminal.
 
 ![Claude's question as a card: the options, the recommended one marked, an own answer, 👍 Recommended](images/dashboard-ask.png)
 
@@ -415,7 +439,12 @@ session uses, e.g. **45k / 200k**: amber from 60 %, orange from 80 %, when Claud
 conversation (summarize it, and continue with the summary). The tooltip has the exact number and how often it was
 compacted so far; a compaction shows in the thread as a line (*Conversation compacted automatically: 531k → 21k
 tokens*). From 70 %, while the session waits at its prompt, **Compact now** types `/compact` into its terminal, so it
-happens when it suits you, not in the middle of a task. The window size is not in Claude Code's records: a session
+happens when it suits you, not in the middle of a task. While it compacts (after **Compact now** or `/compact` sent
+from the dashboard), *the press* runs behind the conversation, in the Matrix look: the conversation is a box of its
+words under a hydraulic press, and every press squeezes it smaller; its words get tinier and denser and turn into
+green code, until it is a small, glowing cube. The conversation fades back meanwhile (nothing new comes until the compaction is done). Once the
+compaction is done, the cube shrinks into the gauge and the context before and after shows briefly (e.g.
+184k → 22k). With reduced motion it is a still picture. The window size is not in Claude Code's records: a session
 that has been larger than 200k tokens (or the model says so) counts with 1M; otherwise the gauge uses
 **Settings › Write mode › Context window** (200k by default, or 1M). The background list shows the gauge too.
 
@@ -672,8 +701,13 @@ defaults; **+ add** takes your own entries:
 - **Checked for every task**: e.g. a test proves it, the quality gate is green, no TODOs;
 - **Reviewed for every change**: e.g. matches the specs, security, error handling, test quality, accessibility,
   API compatibility, migrations;
-- **Workflow steps**: one commit per ticket, acceptance check, diff review with validated findings, docs and
-  diagram updates, parking lot;
+- **Workflow steps**: one commit per ticket, acceptance check, diff review with validated findings, a long-term
+  check, docs and diagram updates, parking lot. The **long-term check** (on by default) has a fresh agent ask of
+  every change whether doing it this way, now and quickly, hurts the structure and maintainability in the long run:
+  layers or module boundaries bypassed, new coupling, a second way of doing what the code already does, a fix of the
+  symptom, or something the planned changes would have to rework. An acceptable shortcut goes to the parking lot as
+  a trade-off to revisit; a harmful one is restructured in the ticket, or, when that would grow the ticket a lot,
+  left for you to decide;
 - **Branches** (choose one): everything on main (the default), a branch per ticket that is merged when the ticket is
   done, or a branch per milestone that is merged when the milestone is done;
 - **Documentation**: e.g. a README with setup and usage, CLAUDE.md / AGENTS.md kept current, an architecture

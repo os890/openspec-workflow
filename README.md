@@ -155,9 +155,9 @@ Horizontal versions for slides and wide pages:
 | 2 | Build | Implement with tests, tick each task once verified | `/openspec-apply-change` |
 | 3 | Build | Quality gate | your build |
 | 4 | Accept | Fresh agent checks every scenario and task criterion against evidence; deviations are recorded | `/openspec-verify-change`, `/openspec-update-change` |
-| 5 | Review | Fresh agent reviews the staged diff only | any agent |
+| 5 | Review | Fresh agent reviews the staged diff only; optionally another fresh agent checks whether the quick way hurts the structure and maintainability in the long run | any agent |
 | 6 | Review | Another fresh agent confirms or rejects each finding, classifies pareto / minor | any agent |
-| 7 | Review | Fix pareto findings; route the rest to spec + roadmap, backlog draft or parking lot | `/openspec-update-change` |
+| 7 | Review | Fix pareto findings; route the rest to spec + roadmap, backlog draft or parking lot; a tactical shortcut goes to the parking lot as a trade-off, a harmful one is restructured or decided by the user | `/openspec-update-change` |
 | 8 | Document | Fresh docs agent and diagram agent, only if docs are affected | any agent |
 | 9 | Document | Quality gate | your build |
 | 10 | Close | Archive the change and commit the ticket | `openspec archive`, `/openspec-archive-change` |
@@ -184,7 +184,7 @@ skill's references hold the pieces it uses:
 - [config-snippet.yaml](skills/openspec-ticket-workflow/references/config-snippet.yaml): rules and guidance for
   `openspec/config.yaml`,
 - [agent-prompts.md](skills/openspec-ticket-workflow/references/agent-prompts.md): prompts for the fresh agents
-  (acceptance check, diff review, findings validation, docs, diagrams),
+  (acceptance check, diff review, long-term check, findings validation, docs, diagrams),
 - [templates.md](skills/openspec-ticket-workflow/references/templates.md): roadmap, backlog draft, idea and parking
   lot,
 - [dashboard-messages.md](skills/openspec-ticket-workflow/references/dashboard-messages.md): what the reactions,
