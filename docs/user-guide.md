@@ -568,7 +568,9 @@ Code** box comes first: a newer version is available (with what is new, from the
 locally), the sign-in ends within three days or has ended (renew it with `claude auth login`), or sessions still run
 an older version than the one installed (they keep it until restarted). Otherwise a small line says that Claude Code
 is up to date and until when you are signed in. Everything comes from this computer: `claude --version`, `claude auth
-status` and Claude Code's own files; nothing is fetched from the internet.
+status` and Claude Code's own files; nothing is fetched from the internet. Version, changelog and sign-in are read
+at most once a day (also across restarts of the dashboard); **check again** next to it reads them right away, e.g.
+after signing in again or updating. Which sessions run an older version is looked at every time.
 
 ![The Claude Code box in the digest: the sign-in ends soon, an update is available, sessions on an older version](images/dashboard-digest-claude.png)
 

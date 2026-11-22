@@ -3217,13 +3217,34 @@ async function projectDigest(p, since) {
 // Claude Code itself, for the digest (with --agent): an update (the newest version in the changelog Claude Code
 // caches, ~/.claude/cache/changelog.md, against `claude --version`), running sessions on an older version (they keep
 // it until restarted), the sign-in (`claude auth status`: signed in, when it expires; nothing else of it is kept).
-// All local, no network; looked at every 10 minutes.
+// All local, no network. Version, changelog and sign-in are read at most once a day (kept in claude-health.json in the
+// state folder, also across restarts; `recheck` reads them again); the sessions' versions on every look (small files).
 const verCmp = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); for (let i = 0; i < Math.max(x.length, y.length); i++) { if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0); } return 0; };
 const runOut = (cmd, args) => new Promise((resolve) => execFile(cmd, args, { timeout: 30000, cwd: os.homedir() }, (err, out) => resolve(err ? null : String(out ?? ''))));
-let healthCache = null;
-async function claudeHealth() {
+const HEALTH_FILE = path.join(STATE_DIR, 'claude-health.json');
+let healthCache = jsonOf(readSync(HEALTH_FILE), null);
+async function claudeHealth(recheck) {
   if (!AGENT) return null;
-  if (healthCache && Date.now() - healthCache.at < 10 * 60e3) return healthCache.v;
+  const today = ymdOf(Date.now());
+  if (recheck || healthCache?.day !== today) {
+    healthCache = { day: today, at: Date.now(), v: await claudeFacts() };
+    try { fs.mkdirSync(STATE_DIR, { recursive: true }); fs.writeFileSync(HEALTH_FILE, JSON.stringify(healthCache)); } catch { /* kept in memory */ }
+  }
+  return { ...healthCache.v, checkedAt: healthCache.at, olderSessions: olderSessions(healthCache.v.version) };
+}
+// running sessions whose record names an older version than the installed one
+function olderSessions(version) {
+  const older = new Map();
+  for (const f of (() => { try { return fs.readdirSync(path.join(os.homedir(), '.claude', 'sessions')); } catch { return []; } })()) {
+    if (!f.endsWith('.json')) continue;
+    const d = jsonOf(readSync(path.join(os.homedir(), '.claude', 'sessions', f)), null);
+    if (!d?.version || d.kind !== 'interactive' || !version || verCmp(d.version, version) >= 0) continue;
+    try { process.kill(d.pid, 0); } catch (e) { if (e.code !== 'EPERM') continue; }
+    older.set(d.version, (older.get(d.version) ?? 0) + 1);
+  }
+  return [...older].map(([v, count]) => ({ version: v, count }));
+}
+async function claudeFacts() {
   const [ver, auth] = await Promise.all([runOut(CLAUDE, ['--version']), runOut(CLAUDE, ['auth', 'status'])]);
   const version = ver?.match(/(\d+\.\d+\.\d+)/)?.[1] ?? null;
   const log = path.join(os.homedir(), '.claude', 'cache', 'changelog.md'), head = readSync(log).slice(0, 60000);
@@ -3234,27 +3255,17 @@ async function claudeHealth() {
     notes = parts.map((x) => x.split('\n').slice(1).filter((l) => /^\s*[-*]/.test(l)).slice(0, 4).map((l) => l.replace(/^\s*[-*]\s*/, '').slice(0, 200))).flat().slice(0, 6);
   }
   const a = (() => { try { return JSON.parse(auth ?? ''); } catch { return null; } })();
-  const older = new Map();
-  for (const f of (() => { try { return fs.readdirSync(path.join(os.homedir(), '.claude', 'sessions')); } catch { return []; } })()) {
-    if (!f.endsWith('.json')) continue;
-    const d = jsonOf(readSync(path.join(os.homedir(), '.claude', 'sessions', f)), null);
-    if (!d?.version || d.kind !== 'interactive' || !version || verCmp(d.version, version) >= 0) continue;
-    try { process.kill(d.pid, 0); } catch (e) { if (e.code !== 'EPERM') continue; }
-    older.set(d.version, (older.get(d.version) ?? 0) + 1);
-  }
-  const v = { version, latest, update: !!(latest && version && verCmp(latest, version) > 0), notes, changelogAt: fs.statSync(log, { throwIfNoEntry: false })?.mtimeMs ?? null,
-    olderSessions: [...older].map(([version, count]) => ({ version, count })), login: a ? { loggedIn: !!a.loggedIn, expiresAt: a.loginExpiresAt ?? null } : null };
-  healthCache = { at: Date.now(), v };
-  return v;
+  return { version, latest, update: !!(latest && version && verCmp(latest, version) > 0), notes, changelogAt: fs.statSync(log, { throwIfNoEntry: false })?.mtimeMs ?? null,
+    login: a ? { loggedIn: !!a.loggedIn, expiresAt: a.loginExpiresAt ?? null } : null };
 }
 const DIGEST_FILE = path.join(STATE_DIR, 'digest.json');
 let digestWriteup = (() => { try { return JSON.parse(fs.readFileSync(DIGEST_FILE, 'utf8')); } catch { return null; } })();
-async function digest(days) {
+async function digest(days, recheck) {
   days = Number(days) === 7 ? 7 : 1;
   const since = digestSince(days);
   const list = (await Promise.all(projects.filter((p) => !p.stopped).map((p) => projectDigest(p, since).catch(() => null)))).filter(Boolean);
   const w = digestWriteup?.since === since && digestWriteup?.days === days ? digestWriteup : null;
-  return { days, since, projects: list, claude: await claudeHealth().catch(() => null), writeup: w ? { text: w.text, at: w.at } : null, writing: !!digestBusy };
+  return { days, since, projects: list, claude: await claudeHealth(recheck).catch(() => null), writeup: w ? { text: w.text, at: w.at } : null, writing: !!digestBusy };
 }
 let digestBusy = null;
 // Claude writes the digest up in a few sentences: the numbers above as its only input, no tools
@@ -3767,7 +3778,7 @@ const handle = async (req, res) => {
         try { return json(res, await writeDigest(url.searchParams.get('days'))); }
         catch (e) { if (!e.status) throw e; res.writeHead(e.status, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: e.message })); }
       }
-      return json(res, await digest(url.searchParams.get('days')));
+      return json(res, await digest(url.searchParams.get('days'), url.searchParams.has('recheck') && !!AGENT && req.headers['x-osd-token'] === TOKEN));
     }
     if (url.pathname === '/api/sessions/status') { // the background list (with --agent)
       if (!AGENT || req.headers['x-osd-token'] !== TOKEN) { res.writeHead(403); return res.end('forbidden'); }

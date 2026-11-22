@@ -62,7 +62,8 @@ check, status change or file write for 2 days; complete but not archived for a d
 change and task. `POST /api/digest?days=` (with `--agent`, token) runs `claude -p --tools ''` with that JSON as the
 only input for a briefing of at most six sentences, kept in `digest.json` in the state folder until the window
 changes. The page asks for the digest at most once a minute and remembers the period (`osd-digest-days`). With `--agent` it
-carries `claude` (looked at every 10 minutes): the installed version (`claude --version`), the newest one in
+carries `claude` (version, changelog and sign-in read at most once a day and kept in `claude-health.json` in the
+state folder, `?recheck` with the token reads them again; the sessions' versions on every request): the installed version (`claude --version`), the newest one in
 `~/.claude/cache/changelog.md` (refreshed by Claude Code) and the notes of the newer ones, running sessions whose
 record names an older version, and `loggedIn`/`loginExpiresAt` from `claude auth status` (nothing else of its output
 is kept or sent). The page shows a highlighted box when an update is available, the sign-in ends within three days
