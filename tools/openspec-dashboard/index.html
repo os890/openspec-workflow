@@ -330,21 +330,34 @@ span.ch-warn { color: var(--st-progress); }
 .agent-panel.term-look .ask-opt, .agent-panel.term-look .ask-text { background: #0d1117; color: #d6dde6; border-color: #30363d; }
 .agent-panel.term-look .ask-opt[aria-pressed="true"] { border-color: #58a6ff; background: #13233b; box-shadow: inset 0 0 0 1px #58a6ff; }
 .agent-panel.term-look .ask-h { color: #f5a35c; } .agent-panel.term-look .ask-card.done .ask-h, .agent-panel.term-look .ask-opt span { color: #8b949e; }
-.agent-card { border: 1px solid var(--line); border-left: 3px solid var(--cf-specified); border-radius: 12px; padding: 10px 12px; background: var(--surface); display: flex; flex-direction: column; gap: 4px; max-width: 92%; font-size: 13px; }
-.agent-card.ac-done { border-left-color: var(--st-complete); } .agent-card.ac-stopped { border-left-color: var(--faint); }
-.ac-h { display: flex; gap: 8px; align-items: center; } .ac-h b { flex: 1; min-width: 0; }
-.ac-st { font-size: 12px; color: var(--muted); display: inline-flex; gap: 5px; align-items: center; white-space: nowrap; }
-.ac-done .ac-st { color: var(--st-complete); font-weight: 600; }
-.ac-meta { font-size: 12px; color: var(--muted); }
-.ac-now { font-family: var(--font-mono); font-size: 12px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ac-res summary { cursor: pointer; color: var(--ink); } .ac-res .md { margin-top: 6px; }
-.ac-toggle { align-self: flex-start; font-size: 12.5px; }
-.ac-steps { margin: 4px 0 0; padding-left: 4px; list-style: none; display: flex; flex-direction: column; gap: 3px; max-height: 320px; overflow: auto; font-size: 12px; }
-.ac-steps .t { font-family: var(--font-mono); } .ac-steps .e { color: var(--st-blocked); } .ac-steps .u summary { cursor: pointer; color: var(--muted); }
-.ac-chip { white-space: nowrap; }
-.agent-panel.term-look .agent-card { background: #161b22; color: #d6dde6; border-color: #30363d; border-left-color: #58a6ff; }
-.agent-panel.term-look .agent-card.ac-done { border-left-color: #3fb950; } .agent-panel.term-look .ac-meta, .agent-panel.term-look .ac-st { color: #8b949e; }
-.agent-panel.term-look .ac-now, .agent-panel.term-look .ac-res summary { color: #d6dde6; }
+#ag-thread.has-agents { padding-bottom: 72px; }
+.as-anchor { position: relative; height: 0; flex: none; z-index: 5; }
+.as-stack { position: absolute; left: 14px; bottom: 10px; display: flex; flex-direction: column-reverse; gap: 6px; max-width: min(340px, calc(100% - 28px)); }
+.as-stack.open { flex-direction: column; max-height: 300px; overflow: auto; padding: 8px; border-radius: 14px; background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid var(--line); box-shadow: var(--shadow-hover); }
+.as-head { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--muted); padding: 0 2px 2px; }
+.as-card { --as-bg: var(--surface); --as-line: var(--line); position: relative; display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 12px; background: var(--as-bg); border: 1px solid var(--as-line); border-left: 3px solid var(--cf-specified); box-shadow: 0 6px 18px -8px rgba(0, 0, 0, .35); cursor: pointer; font-size: 12.5px; min-width: 200px; }
+.as-card:hover { border-color: var(--accent); }
+.as-card.ac-done { border-left-color: var(--st-complete); } .as-card.ac-stopped { border-left-color: var(--faint); }
+.as-stack.many:not(.open) .as-card { box-shadow: 0 6px 18px -8px rgba(0, 0, 0, .35), 4px 4px 0 -1px var(--as-bg), 4px 4px 0 0 var(--as-line), 8px 8px 0 -1px var(--as-bg), 8px 8px 0 0 var(--as-line); }
+.as-ico { flex: none; width: 16px; display: inline-flex; justify-content: center; }
+.as-ok { color: var(--st-complete); font-weight: 800; } .as-off { color: var(--faint); font-size: 10px; }
+.as-txt { min-width: 0; display: flex; flex-direction: column; } .as-txt b, .as-txt span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.as-txt span { color: var(--muted); font-size: 11.5px; font-family: var(--font-mono); }
+.as-x { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 2px; margin-left: auto; }
+.as-more { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 1px 7px; }
+.as-x + .as-more { margin-left: 4px; }
+.as-pop { position: absolute; left: 14px; right: 14px; bottom: 10px; max-height: min(70vh, 560px); overflow: auto; z-index: 6; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow-hover), 0 24px 60px -12px rgba(0, 0, 0, .35); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.as-pop-h { display: flex; align-items: center; gap: 8px; } .as-pop-h b { flex: 1; font-size: 14.5px; } 
+.as-sec { border-top: 1px solid var(--line); padding-top: 8px; } .as-l { font-size: 11.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; cursor: default; }
+details.as-sec summary.as-l { cursor: pointer; } .as-task { white-space: pre-wrap; font-size: 12px; color: var(--muted); max-height: 200px; overflow: auto; }
+.ac-mark { align-self: flex-start; border: 1px dashed var(--line); background: transparent; color: var(--muted); border-radius: 999px; padding: 3px 12px; font: inherit; font-size: 12px; cursor: pointer; display: inline-flex; gap: 5px; align-items: center; }
+.ac-mark b { color: var(--ink); font-weight: 600; } .ac-mark.ac-done { border-style: solid; } .ac-mark:hover { border-color: var(--accent); }
+.agent-panel.term-look .as-card, .agent-panel.term-look .as-pop, .agent-panel.term-look .as-stack.open { background: #161b22; color: #d6dde6; border-color: #30363d; }
+.agent-panel.term-look .as-card { --as-bg: #161b22; --as-line: #30363d; border-left-color: #58a6ff; }
+.agent-panel.term-look .as-txt span, .agent-panel.term-look .as-x { color: #8b949e; }
+.agent-panel.term-look .as-pop .md code { background: #0d1117; color: #e3b341; border-color: #30363d; }
+.agent-panel.term-look .as-pop .as-sec { border-top-color: #30363d; } .agent-panel.term-look .as-l, .agent-panel.term-look .as-task { color: #8b949e; } .agent-panel.term-look .as-card.ac-done { border-left-color: #3fb950; }
+.agent-panel.term-look .ac-mark { color: #8b949e; border-color: #30363d; } .agent-panel.term-look .ac-mark b { color: #d6dde6; }
 .ask-card { border: 1.5px solid #f08c2e; border-radius: 14px; padding: 12px 14px; background: color-mix(in srgb, #f08c2e 7%, var(--surface)); display: flex; flex-direction: column; gap: 8px; max-width: 92%; }
 .ask-card.done { border-color: var(--line); background: var(--surface); opacity: .9; }
 .ask-h { font-weight: 700; font-size: 13px; color: #c2410c; } .ask-card.done .ask-h { color: var(--muted); }
@@ -3664,7 +3677,7 @@ function termThreadHtml(sid) {
   for (const e of items) {
     if (e.kind === 'result' || (e.kind === 'error' && e.id && cli)) continue;
     if (e.kind === 'user' || e.kind === 'mine') lastAsk = e.kind === 'mine' ? e.m.text : e.text;
-    if (e.kind === 'agent') { flush(); out.push(agentCardHtml(e, (T.agents ?? []).find((a) => a.toolUseId === e.id))); continue; }
+    if (e.kind === 'agent') { flush(); out.push(agentMarkHtml(e, (T.agents ?? []).find((a) => a.toolUseId === e.id))); continue; }
     if (e.kind === 'ask') { flush(); const after = items.slice(items.indexOf(e) + 1, items.indexOf(e) + 8); out.push(askDoneHtml(e, results.get(e.id), after.some((x) => x.kind === 'user' && /^\[Answers to your question/.test(x.text)))); continue; }
     if (e.kind === 'note') { flush(); out.push(`<div class="term-note"><span>${esc(e.text)}</span>${e.t ? `<span class="meta">${hhmm(e.t)}</span>` : ''}</div>`); continue; }
     if (cli && e.kind === 'tool') {
@@ -3701,28 +3714,66 @@ const agentOpen = new Set(), agentStepsCache = new Map(); // agent id -> { entri
 async function agentStepsLoad(id) {
   try { const r = await agentPost('agent-steps', { session: ag.term, agent: id }); agentStepsCache.set(id, { entries: r.entries, cut: r.cut, at: Date.now() }); }
   catch (e) { agentStepsCache.set(id, { err: e.message, entries: [], at: Date.now() }); }
-  renderAgentLive();
+  agentStackRender();
 }
 function agentStepsRefresh() { for (const id of agentOpen) { const a = termLog.get(ag.term)?.agents?.find((x) => x.agent === id); if (a?.state === 'working' && Date.now() - (agentStepsCache.get(id)?.at ?? 0) > 3000) agentStepsLoad(id); } }
-const AG_STATE = { working: ['ac-working', 'working'], done: ['ac-done', '✓ done'], stopped: ['ac-stopped', 'stopped'] };
-function agentCardHtml(e, a) {
-  const st = a ? AG_STATE[a.state] : ['ac-working', 'starting'], open = a && agentOpen.has(a.agent), steps = a && agentStepsCache.get(a.agent);
-  const span = a?.start ? dur((a.end ?? Date.now()) - a.start) : '';
-  const list = open ? (steps ? (steps.err ? `<div class="ag-note warn">✕ ${esc(steps.err)}</div>` : `<ol class="ac-steps">${steps.cut ? '<li class="muted">… earlier steps not shown</li>' : ''}${steps.entries.filter((x) => !(x.kind === 'tool' && /^SubagentHandback/.test(x.text))).map((x, i) => x.kind === 'tool' ? `<li class="t">⏺ ${esc(x.text)}</li>`
-      : x.kind === 'text' ? `<li class="x">${esc(x.text.replace(/\s+/g, ' ').slice(0, 400))}</li>` : x.kind === 'error' ? `<li class="e">✕ ${esc(x.text.slice(0, 200))}</li>`
-      : x.kind === 'user' && i === 0 ? `<li class="u"><details><summary>Its task</summary>${esc(x.text.slice(0, 3000))}</details></li>` : '').join('')}</ol>`) : '<div class="ag-note"><span class="ag-spin"></span>Loading its steps…</div>') : '';
-  return `<div class="agent-card ${st[0]}"><div class="ac-h"><span aria-hidden="true">🤖</span><b>${esc(e.text)}</b><span class="ac-st">${a?.state === 'working' || !a ? '<span class="ag-spin"></span>' : ''}${st[1]}</span></div>
-    <div class="ac-meta">${[e.type || a?.type, e.bg || a?.background ? 'in the background' : '', a ? `${a.steps} step${a.steps === 1 ? '' : 's'}` : '', span].filter(Boolean).map(esc).join(' · ')}</div>
-    ${a?.state === 'working' && a.last ? `<div class="ac-now">${esc(a.last)}</div>` : ''}
-    ${a?.result ? `<details class="ac-res"><summary>${esc(a.result.replace(/[#*`>]+/g, '').replace(/\s+/g, ' ').slice(0, 140))}${a.result.length > 140 ? '…' : ''}</summary><div class="md">${md(a.result)}</div></details>` : ''}
-    ${a ? `<button class="link ac-toggle" type="button" data-sa-steps="${esc(a.agent)}" aria-expanded="${open}">${open ? 'Hide its steps ▴' : 'Its steps ▾'}</button>` : ''}${list}</div>`;
+const AG_STATE = { working: ['ac-working', 'working'], done: ['ac-done', 'done'], stopped: ['ac-stopped', 'stopped'] };
+const agIcon = (a) => (!a || a.state === 'working' ? '<span class="ag-spin"></span>' : a.state === 'done' ? '<span class="as-ok">✓</span>' : '<span class="as-off">■</span>');
+const agMeta = (a) => [a.steps != null ? `${a.steps} step${a.steps === 1 ? '' : 's'}` : '', a.start ? dur((a.end ?? Date.now()) - a.start) : ''].filter(Boolean).join(' · ');
+// in the thread, where it was started: one line (a click shows the details)
+function agentMarkHtml(e, a) {
+  return `<button type="button" class="ac-mark ${a ? AG_STATE[a.state][0] : 'ac-working'}" ${a ? `data-sa-open="${esc(a.agent)}"` : 'disabled'} title="${a ? 'Show the agent: its task, steps and result' : 'Starting…'}">🤖 <b>${esc(e.text)}</b> · ${agIcon(a)}${a ? AG_STATE[a.state][1] : 'starting'}</button>`;
+}
+// the stack in the lower left corner: working ones first, then the ones done in the last hour (✕ puts one away)
+const agHidden = new Set(), agStack = { open: false };
+function agentStackHtml() {
+  const T = termLog.get(ag.term), now = Date.now();
+  const list = (T?.agents ?? []).filter((a) => !agHidden.has(a.agent) && (a.state === 'working' || now - (a.end ?? a.start ?? 0) < 3600e3))
+    .sort((x, y) => (x.state === 'working') - (y.state === 'working') || (x.start ?? 0) - (y.start ?? 0)).reverse();
+  if (!list.length) return '';
+  const card = (a, top) => `<div class="as-card ${AG_STATE[a.state][0]}" role="button" tabindex="0" data-sa-open="${esc(a.agent)}" title="${esc(a.description)} · ${esc(AG_STATE[a.state][1])}">
+      <span class="as-ico">${agIcon(a)}</span><span class="as-txt"><b>${esc(a.description || 'Agent')}</b><span>${esc(a.state === 'working' && a.last ? a.last : agMeta(a))}</span></span>
+      ${a.state !== 'working' ? `<button type="button" class="as-x" data-sa-hide="${esc(a.agent)}" title="Remove it from the stack" aria-label="Remove">✕</button>` : ''}${top && list.length > 1 && !agStack.open ? `<span class="as-more" data-sa-fan title="Show all ${list.length}">+${list.length - 1}</span>` : ''}</div>`;
+  const working = list.filter((a) => a.state === 'working').length;
+  return `<div class="as-stack ${agStack.open ? 'open' : ''} ${list.length > 1 ? 'many' : ''}" aria-label="Agents of this session: ${working} working">
+    ${agStack.open ? `<div class="as-head"><span>🤖 ${list.length} agent${list.length === 1 ? '' : 's'}${working ? ` · ${working} working` : ''}</span><button type="button" class="link" data-sa-fan>Fold ▾</button></div>${list.map((a) => card(a, false)).join('')}` : card(list[0], true)}</div>`;
+}
+// the popup with one agent: task, state, result, steps (live while it works)
+function agentPopHtml() {
+  const id = [...agentOpen][0], a = id && termLog.get(ag.term)?.agents?.find((x) => x.agent === id);
+  if (!a) return '';
+  const steps = agentStepsCache.get(a.agent), task = steps?.entries?.find((x) => x.kind === 'user');
+  const list = !steps ? '<div class="ag-note"><span class="ag-spin"></span>Loading its steps…</div>' : steps.err ? `<div class="ag-note warn">✕ ${esc(steps.err)}</div>`
+    : `<ol class="ac-steps">${steps.cut ? '<li class="muted">… earlier steps not shown</li>' : ''}${steps.entries.filter((x) => x !== task && !(x.kind === 'tool' && /^SubagentHandback/.test(x.text))).map((x) => x.kind === 'tool' ? `<li class="t">⏺ ${esc(x.text)}</li>`
+      : x.kind === 'text' ? `<li class="x">${esc(x.text.replace(/\s+/g, ' ').slice(0, 400))}</li>` : x.kind === 'error' ? `<li class="e">✕ ${esc(x.text.slice(0, 200))}</li>` : '').join('')}</ol>`;
+  return `<div class="as-pop" role="dialog" aria-label="Agent: ${esc(a.description)}"><div class="as-pop-h"><span class="as-ico">${agIcon(a)}</span><b>${esc(a.description || 'Agent')}</b><button type="button" class="link" data-sa-close>Close ✕</button></div>
+    <div class="ac-meta">${[a.type, a.background ? 'in the background' : '', AG_STATE[a.state][1], agMeta(a)].filter(Boolean).map(esc).join(' · ')}</div>
+    ${a.state === 'working' && a.last ? `<div class="ac-now">${esc(a.last)}</div>` : ''}
+    ${a.result ? `<div class="as-sec"><div class="as-l">Its result</div><div class="md">${md(a.result)}</div></div>` : ''}
+    ${task ? `<details class="as-sec"><summary class="as-l">Its task</summary><div class="as-task">${esc(task.text.slice(0, 4000))}</div></details>` : ''}
+    <div class="as-sec"><div class="as-l">Its steps</div>${list}</div></div>`;
+}
+function agentStackRender() {
+  const el = $('ag-agents'); if (!el) return;
+  const stack = agentStackHtml();
+  morphHtml(el, stack + agentPopHtml());
+  $('ag-thread')?.classList.toggle('has-agents', !!stack); // room below the last message for the stack
 }
 document.addEventListener('click', (e) => {
-  const b = e.target.closest?.('[data-sa-steps]'); if (!b) return;
-  const id = b.dataset.saSteps;
-  if (agentOpen.has(id)) agentOpen.delete(id); else { agentOpen.add(id); agentStepsLoad(id); }
-  renderAgentLive();
-});
+  const t = e.target;
+  const hide = t.closest?.('[data-sa-hide]'), fan = t.closest?.('[data-sa-fan]'), open = t.closest?.('[data-sa-open]'), close = t.closest?.('[data-sa-close]');
+  if (!hide && !fan && !open && !close) { if (agentOpen.size && !t.closest?.('.as-pop')) { agentOpen.clear(); agentStackRender(); } return; }
+  e.stopPropagation();
+  if (hide) { agHidden.add(hide.dataset.saHide); agentOpen.delete(hide.dataset.saHide); }
+  else if (fan) agStack.open = !agStack.open;
+  else if (close) agentOpen.clear();
+  else if (open) { const id = open.dataset.saOpen; const was = agentOpen.has(id); agentOpen.clear(); if (!was) { agentOpen.add(id); agentStepsLoad(id); } }
+  agentStackRender();
+}, true);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && agentOpen.size) { e.preventDefault(); e.stopPropagation(); agentOpen.clear(); agentStackRender(); }
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('.as-card')) { e.preventDefault(); e.target.click(); }
+}, true);
 const askSel = new Map(); // id -> { picks: Set, text, rest }
 const askState = new Map(); // id -> { busy, err, sent }
 const askOf = (id) => askSel.get(id) ?? askSel.set(id, { picks: new Set(), text: '', rest: '' }).get(id);
@@ -4017,6 +4068,7 @@ function buildChatHtml(s, c, ph) {
     ${ag.max ? '' : chips}
     <div class="ag-bar" id="ag-bar"></div>
     <div class="ag-thread" id="ag-thread" aria-live="polite"></div>
+    ${term ? '<div class="as-anchor" id="ag-agents"></div>' : ''}
     <div class="ag-suggest-wrap" id="ag-suggest">${suggestHtml()}</div>
     <div class="ag-compose">
       <div data-quote-slot>${quoteChipHtml()}</div>
@@ -4468,6 +4520,7 @@ function renderAgentLive() {
     const th = $('ag-thread');
     const atEnd = th.scrollHeight - th.scrollTop - th.clientHeight < 60;
     if (!document.activeElement?.matches?.('#ag-thread .ask-text')) th.innerHTML = threadHtml(c); // typing an own answer: the card stays
+    if (c?.terminal) agentStackRender();
     edFill();
     if (atEnd || ag.stick) { th.scrollTop = th.scrollHeight; ag.stick = false; }
     $('ag-route').innerHTML = c?.terminal ? (ag.note.startsWith('✕') ? `<span style="color:var(--st-blocked)">${esc(ag.note)}</span>` : '') : 'Enter sends · Shift+Enter for a new line';

@@ -372,7 +372,9 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     panel, filling the frame; no header, no close or maximize) and `term=<session>&write=1` on the session's project
     page (or the overview); each half polls, joins and writes on its own. The left one is the joined session, the
     right one the most recent other running session.
-  - **Agents of a session** (subagents): an `Agent`/`Task` call in the transcript becomes a card; its state comes
+  - **Agents of a session** (subagents): an `Agent`/`Task` call in the transcript becomes a slim line in the thread and a card in a
+    stack in the lower left corner of the conversation (working ones first, done ones for an hour), with a popup for
+    its task, result and steps; its state comes
     from `<transcript>/subagents/agent-<id>.jsonl` and `.meta.json` (task, agent type, `requestShape`
     background, `toolUseId` to match the call, `finished`): done when `finished` is set, the agent called
     `SubagentHandback` (its report, shown as the result) or its last answer ended the turn; working while it wrote in

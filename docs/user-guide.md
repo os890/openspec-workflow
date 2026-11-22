@@ -382,11 +382,14 @@ dashboard may control Terminal; when the dashboard runs as a service (`launcher.
 question can stay unanswered in the background: the panel then says so, and the switch is in **System Settings ›
 Privacy & Security › Automation**.
 
-**Its agents.** When the session starts agents (subagents, also in the background), each shows up in the thread
-where it was started, as a card: its task, the kind of agent, whether it runs in the background, how many steps it
-took and how long; while it works its current step, once done ✓ and its result (a click shows all of it). **Its
-steps ▾** lists what the agent did, also while it works. **🤖 2 working** in the bar says how many are still
-running. The dashboard reads them from Claude Code's own records; nothing needs to be set up.
+**Its agents.** When the session starts agents (subagents, also in the background), they gather as a small stack
+in the lower left corner of the conversation: the top card shows an agent with its state (working with its current
+step, ✓ done, or stopped), several stack up behind it with **+2**, and a click on that fans them out. A click on an
+agent opens its details: its task, the kind of agent, steps and time, its result once it is done and all its steps,
+live while it works. In the thread, where it was started, only a slim line remains (🤖 *its task* · done), which
+opens the same details. Agents that are done stay in the stack for an hour; ✕ puts one away. **🤖 2 working** in the
+bar says how many are still running. The dashboard reads them from Claude Code's own records; nothing needs to be
+set up.
 
 **When Claude asks you something.** A question of Claude's (its menu with options in the terminal) shows up in the
 thread as a card: the question, its options as buttons (one or several, as the question allows), a field for your own
