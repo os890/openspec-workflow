@@ -354,7 +354,11 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     that tty), one line, sent with Return; no hook needed, and it works while the session waits at its prompt. A long
     text arrives in Claude Code as a paste, where the Return becomes part of it; the server then reads the tab and,
     while the text still sits in the input box (between the last two rules) and nothing is being asked, sends Return
-    on its own. The end of a joined session's thread shows its state (working with the current step, done and
+    on its own. It looks for up to ~5 s until the text shows, in the box or above it (a busy session may draw it
+    late; an empty box alone is no proof), and answers 502 when it still sits in the box at the end. The page shows
+    the bubble at once (`termPending`): ◷ while the `type` request runs, ✓ once it answered, ✓✓ on the transcript's
+    bubble once the transcript has the text (compared without whitespace runs); a failed send removes it and puts the
+    text back into the input box. The end of a joined session's thread shows its state (working with the current step, done and
     waiting, listening, ended), polled with the transcript every 2 s from Claude Code's own idle/busy (its status `shell`, a finished turn with
     a background command still running, counts as done). In write mode
     the bar folds into one line (**Details ▾** unfolds it), and Claude's answers get the reactions, requests and
@@ -413,7 +417,11 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     popup window; the panel lets go of the session (like ⤓ Background); one pop out at a time. A bar on top of the
     window: **⤺ Back to the panel** (as closing it, also Chrome's "back to tab": the session is joined again in write
     mode, on its project's page or the overview) and **▁ Minimize** (a terminal icon in the bottom right corner,
-    `localStorage` `osd-pip-dock`, kept across reloads; a click pops it out again).
+    `localStorage` `osd-pip-dock`, kept across reloads; a click pops it out again). **Minimize** next to **Pop out**
+    goes straight to that icon without opening the window (a window already popped out closes; the icon holds one
+    session). Side by side, Pop out and Minimize are one group; in the 480px side panel icons only (title and
+    `aria-label` name them), with their labels when maximized. Maximized while writing, **⤡ Restore** is hidden (Pop out does more); `Esc`
+    shrinks the panel as before, and Close ✕ also ends the maximized view (`osd-chat-max` 0).
   - **Agents of a session** (subagents): an `Agent`/`Task` call in the transcript becomes a slim line in the thread and a card in a
     stack in the lower left corner of the conversation (working ones first, done ones for an hour), with a popup for
     its task, result and steps; its state comes
@@ -453,8 +461,8 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     while the session waits at its prompt in macOS Terminal) types `/compact`. **🗑️** at the end of the quick messages (⋯; only while writing to a session in macOS Terminal) types `/compact` too. A
     `/compact` sent from the page (typed, 🗑️ or Compact now), and for a session in macOS Terminal also a compaction
     seen on its screen ("Compacting conversation…" while it works: an auto-compaction or `/compact` typed there; the
-    transcript response carries `compacting`, the tab is read at most every 3 s), starts *the press* behind the thread (a canvas in the Matrix look; the wait rain stays off
-    meanwhile) until the transcript has one more `compact_boundary` (`ctx.compactions`), else until the session
+    transcript response carries `compacting`, the tab is read at most every 3 s), starts *the press* behind the thread (a canvas in the Matrix look, Matrix rain of the conversation's characters
+    in the box at the rain's speed `termView.rainSpeed`; the wait rain stays off meanwhile) until the transcript has one more `compact_boundary` (`ctx.compactions`), else until the session
     waits again, or its screen no longer shows the compaction for 12 s (or 20 minutes); a compaction on the screen
     does not start it again within 20 s after one ended; the finale flies the cube into the gauge and shows the context before → after; the bin puts on shades, runs
     under the press and is flattened (`pressEnd: 'flat'`, the default, 3.8 s) or runs off to the right (`'run'`,

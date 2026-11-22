@@ -1367,14 +1367,21 @@ async function typeInto(pid, text) {
   if (ASKING.test(tail(check.out))) throw httpError(409, 'The session is asking something in its terminal (e.g. a permission); answer it there first.');
   const r = await termScript(tty, 'type', text);
   if (r.err || r.out.trim() !== 'typed') throw httpError(502, `Typing failed: ${(r.errOut || r.out || r.err?.message || '').trim().slice(0, 200)}`);
-  // a long text arrives as a paste, where the Return becomes part of it: if it still sits in the input box, send Return
-  for (let i = 0; i < 3; i++) {
-    await new Promise((res) => setTimeout(res, 400));
+  // a long text arrives as a paste, where the Return becomes part of it: if it still sits in the input box, send Return.
+  // A busy session may not have drawn the text yet at the first look (an empty box is no proof it was sent), so it
+  // waits until the text shows: in the box (→ Return) or above it (sent, or queued while it works); still in the box
+  // at the end: an error, not a silent "sent"
+  const head = squash(text).slice(0, 40);
+  let inBox = false;
+  for (let i = 0; i < 12; i++) {
+    await new Promise((res) => setTimeout(res, i < 4 ? 300 : 500));
     const now = (await termScript(tty, 'check', '')).out;
-    if (!inputBox(now).includes(squash(text).slice(0, 40))) return; // submitted
     if (ASKING.test(tail(now))) return;
-    await termScript(tty, 'enter', '');
+    inBox = inputBox(now).includes(head);
+    if (inBox) { await termScript(tty, 'enter', ''); continue; }
+    if (squash(now).includes(head) || i >= 5) return; // shown outside the box, or not seen in ~2 s (sent and scrolled, or wrapped)
   }
+  if (inBox) throw httpError(502, 'The text is in its input box but Return did not go through: press Return in its terminal.');
 }
 // ---- Claude's questions (AskUserQuestion) in a joined session, answered from the page. In the terminal they are a
 // menu: a digit picks an option and moves on, the Return that follows every typed text would pick the next one. So a

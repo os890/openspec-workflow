@@ -469,6 +469,9 @@ details.as-sec summary.as-l { cursor: pointer; } .as-task { white-space: pre-wra
 .ic-text:focus { outline: 2px solid var(--accent); outline-offset: 0; }
 .ic-note { font-size: 12px; color: var(--muted); } .ic-err { color: var(--st-blocked); font-weight: 600; }
 .ic-chip { display: inline-block; font-size: 11px; font-weight: 700; opacity: .8; margin-bottom: 2px; }
+.ic-chip .tick { margin-left: 3px; font-weight: 800; letter-spacing: -.25em; } /* like a messenger: ◷ typing it in, ✓ in its terminal, ✓✓ picked up */
+.ic-chip .tick.t0 { letter-spacing: 0; opacity: .75; }
+.msg.me.pending { opacity: .85; }
 /* settings dialog: local models */
 .set-dialog { width: min(780px, calc(100vw - 32px)); max-height: calc(100vh - 48px); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); padding: 18px 22px; box-shadow: var(--shadow-hover); }
 .set-dialog::backdrop { background: rgba(0, 0, 0, .35); }
@@ -1876,7 +1879,12 @@ body.embed [data-ag-max], body.embed [data-ag-close] { display: none; }
 @media (max-width: 860px) { .split-body { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; } .split-body iframe + iframe { border-left: 0; border-top: 1px solid var(--line); } }
 .ag-head .ag-splitbtn { margin-left: auto; white-space: nowrap; }
 .ag-head .ag-splitbtn:disabled { opacity: .4; cursor: default; }
-.ag-head .ag-splitbtn + .ag-maxbtn { margin-left: 0; }
+.ag-head .ag-splitbtn + .ag-splitbtn { margin-left: 0; } /* side by side, pop out, minimize: one group on the right */
+/* in the side panel (480px) the three are icons only (the title says what they do), with the labels once maximized */
+.agent-panel:not(.max) .ag-splitbtn .lbl { display: none; }
+.agent-panel:not(.max) .ag-splitbtn svg { margin-right: 0 !important; }
+.agent-panel:not(.max) .ag-head .ag-splitbtn + .ag-splitbtn { margin-left: -2px; }
+.ag-head .ag-splitbtn + .ag-maxbtn { margin-left: 8px; } /* a little apart from the panel's own maximize and close */
 /* time travel: the history shrinks to a small box at the bottom right, the board is the earlier state */
 .gh-panel.travel, .gh-panel.travel.max { inset: auto 12px 12px auto; top: auto; height: min(44vh, 420px); width: min(400px, calc(100vw - 24px)); }
 .gh-panel.travel .gh-detail { display: none; }
@@ -2217,7 +2225,11 @@ function setPress(on, fin) {
   const glyph = () => PRESS_GLYPHS[Math.floor(Math.random() * PRESS_GLYPHS.length)];
   const ease = (x) => (x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2);
   // s: the box's size, 1 at the start; every press squeezes it by a fifth, down to a small cube (then by a little)
-  let s = 1, from = 1, presses = 0, cycle = { phase: 'wait', t: performance.now() }, flash = 0, bounce = 0, scroll = 0;
+  let s = 1, from = 1, presses = 0, cycle = { phase: 'wait', t: performance.now() }, flash = 0, bounce = 0;
+  // the rain in the box: one falling column per character column (row of its head, trail length, where its text starts)
+  const drops = []; let dropAt = 0, ticks = 0;
+  const newDrop = (rows, spread) => ({ y: spread ? Math.floor(Math.random() * rows * 1.4) - Math.floor(rows * 0.4) : -Math.floor(Math.random() * rows * 0.6), len: 3 + Math.floor(Math.random() * Math.max(3, rows * 0.7)), seed: Math.floor(Math.random() * 1e4) });
+  const hash = (n) => { const x = Math.sin(n * 12.9898) * 43758.5453; return x - Math.floor(x); };
   const PH = { wait: 900, down: 620, squeeze: 460, up: 720 };
   const geo = (size) => {
     const floor = h * 0.86, top = h * 0.07, binW = Math.max(40, Math.min(64, w * 0.13)), pw = Math.min(w - binW - 56, w * 0.68, 380);
@@ -2263,18 +2275,27 @@ function setPress(on, fin) {
     g.shadowColor = GREEN; g.shadowBlur = 8 + flash * 28 + (1 - size) * 10;
     g.fillStyle = 'rgba(0, 36, 14, 0.92)'; g.fillRect(-bw / 2, -bh / 2, bw, bh);
     g.strokeStyle = GREEN; g.lineWidth = 1.5; g.strokeRect(-bw / 2, -bh / 2, bw, bh); g.shadowBlur = 0;
-    // its content: the conversation's words, smaller, denser and more code the smaller it gets
+    // its content: Matrix rain of the conversation's characters, at the speed picked for the rain (Settings › Write
+    // mode), smaller, denser and more code the smaller the box gets
     g.beginPath(); g.rect(-bw / 2 + 3, -bh / 2 + 3, bw - 6, bh - 6); g.clip();
-    const fs = Math.max(4, 12.5 * Math.sqrt(size)), lh = fs * 1.15, cw = fs * 0.62, cols = Math.max(1, Math.floor((bw - 8) / cw));
+    const fs = Math.max(4, 12.5 * Math.sqrt(size)), lh = fs * 1.15, cw = fs * 0.72, cols = Math.max(1, Math.floor((bw - 8) / cw)), rows = Math.max(1, Math.ceil((bh - 6) / lh));
     const code = Math.min(0.9, 0.05 + (1 - size) * 0.95 + flash * 0.3);
-    if (!end) scroll += 0.15;
+    while (drops.length < cols) drops.push(newDrop(rows, true));
+    if (!end && !press.still && now - dropAt >= RAIN_MS[rainSpeed()]) { // one row per step, as the rain behind a long answer
+      dropAt = now; ticks++;
+      for (let c = 0; c < cols; c++) { const d = drops[c]; d.y++; if (d.y - d.len > rows) drops[c] = newDrop(rows, false); }
+    }
     g.font = `${fs}px ${FONT}`; g.textAlign = 'left'; g.textBaseline = 'top';
-    for (let row = 0, y = -bh / 2 + 4; y < bh / 2; row++, y += lh) {
-      const at = ((row + Math.floor(scroll)) * cols) % Math.max(1, text.length);
-      let line = text.slice(at, at + cols); if (line.length < cols) line += text.slice(0, cols - line.length);
-      line = [...line].map((c) => (c !== ' ' && Math.random() < code ? glyph() : c)).join('');
-      g.fillStyle = Math.random() < 0.06 + flash * 0.4 ? BRIGHT : GREEN; g.globalAlpha = 0.6 + Math.random() * 0.4;
-      g.fillText(line, -bw / 2 + 5, y);
+    for (let c = 0; c < cols; c++) {
+      const d = drops[c], x = -bw / 2 + 5 + c * cw;
+      for (let k = 0; k < d.len; k++) {
+        const row = d.y - k; if (row < 0 || row >= rows) continue;
+        const hv = hash(c * 131 + row * 17 + d.seed + (k ? 0 : ticks)); // a cell keeps its character; the head flickers
+        let ch = text[(c * 37 + row * 11 + d.seed) % Math.max(1, text.length)] ?? ' ';
+        if (ch === ' ' || hv < code) ch = PRESS_GLYPHS[Math.floor(hv * 9973) % PRESS_GLYPHS.length];
+        g.fillStyle = k ? GREEN : BRIGHT; g.globalAlpha = k ? Math.max(0.12, (1 - k / d.len) * 0.9) : Math.min(1, 0.85 + flash);
+        g.fillText(ch, x, -bh / 2 + 4 + row * lh);
+      }
     }
     g.globalAlpha = 1; g.restore();
     // the bin: green wireframe with ribs, its lid clacks open when words land; then the words on their way into it.
@@ -3831,7 +3852,7 @@ async function msTypeTo(sid, text) {
   openChat('terminal');
   try {
     await agentPost('type', { session: sid, text });
-    typedHere.add(text); const L = termLog.get(sid); if (L) { L.sentAt = Date.now(); L.waitStart = L.sentAt; }
+    typedHere.add(sqz(text)); const L = termLog.get(sid); if (L) { L.sentAt = Date.now(); L.waitStart = L.sentAt; }
     ag.stick = true; termPoll(true);
   } catch (err) { ag.note = '✕ ' + err.message; }
   renderAgentLive();
@@ -4172,6 +4193,11 @@ document.addEventListener('click', (e) => {
   termViewSave(); renderAgentLive();
 }, true);
 const typedHere = new Set(); // messages typed into a session's terminal from this page (marked in its transcript)
+const sqz = (t) => String(t ?? '').replace(/\s+/g, ' ').trim(); // compared without line breaks and runs of spaces
+// typed from this page and not in its transcript yet: shown at once, ◷ while it is typed in, ✓ once it is in its
+// terminal; it leaves when the transcript has it (✓✓ there: picked up), e.g. with the next step while the session works
+const termPending = new Map(); // session id -> [{ key, text, t, typed }]
+const tickHtml = (n) => `<span class="tick t${n}" title="${['Typing it into its terminal…', 'In its terminal: waiting until the session picks it up', 'Picked up by the session'][n]}">${['◷', '✓', '✓✓'][n]}</span>`;
 // the icon of the terminal sessions (header button, panel title): a terminal window with a prompt
 const TERM_SVG = '<svg class="ic-term" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="3"/><path d="M7 9.5l3 2.5-3 2.5M12.5 15h4.5"/></svg>';
 const termLog = new Map(); // session id -> { entries, next (byte offset), cut, err }
@@ -4229,7 +4255,7 @@ function termThreadHtml(sid) {
     flush();
     if (e.kind === 'mine') out.push(`<div class="msg me"><span class="ic-chip">from the dashboard</span>${esc(e.m.text)}<span class="meta">${hhmm(e.m.t)} · ${e.m.state === 'queued' ? `${waitingNow ? 'queued: arrives with the next prompt typed in its terminal' : 'queued: arrives with its next step'}${e.m.state === 'queued' ? ` · <button class="link" type="button" data-ag-cancel="${esc(e.m.id)}" ${e.folder ? `data-folder="${esc(e.folder)}"` : ''}>cancel</button>` : ''}` : 'delivered ' + hhmm(e.m.deliveredAt)}</span></div>`);
     else if (e.kind === 'user' && (REACT_RE.test(e.text) || QUOTE_RE.test(e.text) || quickOf(e.text))) out.push(userMsgHtml(e).replace('<div class="msg me', '<div class="msg me term-user'));
-    else if (e.kind === 'user') out.push(`<div class="msg me term-user">${typedHere.has(e.text.trim()) ? '<span class="ic-chip">typed from the dashboard</span>' : ''}${esc(e.text)}<span class="meta">${e.t ? hhmm(e.t) : ''} · in the terminal</span></div>`);
+    else if (e.kind === 'user') out.push(`<div class="msg me term-user">${typedHere.has(sqz(e.text)) ? `<span class="ic-chip">typed from the dashboard ${tickHtml(2)}</span>` : ''}${esc(e.text)}<span class="meta">${e.t ? hhmm(e.t) : ''} · in the terminal</span></div>`);
     else {
       const id = `term:${sid}:${e.t}:${n++}`;
       rx.msgs.set(id, e.text);
@@ -4237,6 +4263,7 @@ function termThreadHtml(sid) {
     }
   }
   flush();
+  for (const p of termPending.get(sid) ?? []) out.push(`<div class="msg me term-user pending"><span class="ic-chip">typed from the dashboard ${tickHtml(p.typed ? 1 : 0)}</span>${esc(p.text)}<span class="meta">${hhmm(p.t)} · ${p.typed ? 'in its terminal' : 'typing it in…'}</span></div>`);
   out.push(termStateHtml(T, items, canWrite && sx?.typeable));
   return out.join('') || '<div class="ag-empty">Nothing in this session yet.</div>';
 }
@@ -4389,15 +4416,18 @@ async function termPoll(force) {
   try {
     const r = await agentPost('transcript', { session: sid, from: T.next });
     const fresh = !termLog.has(sid) || r.entries.length || T.err;
+    const pend = termPending.get(sid); // typed from here and now in the transcript: picked up
+    if (pend?.length) { const got = r.entries.filter((e) => e.kind === 'user').map((e) => sqz(e.text).slice(0, 80)); const left = pend.filter((p) => !got.includes(p.key.slice(0, 80)) && Date.now() - p.t < 30 * 60e3); if (left.length !== pend.length) termPending.set(sid, left); }
     T.entries.push(...r.entries); if (T.entries.length > 4000) T.entries.splice(0, T.entries.length - 4000);
     const stateChanged = T.state !== r.state || T.ctx?.used !== r.context?.used;
-    T.next = r.next; T.cut ||= r.cut; T.err = ''; T.state = r.state; T.shell = !!r.shell; const askChanged = (T.ask?.id ?? null) !== (r.ask?.id ?? null); T.ask = r.ask ?? null; const agSig = JSON.stringify((r.agents ?? []).map((a) => [a.agent, a.state, a.steps, a.last])), agentsChanged = agSig !== T.agSig; T.agSig = agSig; T.agents = r.agents ?? []; if (agentsChanged) agentStepsRefresh(); if (askChanged && r.ask) { askState.delete(r.ask.id); askSel.delete(r.ask.id); } // asked anew (the same question again): a fresh card if (r.context) T.ctx = r.context;
+    T.next = r.next; T.cut ||= r.cut; T.err = ''; T.state = r.state; T.shell = !!r.shell; const askChanged = (T.ask?.id ?? null) !== (r.ask?.id ?? null); T.ask = r.ask ?? null; const agSig = JSON.stringify((r.agents ?? []).map((a) => [a.agent, a.state, a.steps, a.last])), agentsChanged = agSig !== T.agSig; T.agSig = agSig; T.agents = r.agents ?? []; if (agentsChanged) agentStepsRefresh(); if (askChanged && r.ask) { askState.delete(r.ask.id); askSel.delete(r.ask.id); } // asked anew (the same question again): a fresh card
+    if (r.context) T.ctx = r.context;
     if (r.state === 'working') { T.waitStart ||= T.sentAt || Date.now(); T.sentAt = 0; }
+    else if (!T.sentAt) T.waitStart = 0; // done (or not started yet): the wait is over
     // a compaction on its screen (auto-compaction, or /compact typed in its terminal): the press starts, but not again
     // right after one ended (the screen is read every 3 s, so it may still show the compaction that just finished)
     if (r.compacting && T.compact) T.compact.seenAt = Date.now();
     if (r.compacting && !T.compact && Date.now() - (T.compactEnd ?? 0) > 20e3) T.compact = { since: Date.now(), before: T.ctx?.used ?? null, n: T.ctx?.compactions ?? 0, seenAt: Date.now() };
-    else if (!T.sentAt) T.waitStart = 0; // done (or not started yet): the wait is over
     termLog.set(sid, T);
     if (fresh || force || stateChanged || askChanged || agentsChanged || T.sentAt) renderAgentLive();
   } catch (e) { T.err = e.message; termLog.set(sid, T); renderAgentLive(); }
@@ -4622,6 +4652,9 @@ async function pipOpenFor(s) {
     Object.assign(pip, { win, s, min: false });
     win.addEventListener('pagehide', () => { if (pip.win === win) pipClosed(); });
   } else Object.assign(pip, { win: window.open(src, 'osd-pip', 'popup,width=440,height=700'), s, min: false });
+  pipLeavePanel(s);
+}
+function pipLeavePanel(s) {
   if (ag.term === s.sid) Object.assign(ag, { term: null, termWrite: false, termDetails: false });
   if (ag.open && ag.convo === 'terminal') closeAgent();
 }
@@ -4633,9 +4666,18 @@ function pipClosed() {
   if ((s.projectId || null) === (PROJECT || null)) { openChat('terminal'); Object.assign(ag, { term: s.sid, termWrite: true, termDetails: false, stick: true }); renderAgentLive(); termPoll(true); return; }
   const u = new URL(splitUrl(s.sid, s.projectId), location.href); u.searchParams.delete('embed'); location.href = u.toString();
 }
-function pipOpen() {
+function pipOpen(min) {
   const all = [...termSessions().filter((x) => !x.ended), ...(ag.view?.elsewhere ?? [])], cur = all.find((x) => x.sessionId === ag.term);
-  if (cur) return pipOpenFor({ sid: cur.sessionId, projectId: cur.projectId || PROJECT || null, label: pipLabel(cur) });
+  if (!cur) return;
+  const s = { sid: cur.sessionId, projectId: cur.projectId || PROJECT || null, label: pipLabel(cur) };
+  return min ? pipMinimize(s) : pipOpenFor(s);
+}
+// straight to the icon in the corner, without the window first (a window already popped out closes; the icon holds one session)
+function pipMinimize(s) {
+  const old = pip.win; Object.assign(pip, { win: null, s: null, min: false });
+  try { old?.close(); } catch { /* gone */ }
+  pipDockSet(s);
+  pipLeavePanel(s);
 }
 document.addEventListener('click', (e) => {
   if (e.target.closest?.('[data-pip-dock]')) { const s = pipDockGet(); if (s) pipOpenFor(s); return; }
@@ -4648,7 +4690,7 @@ function splitClose() {
 }
 document.addEventListener('click', (e) => {
   if (e.target.closest?.('[data-ag-split]')) return splitOpen();
-  if (e.target.closest?.('[data-ag-pip]')) return pipOpen();
+  const pb = e.target.closest?.('[data-ag-pip]'); if (pb) return pipOpen(pb.dataset.agPip === 'min');
   if (e.target.closest?.('[data-split-close]')) return splitClose();
   if (e.target.closest?.('[data-split-swap]')) { const b = $('split').querySelector('.split-body'); b.prepend(b.lastElementChild); }
 });
@@ -4676,7 +4718,7 @@ function buildChatHtml(s, c, ph) {
   const term = c?.terminal || ag.convo === 'terminal'; // also before the session list has arrived
   const chips = term ? '' : '<div class="ag-chips" id="ag-chips" role="tablist"></div>'; // ⌨ Terminal sessions is a panel of its own
   return `
-    <div class="ag-head"><h2>${term ? `${TERM_SVG} Terminal sessions` : 'Chat'}</h2><span class="muted" style="font-size:12.5px">${esc(s.project)}</span>${ag.max ? chips : ''}${term && !EMBED ? '<button class="link ag-splitbtn" type="button" data-ag-split title="Two sessions next to each other, each with its own picker and input box (e.g. the one that implements and the one that reviews)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M12 4v16"/></svg>Side by side</button><button class="link ag-splitbtn" type="button" data-ag-pip hidden title="Detach this session into a small window that stays on top of other apps (picture in picture)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><rect x="3" y="4" width="18" height="16" rx="2.5"/><rect x="12" y="12" width="7" height="5" rx="1" fill="currentColor"/></svg>Pop out</button>' : ''}<button class="link ag-maxbtn" type="button" data-ag-max aria-pressed="${ag.max}" title="${ag.max ? 'Back to the side panel' : 'Use the whole window'}">${ag.max ? '⤡ Restore' : '⤢ Maximize'}</button><button class="link" type="button" data-ag-close>Close ✕</button></div>
+    <div class="ag-head"><h2>${term ? `${TERM_SVG} Terminal sessions` : 'Chat'}</h2><span class="muted" style="font-size:12.5px">${esc(s.project)}</span>${ag.max ? chips : ''}${term && !EMBED ? '<button class="link ag-splitbtn" type="button" data-ag-split aria-label="Side by side" title="Two sessions next to each other, each with its own picker and input box (e.g. the one that implements and the one that reviews)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M12 4v16"/></svg><span class="lbl">Side by side</span></button><button class="link ag-splitbtn" type="button" data-ag-pip hidden aria-label="Pop out" title="Detach this session into a small window that stays on top of other apps (picture in picture)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><rect x="3" y="4" width="18" height="16" rx="2.5"/><rect x="12" y="12" width="7" height="5" rx="1" fill="currentColor"/></svg><span class="lbl">Pop out</span></button><button class="link ag-splitbtn" type="button" data-ag-pip="min" hidden aria-label="Minimize" title="Straight to a terminal icon in the bottom right corner: one click on it pops the session out when you need it"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="m7 10 3 2.5L7 15M12 15h5"/></svg><span class="lbl">Minimize</span></button>' : ''}<button class="link ag-maxbtn" type="button" data-ag-max aria-pressed="${ag.max}" title="${ag.max ? 'Back to the side panel' : 'Use the whole window'}">${ag.max ? '⤡ Restore' : '⤢ Maximize'}</button><button class="link" type="button" data-ag-close>Close ✕</button></div>
     ${ag.max ? '' : chips}
     <div class="ag-bar" id="ag-bar"></div>
     <div class="ag-thread" id="ag-thread" aria-live="polite"></div>
@@ -4764,7 +4806,8 @@ function appHtml(app) {
   return `<div class="app-row"><a class="btn primary" href="${esc(url)}" target="_blank" rel="noopener">Open the app ↗</a><code>${esc(url)}</code></div>`;
 }
 // 🗑️ at the end of the quick messages: /compact, typed into the session (only while writing to one in macOS Terminal)
-const compactOn = () => { const x = ag.term && termSessions().find((y) => y.sessionId === ag.term); return !!(ag.panel === 'chat' && ag.convo === 'terminal' && ag.termWrite && x?.typeable && !x.ended); };
+// (the session among this project's sessions or the others: also on the overview and for a session only)
+const compactOn = () => { const x = ag.term && [...termSessions(), ...(ag.view?.elsewhere ?? [])].find((y) => y.sessionId === ag.term); return !!(ag.panel === 'chat' && ag.convo === 'terminal' && ag.termWrite && x?.typeable && !x.ended); };
 // the open quick messages stay in the tools row when they fit on one line there, else they get a row of their own
 function qkFit() {
   for (const q of document.querySelectorAll('.qk')) {
@@ -5144,7 +5187,7 @@ function termAutoJoin() {
     const say = ag.newSay, tag = ag.newTag;
     if (tag) { Object.assign(x, tag); agentPost('tag', { session: x.sessionId, ...tag }).catch(() => { /* labelled by its prompt instead */ }); }
     Object.assign(ag, { newAt: 0, newSay: null, newTag: null, note: '', term: x.sessionId, termWrite: true, termDetails: false, stick: true }); termPoll(true);
-    if (say) agentPost('type', { session: x.sessionId, text: say }).then(() => { typedHere.add(say); const L = termLog.get(x.sessionId); if (L) { L.sentAt = Date.now(); L.waitStart = L.sentAt; } termPoll(true); })
+    if (say) agentPost('type', { session: x.sessionId, text: say }).then(() => { typedHere.add(sqz(say)); const L = termLog.get(x.sessionId); if (L) { L.sentAt = Date.now(); L.waitStart = L.sentAt; } termPoll(true); })
       .catch((err) => { ag.note = `✕ ${err.message} · not sent: ${say}`; renderAgentLive(); });
   }
   else if (Date.now() - ag.newAt > (ag.note ? 180e3 : 60e3)) { ag.newAt = 0; ag.newSay = null; ag.note = '✕ The new session did not show up within a minute: is the terminal window asking something (e.g. whether you trust the folder)?'; }
@@ -5165,7 +5208,9 @@ function renderAgentLive() {
     if ($('ag-text')) $('ag-text').placeholder = chatPlaceholder(c, ui.state ? { project: ui.state.project } : { project: '' });
     if ($('ag-chips')) $('ag-chips').innerHTML = list.filter((x) => !x.terminal).map((x) => `<button type="button" class="chip" role="tab" data-ag-convo="${esc(x.id)}" aria-selected="${x.id === c?.id}">${x.live ? '<span class="dot on"></span>' : ''}${x.session ? 'Session · ' : ''}${esc(x.label)}</button>`).join('');
     morphHtml($('ag-bar'), barHtml(c)); // morph: an open session picker stays open
-    const pb = document.querySelector('#agent [data-ag-pip]'); if (pb) pb.hidden = !(ag.term && ag.termWrite); // pop out: while writing to a session
+    for (const pb of document.querySelectorAll('#agent [data-ag-pip]')) pb.hidden = !(ag.term && ag.termWrite); // pop out and minimize: while writing to a session
+    // maximized while writing: no ⤡ Restore next to Pop out (Pop out does more); Close ✕ then also ends the maximized view
+    const mb = document.querySelector('#agent .ag-head [data-ag-max]'); if (mb) mb.hidden = !!(ag.max && ag.convo === 'terminal' && ag.term && ag.termWrite && !EMBED);
     const sb = document.querySelector('#agent [data-ag-split]'); // side by side needs a second running session
     if (sb) {
       const others = [...termSessions().filter((x) => !x.ended), ...(ag.view?.elsewhere ?? [])].filter((x) => x.sessionId !== ag.term).length;
@@ -5214,6 +5259,7 @@ async function agentSend(force = false, direct = null) {
   const typed = ta?.value.trim() ?? '';
   const text = direct ?? (typed && ag.panel === 'chat' ? withQuote(typed) : typed);
   ag.busy = true;
+  let cleared = false;
   try {
     if (ag.panel === 'chat') {
       if (!text) return;
@@ -5221,12 +5267,21 @@ async function agentSend(force = false, direct = null) {
       if (c?.terminal) {
         const xo = (ag.view?.elsewhere ?? []).find((y) => y.sessionId === ag.term && !y.projectId);
         const tx = termSessions().find((y) => y.sessionId === ag.term) ?? xo;
-        if (tx?.typeable) { await agentPost('type', { session: ag.term, text }); compactMark(ag.term, text); typedHere.add(text.replace(/\s*\n\s*/g, ' ').trim()); const L = termLog.get(ag.term); if (L) { L.sentAt = Date.now(); L.waitStart = L.sentAt; } ag.stick = true; termPoll(true); }
+        if (tx?.typeable) {
+          // the bubble at once, the input box free for the next message; typing it in may take a few seconds
+          const sid = ag.term, p = { key: sqz(text), text, t: Date.now(), typed: false };
+          termPending.set(sid, [...(termPending.get(sid) ?? []), p]); typedHere.add(p.key);
+          if (!direct) { ag.drafts['chat-' + ag.convo] = ''; ta.value = ''; rx.quote = null; showQuoteChip(); }
+          cleared = true; ag.stick = true; renderAgentLive();
+          try { await agentPost('type', { session: sid, text }); }
+          catch (err) { termPending.set(sid, (termPending.get(sid) ?? []).filter((x) => x !== p)); if (!direct && ta && !ta.value.trim()) ta.value = typed; throw err; } // not sent: the text back in the box
+          p.typed = true; compactMark(sid, text); const L = termLog.get(sid); if (L) { L.sentAt = Date.now(); L.waitStart = L.sentAt; } termPoll(true);
+        }
         else await agentPost('message', { text, to: 'inbox', session: ag.term || undefined, ...(xo ? { folder: xo.folder } : {}) });
       }
       else if (c?.session) await agentPost('message', { change: c.last.change, text, job: c.last.id });
       else await agentPost('chat', { text, mode: c?.brainstorm ? 'brainstorm' : 'assistant' });
-      if (!direct) { ag.drafts['chat-' + ag.convo] = ''; ta.value = ''; rx.quote = null; showQuoteChip(); }
+      if (!direct && !cleared) { ag.drafts['chat-' + ag.convo] = ''; ta.value = ''; rx.quote = null; showQuoteChip(); }
       ag.stick = true;
       ag.note = '';
     } else if (ag.mode === 'ask') {
@@ -5271,7 +5326,10 @@ document.addEventListener('click', (e) => {
   const ticket = t.closest('[data-agent]');
   if (ticket) { e.stopPropagation(); return openTicket(ticket.dataset.agent, ticket.dataset.agentMode, ticket.dataset.agentDraft); }
   if (!t.closest('#agent')) return;
-  if (t.closest('[data-ag-close]')) return closeAgent();
+  if (t.closest('[data-ag-close]')) {
+    if (document.querySelector('#agent .ag-head [data-ag-max]')?.hidden) { ag.max = false; try { localStorage.setItem('osd-chat-max', '0'); } catch {} } // without ⤡ Restore: the next open is the side panel
+    return closeAgent();
+  }
   if (t.closest('[data-ag-max]')) {
     if ($('ag-text')) ag.drafts[ag.panel === 'chat' ? 'chat-' + ag.convo : 'ticket-' + ag.mode] = $('ag-text').value;
     ag.max = !ag.max;

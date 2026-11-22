@@ -397,7 +397,10 @@ way.
 **Write to it.** A joined session is read-only at first; **✎ Write to it** next to its state starts writing. Your
 message is typed into the session's macOS Terminal tab and sent with
 Return, exactly as if you typed it there, also while the session waits at its prompt; no setup is needed, and the
-transcript marks it as *typed from the dashboard*. It goes as one line (line breaks become spaces). The dashboard
+transcript marks it as *typed from the dashboard*. Its bubble shows at once, like in a messenger: ◷ while the
+dashboard types it in, ✓ once it is in the session's terminal, ✓✓ once the session has picked it up (while it works,
+that is with its next step). If it could not be sent, the bubble goes and the text is back in the input box with the
+reason. It goes as one line (line breaks become spaces). The dashboard
 only types while Claude Code itself is in the foreground of that tab (never into a shell), and not while the session
 asks you something there (a permission, a choice), since Return would answer it. macOS asks once whether the
 dashboard may control Terminal; when the dashboard runs as a service (`launcher.mjs install --service`), that
@@ -444,7 +447,8 @@ tokens*). From 70 %, while the session waits at its prompt, **Compact now** type
 happens when it suits you, not in the middle of a task; **🗑️** at the end of the quick messages (⋯) does the same at any time. While
 it compacts (after **Compact now**, 🗑️ or `/compact` sent from the dashboard, and in macOS Terminal also when Claude
 Code compacts by itself or `/compact` was typed there), *the press* runs behind the conversation, in the Matrix look: the conversation is a box of its
-words under a hydraulic press, and every press squeezes it smaller; its words get tinier and denser and turn into
+words under a hydraulic press, and every press squeezes it smaller. Inside the box the conversation's characters fall
+as Matrix rain, at the speed set for the rain (**Settings › Write mode**); they get tinier and denser and turn into
 green code, until it is a small, glowing cube. The words squeezed out tumble into a bin, /dev/null, which counts
 them; at the end it puts on agent shades, grows legs, runs under the press and is flattened too. For a shorter
 ending, **Settings › Write mode › While it compacts › Runs away** lets the bin run off to the right instead. The conversation fades back meanwhile (nothing new comes until the compaction is done). Once the
@@ -482,7 +486,10 @@ window), with the whole write mode: the thread, the input box, the quick message
 The panel lets go of the session meanwhile. **⤺ Back to the panel** at the top of the small window (or closing it)
 brings the session back into the panel, in write mode. **▁ Minimize** closes it and leaves a round terminal icon in
 the dashboard's bottom right corner (it stays after a reload): a click pops the same session out again, so your main
-write session is always one click away; its ✕ removes the icon.
+write session is always one click away; its ✕ removes the icon. **Minimize** next to **Pop out** goes there straight
+away, without the window first: for a session you'll want later, not right now. In the side panel the three sit
+together as small icons (hover for the name); maximized they have their labels, and there is no **⤡ Restore** next
+to them while you write (`Esc` or **Close ✕** brings back the side panel).
 
 **Send it to the background.** For a longer task, **⤓ Background** (next to **Read only**) closes the panel and
 keeps the session in a list; the panel lets go of it, so the terminal button opens with the picker, for another
