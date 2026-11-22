@@ -370,7 +370,9 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     again for a minute.
   - **Side by side**: an overlay with two frames of the page itself, each with `?embed` (only the terminal sessions
     panel, filling the frame; no header, no close or maximize) and `term=<session>&write=1` on the session's project
-    page (or the overview); each half polls, joins and writes on its own. The left one is the joined session, the
+    page (or the overview); each half polls, joins and writes on its own, without a lasting connection (the state once, the sessions
+    every 3 s), since a browser keeps only six connections per address and every dashboard tab holds one. The button
+    is disabled until a second session runs. The left one is the joined session, the
     right one the most recent other running session.
   - **Agents of a session** (subagents): an `Agent`/`Task` call in the transcript becomes a slim line in the thread and a card in a
     stack in the lower left corner of the conversation (working ones first, done ones for an hour), with a popup for

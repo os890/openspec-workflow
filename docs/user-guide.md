@@ -432,13 +432,15 @@ as reactions and quotes.
 **Side by side.** **Side by side** in the panel's header shows two sessions next to each other (one above the
 other on a narrow screen), e.g. the session that implements a ticket and the one that reviews it. Each half is a
 panel of its own, with its own session picker, write mode, input box and look; the left one starts with the session
-you have joined, the right one with the most recent other one. **⇄ Swap** swaps the halves, **Close ✕** (or `Esc`)
+you have joined, the right one with the most recent other one. It needs a second running session (start one with
+**＋ New session**); until then the button is greyed out. **⇄ Swap** swaps the halves, **Close ✕** (or `Esc`)
 goes back to the single panel.
 
 ![Two sessions side by side, each with its own input box](images/dashboard-side-by-side.png)
 
 **Send it to the background.** For a longer task, **⤓ Background** (next to **Read only**) closes the panel and
-keeps the session in a list; a button with the number of sessions appears in the header, on every page of the
+keeps the session in a list; the panel lets go of it, so the terminal button opens with the picker, for another
+session; a button with the number of sessions appears in the header, on every page of the
 dashboard. Its dot is amber while one still works, green when all are done, red when one needs you or has an issue;
 **n ✓** counts the ones that finished since you last looked. A click opens the list, with a status per session:
 

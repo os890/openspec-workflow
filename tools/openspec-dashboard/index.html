@@ -1798,6 +1798,7 @@ body.embed [data-ag-max], body.embed [data-ag-close] { display: none; }
 .split-body iframe + iframe { border-left: 1px solid var(--line); }
 @media (max-width: 860px) { .split-body { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; } .split-body iframe + iframe { border-left: 0; border-top: 1px solid var(--line); } }
 .ag-head .ag-splitbtn { margin-left: auto; white-space: nowrap; }
+.ag-head .ag-splitbtn:disabled { opacity: .4; cursor: default; }
 .ag-head .ag-splitbtn + .ag-maxbtn { margin-left: 0; }
 /* time travel: the history shrinks to a small box at the bottom right, the board is the earlier state */
 .gh-panel.travel, .gh-panel.travel.max { inset: auto 12px 12px auto; top: auto; height: min(44vh, 420px); width: min(400px, calc(100vw - 24px)); }
@@ -4527,6 +4528,12 @@ function renderAgentLive() {
     if ($('ag-text')) $('ag-text').placeholder = chatPlaceholder(c, ui.state ? { project: ui.state.project } : { project: '' });
     if ($('ag-chips')) $('ag-chips').innerHTML = list.filter((x) => !x.terminal).map((x) => `<button type="button" class="chip" role="tab" data-ag-convo="${esc(x.id)}" aria-selected="${x.id === c?.id}">${x.live ? '<span class="dot on"></span>' : ''}${x.session ? 'Session · ' : ''}${esc(x.label)}</button>`).join('');
     morphHtml($('ag-bar'), barHtml(c)); // morph: an open session picker stays open
+    const sb = document.querySelector('#agent [data-ag-split]'); // side by side needs a second running session
+    if (sb) {
+      const others = [...termSessions().filter((x) => !x.ended), ...(ag.view?.elsewhere ?? [])].filter((x) => x.sessionId !== ag.term).length;
+      sb.disabled = !others;
+      sb.title = others ? 'Two sessions next to each other, each with its own picker and input box (e.g. the one that implements and the one that reviews)' : 'Needs a second running session: start one with ＋ New session';
+    }
     termViewApply(c?.terminal && ag.term && ag.termWrite);
     const tx = c?.terminal && ag.term ? termSessions().find((y) => y.sessionId === ag.term) ?? (ag.view?.elsewhere ?? []).find((y) => y.sessionId === ag.term && !y.projectId) : null;
     const ro = c?.terminal && (ag.term ? (!tx || !ag.termWrite || tx.ended || (tx.hookless && !tx.typeable)) : !ag.view?.hooks); // a joined session is read-only until "Write to it"; an ended one or one without the hook stays so
@@ -4658,6 +4665,9 @@ document.addEventListener('click', (e) => {
   if (t.closest('[data-ag-bg]')) {
     const x = termSessions().find((y) => y.sessionId === ag.term) ?? (ag.view?.elsewhere ?? []).find((y) => y.sessionId === ag.term);
     if (x) bgAdd(x);
+    // it goes on in the background (the background list brings it back): the panel lets go of it, so the session
+    // button opens with the picker, for another session
+    Object.assign(ag, { term: null, termWrite: false, termDetails: false });
     return closeAgent();
   }
   if (t.closest('[data-ag-term-details]')) { ag.termDetails = !ag.termDetails; renderAgentLive(); return; }
@@ -6151,6 +6161,12 @@ function startProject() {
   if (AGENT_TOKEN && PARAMS.get('panel') === 'chat') { ag.open = true; ag.panel = 'chat'; ag.stick = true; ag.max = ag.max || PARAMS.has('max'); $('agent').hidden = false; document.body.classList.add('ag-open'); } // ?panel=chat opens the chat, &max maximized
   if (SNAPSHOT && AGENT_TOKEN) fetch(withProject('/api/agent')).then((r) => r.json()).then((v) => { ag.view = v; renderAgentLive(); });
   if (SNAPSHOT) fetch(withProject('/api/state')).then((r) => r.json()).then((d) => { $('conn').innerHTML = `<span class="dot"></span>snapshot ${hhmm(d.scannedAt)}`; accept(d); });
+  else if (EMBED) { // one half of side by side: no lasting connection (a browser keeps only 6 per address, and every
+    // dashboard tab and window holds one): the state once, the sessions every 3 s
+    fetch(withProject('/api/state')).then((r) => r.json()).then(accept).catch(() => {});
+    const poll = () => fetch(withProject('/api/agent')).then((r) => r.json()).then((v) => { ag.view = v; renderAgentLive(); }).catch(() => {});
+    poll(); setInterval(poll, 3000);
+  }
   else connect();
 }
 function startOverview() {
@@ -6162,6 +6178,7 @@ function startOverview() {
     fetch('/api/projects').then((r) => r.json()).then((d) => { $('conn').innerHTML = `<span class="dot"></span>snapshot ${hhmm(d.scannedAt)}`; renderOverview(d); });
     return;
   }
+  if (EMBED) { fetch('/api/projects').then((r) => r.json()).then(renderOverview).catch(() => {}); return; } // one half of side by side: no lasting connection (the sessions are polled)
   const es = new EventSource('/events?overview=1');
   es.onopen = () => { $('conn').innerHTML = '<span class="dot on"></span>live'; };
   let onboardFrom = AGENT_TOKEN ? PARAMS.get('onboard') : null; // ?onboard=<folder>: "Onboard it as a project…" from a session-only session
