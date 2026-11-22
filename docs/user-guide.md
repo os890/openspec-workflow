@@ -449,6 +449,8 @@ compaction is done, the cube shrinks into the gauge and the context before and a
 that has been larger than 200k tokens (or the model says so) counts with 1M; otherwise the gauge uses
 **Settings › Write mode › Context window** (200k by default, or 1M). The background list shows the gauge too.
 
+![While the session compacts: the conversation is pressed into a smaller and smaller box, the words squeezed out fall into /dev/null, and at the end the bin puts on shades, runs under the press and is flattened too](images/dashboard-compact-press.webp)
+
 While you write, the details above the conversation fold into one line (**✎ Writing to …**, its state, **Details ▾**,
 **Read only**), so the conversation gets the panel. That way a session you started in the terminal continues in the
 dashboard. If its folder is not a project of the dashboard yet, **Onboard as project** next to **Read only** sets up
