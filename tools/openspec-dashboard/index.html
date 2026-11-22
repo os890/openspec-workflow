@@ -1461,6 +1461,24 @@ body.board-max { overflow: hidden; }
 .ov-empty { color: var(--muted); }
 @media (max-width: 720px) { .ov-grid { grid-template-columns: 1fr; } }
 /* settings › Phone and tablet */
+.us-dialog { width: min(820px, calc(100vw - 32px)); }
+#usage-btn { display: inline-flex; align-items: center; }
+.us-limits { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 6px 0 4px; }
+.us-limit { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.us-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.us-pct { font-weight: 800; font-variant-numeric: tabular-nums; } .us-pct.mid { color: #b07d00; } .us-pct.hi { color: #e8590c; }
+.us-bar { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--ink) 10%, transparent); overflow: hidden; }
+.us-bar i { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+.us-bar.mid i { background: #d9a400; } .us-bar.hi i { background: #f08c2e; } .us-bar.thin { height: 5px; } .us-bar.thin i { background: var(--cf-specified); }
+.us-sub { font-size: 12px; color: var(--muted); }
+.us-h { font-size: 15px; margin: 18px 0 2px; }
+.us-periods { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+.us-period { display: flex; flex-direction: column; gap: 10px; }
+.us-hint { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.us-share { font-weight: 700; font-variant-numeric: tabular-nums; }
+.us-tops { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.us-chip { font-size: 12px; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; }
+:root[data-theme="dark"] .us-pct.mid { color: #f2c94c; } :root[data-theme="dark"] .us-pct.hi { color: #f5a35c; }
 .lan-pair { display: flex; gap: 18px; align-items: flex-start; margin-top: 10px; flex-wrap: wrap; }
 .lan-qr { flex: none; background: #fff; border-radius: 10px; padding: 6px; line-height: 0; border: 1px solid var(--line); }
 .lan-txt { flex: 1 1 260px; min-width: 0; }
@@ -1954,6 +1972,7 @@ body.ag-max { overflow: hidden; }
       <button class="btn" id="term-btn" type="button" aria-label="Terminal sessions" aria-controls="agent" title="Sessions running in a terminal or an IDE: join one, follow it live, write to it" hidden><svg class="ic-term" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="3"/><path d="M7 9.5l3 2.5-3 2.5M12.5 15h4.5"/></svg></button>
       <button class="btn" id="folder-btn" type="button" aria-label="Open the project folder" title="Open the project folder in the file manager (which one: ⚙ Settings › General)" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg></button>
       <button class="btn" id="git-btn" type="button" aria-label="Git history" aria-controls="githist" title="Git history: the commits, branches and tags, and what each commit changed" hidden>⎇</button>
+      <button class="btn" id="usage-btn" type="button" aria-label="Usage" title="Usage of your Claude plan: the session and weekly limits, and what contributes to them" hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4.5 17a8 8 0 1 1 15 0"/><path d="M12 13l3.5-4"/><circle cx="12" cy="13" r="1.2" fill="currentColor"/></svg></button>
       <button class="btn" id="podman-btn" type="button" aria-label="Podman" title="Podman: the VM and its containers (start, stop, restart)" hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8l8.5 4.6v9.2L12 21.2l-8.5-4.6V7.4z"/><path d="M3.5 7.4L12 12l8.5-4.6M12 12v9.2"/></svg></button>
       <button class="btn" id="menu-btn" type="button" aria-label="Look and settings" aria-haspopup="true" aria-expanded="false" aria-controls="hdr-menu" title="Style, light or dark, settings">☰</button>
     </div>
@@ -1969,6 +1988,7 @@ body.ag-max { overflow: hidden; }
   <div class="hm-row"><span>Light or dark</span><button class="btn" id="theme" type="button" aria-label="Toggle light or dark theme">◐ Switch</button></div>
   <div class="hm-row" id="hm-install" hidden><span>As an app, with its own icon in the Dock</span><button class="btn primary" id="install-btn" type="button">Install…</button></div>
   <div class="hm-row" id="hm-lan" hidden><span>On a phone or tablet</span><button class="btn" id="lan-btn" type="button" title="Show the dashboard on a phone or tablet in the same network">QR code…</button></div>
+  <div class="hm-row" id="hm-usage" hidden><span>Usage of your Claude plan</span><button class="btn" id="usage-menu-btn" type="button">Usage…</button></div>
   <div class="hm-row hm-set"><span>Settings</span><button class="btn" id="settings-btn" type="button" aria-label="Settings" title="Settings: local models, Podman, write mode, file manager" hidden>⚙ Open…</button></div>
 </div>
 <div class="bg-pop" id="bg-pop" role="dialog" aria-label="Sessions in the background" hidden></div>
@@ -1985,6 +2005,7 @@ body.ag-max { overflow: hidden; }
   <section class="panel board" id="board"></section>
 </div>
 <dialog class="set-dialog" id="settings" aria-labelledby="set-title"></dialog>
+<dialog class="set-dialog us-dialog" id="usage" aria-labelledby="us-title"></dialog>
 <dialog class="set-dialog pd-dialog" id="propose" aria-labelledby="pd-title"></dialog>
 <dialog class="set-dialog onb-dialog" id="onbdlg" aria-labelledby="onb-title"></dialog>
 <aside class="drawer agent-panel" id="agent" aria-label="Agent" hidden></aside>
@@ -3557,6 +3578,41 @@ document.addEventListener('click', (e) => { if (!$('hdr-menu').hidden && !e.targ
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('hdr-menu').hidden) hdrMenu(false); });
 $('settings-btn').addEventListener('click', () => hdrMenu(false));
 $('podman-btn').addEventListener('click', () => { st.tab = 'podman'; openSettings(false); });
+// ---- the usage of the Claude plan (what /usage shows in Claude Code): the limits with their reset time, and what
+// contributes (hints with their share, top skills, subagents and MCP servers), from `claude -p /usage` on the server
+const us = { data: null, busy: false, err: '' };
+async function openUsage(fresh) {
+  const dlg = $('usage'); if (!dlg.open) dlg.showModal();
+  us.busy = true; us.err = ''; renderUsage();
+  try {
+    const r = await fetch('/api/usage' + (fresh ? '?fresh' : ''), { headers: { 'x-osd-token': AGENT_TOKEN } });
+    const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+    us.data = d;
+  } catch (e) { us.err = e.message; }
+  us.busy = false; renderUsage();
+}
+function renderUsage() {
+  const d = us.data, lvl = (p) => (p >= 85 ? 'hi' : p >= 60 ? 'mid' : '');
+  const limit = (l) => `<div class="us-limit"><div class="us-row"><b>${esc(l.label[0].toUpperCase() + l.label.slice(1))}</b><span class="us-pct ${lvl(l.pct)}">${l.pct}% used</span></div>
+      <div class="us-bar ${lvl(l.pct)}" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${l.pct}" aria-label="${esc(l.label)}: ${l.pct}% used"><i style="width:${Math.max(1, Math.min(100, l.pct))}%"></i></div>
+      ${l.resets ? `<div class="us-sub">resets ${esc(l.resets)}</div>` : ''}</div>`;
+  const period = (p) => `<div class="us-period"><div class="us-row"><b>Last ${esc(p.label)}</b><span class="muted">${p.requests.toLocaleString()} requests · ${p.sessions.toLocaleString()} sessions</span></div>
+      ${p.hints.map((h) => `<div class="us-hint"><div class="us-row"><span>${esc(h.what)}</span><span class="us-share">${h.pct}%</span></div><div class="us-bar thin"><i style="width:${Math.max(1, Math.min(100, h.pct))}%"></i></div>${h.how ? `<div class="us-sub">${esc(h.how)}</div>` : ''}</div>`).join('')}
+      ${p.tops.map((t) => `<div class="us-tops"><span class="us-sub">Top ${esc(t.label)}</span>${t.items.map((i) => `<span class="us-chip">${esc(i.name)}${i.pct != null ? ` <b>${i.pct}%</b>` : ''}</span>`).join('')}</div>`).join('')}</div>`;
+  $('usage').innerHTML = `<div class="set-head"><h2 id="us-title">Usage</h2><button class="link" type="button" data-us-refresh ${us.busy ? 'disabled' : ''}>${us.busy ? '<span class="ag-spin"></span>Asking Claude Code…' : '↻ Refresh'}</button><button class="link" type="button" data-us-close>Close ✕</button></div>
+    ${us.err ? `<div class="ag-note warn">✕ ${esc(us.err)}</div>` : ''}
+    ${d ? `${d.plan ? `<p class="ag-note">${esc(d.plan)}${d.at ? ` · as of ${hhmm(d.at)}` : ''}</p>` : ''}
+      <div class="us-limits">${d.limits.map(limit).join('')}</div>
+      ${d.periods.length ? `<h3 class="us-h">What contributes to your usage</h3>${d.scope ? `<p class="ag-note">${esc(d.scope)}</p>` : ''}<div class="us-periods">${d.periods.map(period).join('')}</div>` : ''}
+      ${d.notes.map((n) => `<p class="ag-note warn">${esc(n)}</p>`).join('')}` : us.busy ? '' : '<div class="ag-note">No usage yet.</div>'}`;
+}
+$('usage-btn').addEventListener('click', () => openUsage(false));
+$('usage-menu-btn').addEventListener('click', () => { hdrMenu(false); openUsage(false); });
+$('usage').addEventListener('click', (e) => {
+  if (e.target === $('usage') || e.target.closest('[data-us-close]')) return $('usage').close();
+  if (e.target.closest('[data-us-refresh]')) openUsage(true);
+});
 $('theme').addEventListener('click', () => {
   const root = document.documentElement;
   const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
@@ -5323,6 +5379,7 @@ $('settings').addEventListener('click', async (e) => {
   }
 });
 if (AGENT_TOKEN) { $('settings-btn').hidden = false; $('settings-btn').addEventListener('click', () => openSettings(false)); }
+if (AGENT_TOKEN) $('hm-usage').hidden = false;
 if (AGENT_TOKEN && !REMOTE) { $('hm-lan').hidden = false; $('lan-btn').addEventListener('click', () => { hdrMenu(false); st.tab = 'lan'; openSettings(false); }); }
 if (REMOTE) document.body.classList.add('remote'); // on a phone or tablet: what only makes sense on the computer is hidden
 document.addEventListener('click', (e) => {
@@ -5682,7 +5739,7 @@ document.addEventListener('click', async (e) => {
 }, true);
 function renderOverview(o) {
   $('folder-btn').hidden = true;
-  if (AGENT_TOKEN) $('podman-btn').hidden = false; // the overview has the room: Podman management at a click
+  if (AGENT_TOKEN) { $('podman-btn').hidden = false; $('usage-btn').hidden = false; } // the overview has the room: Podman and the usage at a click
   if (AGENT_TOKEN && !ag.ovProject && o.projects?.length) setTimeout(async () => {
     await ovTermFetch(); // ⌨ with its badge right away
     if ((PARAMS.get('term') || EMBED) && !ag.open) { await openTermOverview(); ag.term = PARAMS.get('term') || null; ag.termWrite = PARAMS.get('write') === '1'; renderAgentLive(); termPoll(true); } // from the background list, or one half of "Side by side"

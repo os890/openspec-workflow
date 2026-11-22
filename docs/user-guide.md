@@ -563,6 +563,17 @@ period). Only the digest's numbers and change names go to Claude; it reads nothi
 
 ![The daily digest below the projects, with Claude's briefing](images/dashboard-digest.png)
 
+### Usage of your Claude plan
+
+With `--agent`, the gauge button in the overview's header (on a project's page: **☰ › Usage…**) shows what `/usage`
+shows in Claude Code, as a page to read at a glance: each limit of your plan (the session, the week, per model) as
+a bar with how much is used and when it resets, and what contributes to the usage over the last 24 hours and 7 days,
+each hint with its share (e.g. *Start fresh when you switch tasks · run /clear*) and the top skills, subagents and MCP
+servers. **↻ Refresh** asks again; otherwise it is kept for a minute. The dashboard runs `claude -p /usage` for it, a
+local command of Claude Code that does not use the model.
+
+![The usage of the Claude plan: limits with their reset time, and what contributes (example numbers)](images/dashboard-usage.png)
+
 ### Archive and unfollow
 
 Every project the dashboard follows costs a little all the time: it watches `openspec/`, looks at the files of the

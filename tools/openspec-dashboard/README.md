@@ -45,6 +45,11 @@ are labelled with the shortest end of their path that tells them apart (`example
 cards, in the picker, the title and the history panel; candidates to onboard likewise (also against followed
 projects), in the list, the chat and the progress dialog.
 
+**Usage** (with `--agent`; a gauge button on the overview, ☰ › Usage… elsewhere): `GET /api/usage` (token) runs
+`claude -p /usage` in the home folder and parses its text: the limits (`Current <name>: <n>% used · resets <when>`),
+the periods (`Last 24h · <n> requests · <n> sessions`) with their hints (`<n>%  <what> · <how>`) and `Top …:` lists,
+the plan line and warnings; kept for a minute (`?fresh` asks again).
+
 **Daily digest** (overview, below the cards): `GET /api/digest?days=1|7` computes per followed project, from the
 charts' timeline (`git log` of `openspec/` merged with the recorded history), the window since the start of the
 previous working day (Monday: Friday) or the last 7 days: tasks checked (per change), changes that reached

@@ -3080,6 +3080,43 @@ for (const root of startRoots) {
 const byId = new Map(projects.map((p) => [p.id, p]));
 const projectFor = (url) => byId.get(url.searchParams.get('project')) ?? projects[0];
 const parkedList = (m) => [...m.entries()].map(([root, x]) => ({ root, ...x, label: labelOf(root), exists: fs.existsSync(path.join(root, 'openspec')) })).sort((a, b) => b.at - a.at);
+// ---------------------------------------------------------------- the plan's usage (overview › Usage, with --agent)
+// What /usage shows in Claude Code: the limits of the subscription (session, week, per model) with their reset time,
+// and what contributes to the usage (hints with shares, top skills, subagents, MCP servers). `claude -p /usage` prints
+// it as text (a local command, no model call); parsed here, kept for a minute.
+function parseUsage(text) {
+  const lines = String(text).split('\n').map((l) => l.replace(/\s+$/, ''));
+  const out = { limits: [], periods: [], notes: [], plan: null, raw: text.slice(0, 20000) };
+  let period = null;
+  for (const l of lines) {
+    let m;
+    if ((m = l.match(/^(Current [^:]+):\s*(\d+(?:\.\d+)?)% used(?:\s*·\s*resets (.*))?$/))) { out.limits.push({ label: m[1].replace(/^Current /, ''), pct: Number(m[2]), resets: m[3] ?? null }); period = null; continue; }
+    if ((m = l.match(/^Last (\S+) · ([\d,]+) requests · ([\d,]+) sessions/))) { period = { label: m[1], requests: Number(m[2].replace(/,/g, '')), sessions: Number(m[3].replace(/,/g, '')), hints: [], tops: [] }; out.periods.push(period); continue; }
+    if (period && (m = l.match(/^\s+(\d+)%\s+(.*)$/))) { const [what, ...how] = m[2].split(' · '); period.hints.push({ pct: Number(m[1]), what, how: how.join(' · ') }); continue; }
+    if (period && (m = l.match(/^\s+Top ([^:]+):\s*(.*)$/))) { period.tops.push({ label: m[1], items: m[2].split(/,\s*/).map((x) => { const k = x.match(/^(.*?)\s+(\d+)%$/); return k ? { name: k[1], pct: Number(k[2]) } : { name: x, pct: null }; }) }); continue; }
+    if (/^You are currently using/.test(l)) out.plan = l;
+    else if (/^Warning:/.test(l)) out.notes.push(l.replace(/^Warning:\s*/, ''));
+    else if (/^Approximate/.test(l)) out.scope = l;
+  }
+  return out;
+}
+let usageCache = null;
+async function usage(fresh) {
+  if (!AGENT) throw httpError(404, 'Start the dashboard with --agent for this.');
+  if (!fresh && usageCache && Date.now() - usageCache.at < 60e3) return usageCache.v;
+  const text = await new Promise((resolve, reject) => {
+    const child = spawn(CLAUDE, ['-p', '/usage'], { cwd: os.homedir(), stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    child.stdout.on('data', (x) => { out += x; }); child.stderr.on('data', (x) => { out += x; });
+    const timer = setTimeout(() => child.kill('SIGTERM'), 60e3);
+    child.on('error', (e) => { clearTimeout(timer); reject(httpError(502, e.code === 'ENOENT' ? `${CLAUDE} was not found.` : e.message)); });
+    child.on('close', () => { clearTimeout(timer); resolve(out); });
+  });
+  const v = { ...parseUsage(text), at: Date.now() };
+  if (!v.limits.length && !v.periods.length) throw httpError(502, `No usage in the answer of Claude Code: ${text.trim().slice(0, 300)}`);
+  usageCache = { at: Date.now(), v };
+  return v;
+}
 // ---------------------------------------------------------------- the daily digest (overview, below the projects)
 // Per followed project, since the start of the previous working day (Monday: since Friday) or over the last 7 days:
 // the tasks checked, the changes started, completed and archived, new tickets, the commits; what is stuck (in
@@ -3626,6 +3663,11 @@ const handle = async (req, res) => {
       }
     }
     if (url.pathname === '/api/projects') return json(res, overview());
+    if (url.pathname === '/api/usage') {
+      if (!AGENT || req.headers['x-osd-token'] !== TOKEN) { res.writeHead(403); return res.end('forbidden'); }
+      try { return json(res, await usage(url.searchParams.has('fresh'))); }
+      catch (e) { if (!e.status) throw e; res.writeHead(e.status, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: e.message })); }
+    }
     if (url.pathname === '/api/digest') {
       if (req.method === 'POST') {
         if (!AGENT || req.headers['x-osd-token'] !== TOKEN) { res.writeHead(403); return res.end('forbidden'); }
