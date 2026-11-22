@@ -323,7 +323,10 @@ They are handy while a session works: the message reaches it mid-turn, and it an
 thread shows each one short, e.g. **👀 Status**.
 
 - git: the green arrow (**Commit**) asks it to make sure everything is up to date and commit, but not push; the blue
-  arrow (**Commit and push**) to make sure everything is up to date, commit and push;
+  arrow (**Commit and push**) to make sure everything is up to date, commit and push. While you write to a session
+  whose folder is a git repository, a git icon with a red dot next to ⚙ shows that it has uncommitted files (checked
+  once an answer is in, then every few seconds while the session waits); hovering lists them, a click opens these
+  quick messages, and the icon goes away once everything is committed;
 - find out where it stands: 👀 the current status (done, now, next), ❓ whether anything blocks it or it needs a
   decision, 🔍 a summary of the changes so far (files and why, nothing committed), 📍 which task of the current
   change it is on and how many are left;

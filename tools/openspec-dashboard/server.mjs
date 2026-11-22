@@ -340,6 +340,24 @@ function gitRead(root, args, max = 4 << 20) { // → { out, cut } or null; outpu
     child.on('close', (code) => { clearTimeout(timer); resolve(code === 0 || cut ? { out: Buffer.concat(chunks).toString('utf8'), cut } : null); });
   });
 }
+// the git hint under a write session's input box: its folder's uncommitted files (null outside a git repository),
+// cached a few seconds per folder (the page asks for it while the session is not working)
+const gitHintCache = new Map(); // folder -> { t, v }
+async function gitHint(dir) {
+  if (!dir || !path.isAbsolute(dir)) return null;
+  const c = gitHintCache.get(dir);
+  if (c && Date.now() - c.t < 4000) return c.v;
+  let v = null;
+  const st = await gitRead(dir, ['status', '--porcelain=v1', '--branch', '--untracked-files=normal'], 1 << 20);
+  if (st) {
+    const lines = st.out.split('\n').filter(Boolean), head = lines[0]?.startsWith('## ') ? lines.shift().slice(3) : '';
+    v = { branch: head.replace(/\.\.\..*$/, '').replace(/^No commits yet on /, '') || null, ahead: Number(head.match(/\[ahead (\d+)/)?.[1] ?? 0),
+      uncommitted: st.cut ? Math.max(lines.length, 1000) : lines.length, files: lines.slice(0, 12).map((l) => l.slice(3)) };
+  }
+  gitHintCache.set(dir, { t: Date.now(), v });
+  if (gitHintCache.size > 50) gitHintCache.delete(gitHintCache.keys().next().value);
+  return v;
+}
 const GIT_PAGE = 150;
 const COMMIT_ID = /^[0-9a-f]{7,64}$/;
 async function gitLog(root, { skip = 0, only = false } = {}) {
@@ -2195,7 +2213,7 @@ function createAgent(project) {
   }
   // the transcript grows; the page asks for what came after `from` (a byte offset). Only files in Claude Code's own
   // folder are read; a long one starts with its last 2 MB.
-  async function transcript({ session, from }) {
+  async function transcript({ session, from, git: withGit }) {
     const x = sessionOf(session);
     const r0 = x && runningSessions().find((y) => y.sessionId === x.sessionId);
     if (!x?.transcript && r0) return { entries: [], next: 0, cut: false, size: 0, state: r0.asking ? 'asking' : r0.waiting ? 'waiting' : 'working' }; // started, no prompt yet: Claude Code writes the transcript with the first one
@@ -2221,7 +2239,7 @@ function createAgent(project) {
     // a question of Claude's that waits in its terminal (a menu): read from the screen
     const ask = r?.asking && r.typeable ? await screenAskOf(r.pid) : null;
     const compacting = state === 'working' && r?.typeable ? await screenCompacting(r.pid) : false;
-    return { entries, next: start + Math.max(end, from0), cut, size, state, shell: !!r?.shell, agents: agentsOf(file), compacting, ask: ask && { id: ask.id, kind: ask.kind, title: ask.title, detail: ask.detail, chat: !!ask.chat, question: ask.question, multi: ask.multi, tabs: ask.tabs, options: ask.options }, context: transcriptInfo(file)?.ctx ?? null };
+    return { entries, next: start + Math.max(end, from0), cut, size, state, shell: !!r?.shell, agents: agentsOf(file), compacting, ...(withGit ? { git: await gitHint(x.cwd) } : {}), ask: ask && { id: ask.id, kind: ask.kind, title: ask.title, detail: ask.detail, chat: !!ask.chat, question: ask.question, multi: ask.multi, tabs: ask.tabs, options: ask.options }, context: transcriptInfo(file)?.ctx ?? null };
   }
 
   function control({ job: jobId, action }) {

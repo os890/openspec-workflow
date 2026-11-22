@@ -357,7 +357,10 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     on its own. It looks for up to ~5 s until the text shows, in the box or above it (a busy session may draw it
     late; an empty box alone is no proof), and answers 502 when it still sits in the box at the end. The page shows
     the bubble at once (`termPending`): ◷ while the `type` request runs, ✓ once it answered, ✓✓ on the transcript's
-    bubble once the transcript has the text (compared without whitespace runs), only on the latest own message; it glides
+    bubble once the transcript has the text (compared without whitespace runs), only on the latest own message. While the session is not
+    working, the page asks `transcript` for `git` as well (every 8 s; `gitHint`: `git status --porcelain --branch` in
+    the session's folder with the read-only git options, cached 4 s): with uncommitted files, a git icon with a red dot
+    shows next to ⚙ (the files as its tooltip, a click opens the quick messages), hidden again once all is committed; it glides
     in at `termView.popSpeed` (`POP_MS`, 1.3 s to instant, default 0.8 s; Settings › Write mode › Your messages); a failed send removes it and puts the
     text back into the input box. The end of a joined session's thread shows its state (working with the current step, done and
     waiting, listening, ended), polled with the transcript every 2 s from Claude Code's own idle/busy (its status `shell`, a finished turn with
