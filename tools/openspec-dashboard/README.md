@@ -376,7 +376,7 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     runs behind the conversation and is removed when it is done (a still image with reduced motion); the **Write
     mode** tab of the settings (⚙ below the input box opens it there) turns it off, sets the delay (5–600 s), the speed (one step every 160, 100, 60, 40 or 25 ms; 60 by default) and the
     color of your messages (highlighted, the style's accent, or an own color with a readable text color). Both only apply in write mode
-    and are kept in `localStorage` (`osd-term-view`: `look`, `fs`, `matrix`, `rainAfter`, `rainSpeed`, `me`, `ctxWin`). **Set up the hook** is
+    and are kept in `localStorage` (`osd-term-view`: `look`, `fs`, `matrix`, `rainAfter`, `rainSpeed`, `me`, `ctxWin`, `pressEnd`). **Set up the hook** is
     only offered for a picked session that cannot be typed into. The drop-down lists the project's sessions of the last 12 hours: the ones the
     hook below reports, and also those it has not seen (no hook, or started before it), found in Claude Code's own
     records: `~/.claude/sessions/<pid>.json` (session id, folder, idle or busy; the process must still run) for the
@@ -447,7 +447,9 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     while the session waits at its prompt in macOS Terminal) types `/compact`. A `/compact` sent from the page (typed
     or Compact now) starts *the press* behind the thread (a canvas in the Matrix look; the wait rain stays off
     meanwhile) until the transcript has one more `compact_boundary` (`ctx.compactions`), else until the session
-    waits again (or 20 minutes); the finale flies the cube into the gauge and shows the context before → after. A `compact_boundary` shows in the
+    waits again (or 20 minutes); the finale flies the cube into the gauge and shows the context before → after; the bin puts on shades, runs
+    under the press and is flattened (`pressEnd: 'flat'`, the default, 3.8 s) or runs off to the right (`'run'`,
+    2.6 s; Settings › Write mode › While it compacts). A `compact_boundary` shows in the
     thread as a divider with the tokens before and after; the summary Claude Code adds after it is left out.
   - **⤢ Maximize** gives the chat the whole window (`Esc` restores it, a second `Esc` closes it).
   - **Reactions and quotes**: each of Claude's answers has a faint ⋯; hovering the answer (or tapping ⋯) shows a
