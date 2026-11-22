@@ -408,6 +408,12 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     every 3 s), since a browser keeps only six connections per address and every dashboard tab holds one. The button
     is disabled until a second session runs. The left one is the joined session, the
     right one the most recent other running session.
+  - **Pop out** (while writing to a session): the same `?embed` page for that session in a Document Picture-in-Picture
+    window (`documentPictureInPicture.requestWindow`, 440×680, always on top; Chrome and the installed app), else a
+    popup window; the panel lets go of the session (like ⤓ Background); one pop out at a time. A bar on top of the
+    window: **⤺ Back to the panel** (as closing it, also Chrome's "back to tab": the session is joined again in write
+    mode, on its project's page or the overview) and **▁ Minimize** (a terminal icon in the bottom right corner,
+    `localStorage` `osd-pip-dock`, kept across reloads; a click pops it out again).
   - **Agents of a session** (subagents): an `Agent`/`Task` call in the transcript becomes a slim line in the thread and a card in a
     stack in the lower left corner of the conversation (working ones first, done ones for an hour), with a popup for
     its task, result and steps; its state comes
@@ -444,10 +450,13 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     the transcript was ever above 200k tokens (the largest `usage` and `preTokens` of the whole transcript, read once
     in the background in 4 MB steps and then only what was added), 200k when Claude Code compacted it on its own
     below that, else `null` (the page uses `osd-term-view.ctxWin`, 200k by default). **Compact now** (from 70 %,
-    while the session waits at its prompt in macOS Terminal) types `/compact`. A `/compact` sent from the page (typed
-    or Compact now) starts *the press* behind the thread (a canvas in the Matrix look; the wait rain stays off
+    while the session waits at its prompt in macOS Terminal) types `/compact`. **🗑️** at the end of the quick messages (⋯; only while writing to a session in macOS Terminal) types `/compact` too. A
+    `/compact` sent from the page (typed, 🗑️ or Compact now), and for a session in macOS Terminal also a compaction
+    seen on its screen ("Compacting conversation…" while it works: an auto-compaction or `/compact` typed there; the
+    transcript response carries `compacting`, the tab is read at most every 3 s), starts *the press* behind the thread (a canvas in the Matrix look; the wait rain stays off
     meanwhile) until the transcript has one more `compact_boundary` (`ctx.compactions`), else until the session
-    waits again (or 20 minutes); the finale flies the cube into the gauge and shows the context before → after; the bin puts on shades, runs
+    waits again, or its screen no longer shows the compaction for 12 s (or 20 minutes); a compaction on the screen
+    does not start it again within 20 s after one ended; the finale flies the cube into the gauge and shows the context before → after; the bin puts on shades, runs
     under the press and is flattened (`pressEnd: 'flat'`, the default, 3.8 s) or runs off to the right (`'run'`,
     2.6 s; Settings › Write mode › While it compacts). A `compact_boundary` shows in the
     thread as a divider with the tokens before and after; the summary Claude Code adds after it is left out.

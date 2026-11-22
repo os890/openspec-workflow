@@ -1441,6 +1441,18 @@ function screenAsk(screen) {
 const agentCache = new Map(); // agent transcript -> what was read of it (by modification time)
 const askIdOf = (a) => createHash('sha1').update(`${a.question}|${a.options.map((o) => o.label).join('|')}${a.kind ? `|${a.title}|${a.detail}` : ''}`).digest('hex').slice(0, 12);
 const screenAskCache = new Map(); // pid -> { t, ask }
+// a compaction on the screen of a session in macOS Terminal: Claude Code shows "Compacting conversation…" while it
+// compacts, automatically or after /compact typed there; read at most every 3 s (only while the session works)
+const compactCache = new Map(); // pid -> { t, on }
+async function screenCompacting(pid) {
+  const c = compactCache.get(pid);
+  if (c && Date.now() - c.t < 3000) return c.on;
+  const ps = (await runCmd('ps', ['-o', 'tty=', '-p', String(pid)])).out.trim();
+  let on = false;
+  if (ps && ps !== '??') { const sc = await termScript(`/dev/${ps}`, 'check', '').catch(() => null); on = !!sc && /Compacting conversation/i.test(String(sc.out).replace(/\s+$/, '').split('\n').slice(-15).join('\n')); }
+  compactCache.set(pid, { t: Date.now(), on });
+  return on;
+}
 async function screenAskOf(pid, fresh) {
   const c = screenAskCache.get(pid);
   if (!fresh && c && Date.now() - c.t < 1500) return c.ask;
@@ -2201,7 +2213,8 @@ function createAgent(project) {
     const state = x.listening ? 'listening' : r ? (r.asking ? 'asking' : r.waiting ? 'waiting' : 'working') : x.ended || x.elsewhere || x.hookless ? 'ended' : x.waiting ? 'waiting' : 'working';
     // a question of Claude's that waits in its terminal (a menu): read from the screen
     const ask = r?.asking && r.typeable ? await screenAskOf(r.pid) : null;
-    return { entries, next: start + Math.max(end, from0), cut, size, state, shell: !!r?.shell, agents: agentsOf(file), ask: ask && { id: ask.id, kind: ask.kind, title: ask.title, detail: ask.detail, chat: !!ask.chat, question: ask.question, multi: ask.multi, tabs: ask.tabs, options: ask.options }, context: transcriptInfo(file)?.ctx ?? null };
+    const compacting = state === 'working' && r?.typeable ? await screenCompacting(r.pid) : false;
+    return { entries, next: start + Math.max(end, from0), cut, size, state, shell: !!r?.shell, agents: agentsOf(file), compacting, ask: ask && { id: ask.id, kind: ask.kind, title: ask.title, detail: ask.detail, chat: !!ask.chat, question: ask.question, multi: ask.multi, tabs: ask.tabs, options: ask.options }, context: transcriptInfo(file)?.ctx ?? null };
   }
 
   function control({ job: jobId, action }) {

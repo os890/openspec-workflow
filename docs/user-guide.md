@@ -385,7 +385,9 @@ written to through the hook (below).
 
 The drop-down also lists sessions running in other folders. One in another project the dashboard follows is under
 **Other projects**: picking it switches to that project and joins the session there. One in a folder the dashboard
-does not follow is under **Session only**: you follow it without a board, roadmap or specs around it, and
+does not follow is under **Session only**: you follow it without a board, roadmap or specs around it (on a project's
+page read-only; **✎ Write to it** opens it on the overview, outside any project, so it never mixes with the project's
+sessions), and
 **Onboard it as a project…** opens the onboarding chat for its folder in the overview (or **Follow it as a
 project** when the folder has an `openspec/` already). On the overview, the terminal button lists every running session the same
 way.
@@ -439,8 +441,9 @@ session uses, e.g. **45k / 200k**: amber from 60 %, orange from 80 %, when Claud
 conversation (summarize it, and continue with the summary). The tooltip has the exact number and how often it was
 compacted so far; a compaction shows in the thread as a line (*Conversation compacted automatically: 531k → 21k
 tokens*). From 70 %, while the session waits at its prompt, **Compact now** types `/compact` into its terminal, so it
-happens when it suits you, not in the middle of a task. While it compacts (after **Compact now** or `/compact` sent
-from the dashboard), *the press* runs behind the conversation, in the Matrix look: the conversation is a box of its
+happens when it suits you, not in the middle of a task; **🗑️** at the end of the quick messages (⋯) does the same at any time. While
+it compacts (after **Compact now**, 🗑️ or `/compact` sent from the dashboard, and in macOS Terminal also when Claude
+Code compacts by itself or `/compact` was typed there), *the press* runs behind the conversation, in the Matrix look: the conversation is a box of its
 words under a hydraulic press, and every press squeezes it smaller; its words get tinier and denser and turn into
 green code, until it is a small, glowing cube. The words squeezed out tumble into a bin, /dev/null, which counts
 them; at the end it puts on agent shades, grows legs, runs under the press and is flattened too. For a shorter
@@ -472,6 +475,14 @@ you have joined, the right one with the most recent other one. It needs a second
 goes back to the single panel.
 
 ![Two sessions side by side, each with its own input box](images/dashboard-side-by-side.png)
+
+**Pop out.** While you write to a session, **Pop out** next to **Side by side** detaches it into a small window that
+stays on top of your other apps (picture in picture, in Chrome and the installed app; in other browsers a normal
+window), with the whole write mode: the thread, the input box, the quick messages and the press while it compacts.
+The panel lets go of the session meanwhile. **⤺ Back to the panel** at the top of the small window (or closing it)
+brings the session back into the panel, in write mode. **▁ Minimize** closes it and leaves a round terminal icon in
+the dashboard's bottom right corner (it stays after a reload): a click pops the same session out again, so your main
+write session is always one click away; its ✕ removes the icon.
 
 **Send it to the background.** For a longer task, **⤓ Background** (next to **Read only**) closes the panel and
 keeps the session in a list; the panel lets go of it, so the terminal button opens with the picker, for another

@@ -337,8 +337,11 @@ span.ch-warn { color: var(--st-progress); }
 .cq-l { font-size: 12px; color: var(--muted); } .cq-v { font-size: 24px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
 .cq-s { font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
 .cq-spark { margin-top: 4px; }
-/* the quick messages, open: a row of their own below the input row, so Send stays where it is */
-.qk:has(.qk-bar:not([hidden])) { flex-basis: 100%; order: 99; display: flex; align-items: center; flex-wrap: wrap; }
+/* the quick messages, open: in the free space of the tools row when they fit on one line there, else a row of their
+   own below it (qkFit), so Send stays where it is either way */
+.qk:has(.qk-bar:not([hidden])) { flex: 1 1 0; min-width: 0; display: flex; align-items: center; }
+.qk:has(.qk-bar:not([hidden])) .qk-bar { flex: 1 1 auto; min-width: 0; }
+.qk.qk-row:has(.qk-bar:not([hidden])) { flex: 1 1 100%; order: 99; }
 /* in terminal colors */
 .agent-panel.term-look .ask-card { background: #161b22; color: #d6dde6; }
 .agent-panel.term-look .ask-card.done { border-color: #30363d; opacity: 1; }
@@ -1521,7 +1524,7 @@ body.remote #folder-btn, body.remote #hm-install { display: none !important; }
   #project { max-width: 34vw; }
   header.top .live .btn { padding: 6px 8px; }
   .agent-panel, .gh-panel:not(.travel), .gh-panel.max:not(.travel) { inset: 0; width: auto; border-radius: 0; }
-  [data-ag-split], .agent-panel [data-ag-max], .gh-panel [data-gh-max] { display: none !important; }
+  [data-ag-split], [data-ag-pip], .agent-panel [data-ag-max], .gh-panel [data-gh-max] { display: none !important; }
   .tt-bar { padding: 8px 12px; font-size: 12.5px; }
   .tt-bar .tt-nav { margin-left: 0; }
   .digest { padding: 14px 14px; }
@@ -1619,6 +1622,12 @@ body.remote #folder-btn, body.remote #hm-install { display: none !important; }
 .agent-panel.term-look .wait-rain { opacity: 1; background: #0d1117; }
 .agent-panel.rain-on #ag-thread { position: relative; z-index: 1; }
 .agent-panel .press-canvas { opacity: 1; background: #0d1117; }
+/* a minimized pop out: a terminal icon in the bottom right corner; a click pops the session out again */
+.pip-dock { position: fixed; right: 18px; bottom: 18px; z-index: 60; }
+.pip-dock-btn { width: 48px; height: 48px; border-radius: 50%; border: 1px solid #00d65a; background: #0d1117; color: #00d65a; display: grid; place-items: center; cursor: pointer; box-shadow: 0 0 14px rgba(0, 214, 90, .45), var(--shadow); }
+.pip-dock-btn:hover { box-shadow: 0 0 22px rgba(0, 214, 90, .7), var(--shadow); }
+.pip-dock-x { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; border: 0; font-size: 10px; line-height: 1; background: var(--surface); color: var(--muted); box-shadow: var(--shadow); cursor: pointer; display: none; }
+.pip-dock:hover .pip-dock-x, .pip-dock:focus-within .pip-dock-x { display: block; }
 /* while the press runs the conversation steps back (nothing new comes until the compaction is done) */
 .agent-panel.press-on #ag-thread { opacity: .22; transition: opacity .6s; }
 .agent-panel.press-on #ag-thread .term-state { opacity: 1; }
@@ -2346,7 +2355,8 @@ setInterval(() => {
   if (!C) { if (press && !press.end) setPress(false); return; }
   const compacted = (T.ctx?.compactions ?? 0) > C.n;
   const idle = Date.now() - C.since > 10e3 && T.state !== 'working' && !(T.sentAt && Date.now() - T.sentAt < 20e3);
-  if (compacted || idle || Date.now() - C.since > 20 * 60e3) { T.compact = null; return setPress(false, { before: C.before, after: compacted ? T.ctx?.used : null }); }
+  const offScreen = C.seenAt && Date.now() - C.seenAt > 12e3; // its screen showed the compaction and no longer does (it may work on, e.g. with agents in the background)
+  if (compacted || idle || offScreen || Date.now() - C.since > 20 * 60e3) { T.compact = null; T.compactEnd = Date.now(); return setPress(false, { before: C.before, after: compacted ? T.ctx?.used : null }); }
   if (here) setPress(true); else if (press && !press.end) setPress(false);
 }, 1000);
 setInterval(() => {
@@ -4383,6 +4393,10 @@ async function termPoll(force) {
     const stateChanged = T.state !== r.state || T.ctx?.used !== r.context?.used;
     T.next = r.next; T.cut ||= r.cut; T.err = ''; T.state = r.state; T.shell = !!r.shell; const askChanged = (T.ask?.id ?? null) !== (r.ask?.id ?? null); T.ask = r.ask ?? null; const agSig = JSON.stringify((r.agents ?? []).map((a) => [a.agent, a.state, a.steps, a.last])), agentsChanged = agSig !== T.agSig; T.agSig = agSig; T.agents = r.agents ?? []; if (agentsChanged) agentStepsRefresh(); if (askChanged && r.ask) { askState.delete(r.ask.id); askSel.delete(r.ask.id); } // asked anew (the same question again): a fresh card if (r.context) T.ctx = r.context;
     if (r.state === 'working') { T.waitStart ||= T.sentAt || Date.now(); T.sentAt = 0; }
+    // a compaction on its screen (auto-compaction, or /compact typed in its terminal): the press starts, but not again
+    // right after one ended (the screen is read every 3 s, so it may still show the compaction that just finished)
+    if (r.compacting && T.compact) T.compact.seenAt = Date.now();
+    if (r.compacting && !T.compact && Date.now() - (T.compactEnd ?? 0) > 20e3) T.compact = { since: Date.now(), before: T.ctx?.used ?? null, n: T.ctx?.compactions ?? 0, seenAt: Date.now() };
     else if (!T.sentAt) T.waitStart = 0; // done (or not started yet): the wait is over
     termLog.set(sid, T);
     if (fresh || force || stateChanged || askChanged || agentsChanged || T.sentAt) renderAgentLive();
@@ -4536,7 +4550,7 @@ document.addEventListener('click', (e) => {
     location.href = u.toString();
   }
 }, true);
-function closeAgent() { if (EMBED) return; cancelRecording(); ag.open = false; ag.msPick = null; $('agent').hidden = true; document.body.classList.remove('ag-open', 'ag-max'); updateAgentBtn(); }
+function closeAgent() { if (EMBED) return; cancelRecording(); ag.open = false; ag.msPick = null; termUrlSync(); $('agent').hidden = true; document.body.classList.remove('ag-open', 'ag-max'); updateAgentBtn(); }
 // a session picker that was left alone during updates (it had the focus): bring it up to date when it loses it
 document.addEventListener('focusout', (e) => { if (e.target.matches?.('#agent select')) setTimeout(() => ag.open && renderAgentLive(), 0); });
 // ---- side by side: two terminal sessions next to each other, each half the page itself with ?embed (its own picker,
@@ -4563,12 +4577,78 @@ function splitOpen() {
     <div class="split-body"><iframe title="Left session" src="${esc(left)}"></iframe><iframe title="Right session" src="${esc(right)}"></iframe></div>`;
   el.hidden = false; split.open = true; document.body.classList.add('split-open');
 }
+// ---- pop out: the session you write to, detached into a small window that stays on top of other apps (Document
+// Picture-in-Picture, Chrome and the installed app); inside it the same embedded page as one half of "Side by side",
+// below a slim bar: "Back to the panel" and "Minimize". Without that API a popup window. The panel lets go of the
+// session meanwhile; one pop out at a time.
+// Closing the window (its ✕, Chrome's "back to tab" or "Back to the panel") brings the session back into the panel,
+// in write mode. "Minimize" closes it and leaves a terminal icon in the page's bottom right corner (kept across
+// reloads): a click pops the session out again, so the main write session stays at hand.
+const pip = { win: null, s: null, min: false, leaving: false };
+addEventListener('pagehide', () => { pip.leaving = true; }); // the page itself goes (a reload): its pop out closes with it, nothing to bring back
+const PIP_DOCK = 'osd-pip-dock';
+const pipDockGet = () => { try { return JSON.parse(localStorage.getItem(PIP_DOCK) || 'null'); } catch { return null; } };
+const pipDockSet = (s) => { try { if (s) localStorage.setItem(PIP_DOCK, JSON.stringify(s)); else localStorage.removeItem(PIP_DOCK); } catch { /* not kept */ } pipDockRender(); };
+function pipDockRender() {
+  const s = AGENT_TOKEN && !EMBED ? pipDockGet() : null;
+  let el = $('pip-dock');
+  if (!s) { el?.remove(); return; }
+  if (!el) { el = document.createElement('div'); el.id = 'pip-dock'; el.className = 'pip-dock'; document.body.append(el); }
+  el.innerHTML = `<button type="button" class="pip-dock-btn" data-pip-dock title="${esc(`Pop out again: ${s.label}`)}" aria-label="${esc(`Pop out the session ${s.label} again`)}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="2.5"/><path d="m7 10 3 2.5L7 15M12.5 15H17"/></svg></button><button type="button" class="pip-dock-x" data-pip-dock-x title="Remove the icon" aria-label="Remove the icon">✕</button>`;
+}
+const pipLabel = (x) => termMs(x) || (x.prompt ? x.prompt.replace(/\s+/g, ' ').slice(0, 40) : `session ${x.sessionId.slice(0, 8)}`);
+async function pipOpenFor(s) {
+  try { pip.min = false; pip.win?.close(); } catch { /* gone */ }
+  const src = new URL(splitUrl(s.sid, s.projectId), location.href).href;
+  pipDockSet(null);
+  if (window.documentPictureInPicture?.requestWindow) {
+    const win = await documentPictureInPicture.requestWindow({ width: 440, height: 700 });
+    const d = win.document;
+    d.title = s.label;
+    const st = d.createElement('style');
+    st.textContent = `html, body { margin: 0; height: 100%; background: #0d1117; color: #c9d1d9; font: 12px -apple-system, system-ui, sans-serif; }
+      body { display: flex; flex-direction: column; } .bar { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-bottom: 1px solid #30363d; }
+      .bar b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: #00d65a; }
+      .bar button { font: inherit; color: #c9d1d9; background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 2px 8px; cursor: pointer; }
+      .bar button:hover { border-color: #00d65a; color: #fff; } iframe { flex: 1; border: 0; width: 100%; display: block; }`;
+    d.head.append(st);
+    const bar = d.createElement('div'); bar.className = 'bar';
+    bar.innerHTML = `<b></b><button type="button" data-min title="Minimize: a terminal icon in the dashboard's bottom right corner brings it back">▁ Minimize</button><button type="button" data-back title="Back into the dashboard's panel">⤺ Back to the panel</button>`;
+    bar.querySelector('b').textContent = `▣ ${s.label}`;
+    bar.querySelector('[data-min]').onclick = () => { pip.min = true; win.close(); };
+    bar.querySelector('[data-back]').onclick = () => win.close();
+    const f = d.createElement('iframe'); f.src = src; f.title = 'Session'; f.allow = 'microphone; clipboard-write';
+    d.body.append(bar, f);
+    Object.assign(pip, { win, s, min: false });
+    win.addEventListener('pagehide', () => { if (pip.win === win) pipClosed(); });
+  } else Object.assign(pip, { win: window.open(src, 'osd-pip', 'popup,width=440,height=700'), s, min: false });
+  if (ag.term === s.sid) Object.assign(ag, { term: null, termWrite: false, termDetails: false });
+  if (ag.open && ag.convo === 'terminal') closeAgent();
+}
+function pipClosed() {
+  const s = pip.s; pip.win = null;
+  if (!s || pip.leaving) return;
+  if (pip.min) return pipDockSet(s); // minimized: the icon in the corner
+  // back into the panel, in write mode: here when it is this page's project (or the overview for a session only), else there
+  if ((s.projectId || null) === (PROJECT || null)) { openChat('terminal'); Object.assign(ag, { term: s.sid, termWrite: true, termDetails: false, stick: true }); renderAgentLive(); termPoll(true); return; }
+  const u = new URL(splitUrl(s.sid, s.projectId), location.href); u.searchParams.delete('embed'); location.href = u.toString();
+}
+function pipOpen() {
+  const all = [...termSessions().filter((x) => !x.ended), ...(ag.view?.elsewhere ?? [])], cur = all.find((x) => x.sessionId === ag.term);
+  if (cur) return pipOpenFor({ sid: cur.sessionId, projectId: cur.projectId || PROJECT || null, label: pipLabel(cur) });
+}
+document.addEventListener('click', (e) => {
+  if (e.target.closest?.('[data-pip-dock]')) { const s = pipDockGet(); if (s) pipOpenFor(s); return; }
+  if (e.target.closest?.('[data-pip-dock-x]')) pipDockSet(null);
+});
+setTimeout(pipDockRender, 0);
 function splitClose() {
   const el = $('split'); if (!el) return;
   el.hidden = true; el.innerHTML = ''; split.open = false; document.body.classList.remove('split-open');
 }
 document.addEventListener('click', (e) => {
   if (e.target.closest?.('[data-ag-split]')) return splitOpen();
+  if (e.target.closest?.('[data-ag-pip]')) return pipOpen();
   if (e.target.closest?.('[data-split-close]')) return splitClose();
   if (e.target.closest?.('[data-split-swap]')) { const b = $('split').querySelector('.split-body'); b.prepend(b.lastElementChild); }
 });
@@ -4596,7 +4676,7 @@ function buildChatHtml(s, c, ph) {
   const term = c?.terminal || ag.convo === 'terminal'; // also before the session list has arrived
   const chips = term ? '' : '<div class="ag-chips" id="ag-chips" role="tablist"></div>'; // ⌨ Terminal sessions is a panel of its own
   return `
-    <div class="ag-head"><h2>${term ? `${TERM_SVG} Terminal sessions` : 'Chat'}</h2><span class="muted" style="font-size:12.5px">${esc(s.project)}</span>${ag.max ? chips : ''}${term && !EMBED ? '<button class="link ag-splitbtn" type="button" data-ag-split title="Two sessions next to each other, each with its own picker and input box (e.g. the one that implements and the one that reviews)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M12 4v16"/></svg>Side by side</button>' : ''}<button class="link ag-maxbtn" type="button" data-ag-max aria-pressed="${ag.max}" title="${ag.max ? 'Back to the side panel' : 'Use the whole window'}">${ag.max ? '⤡ Restore' : '⤢ Maximize'}</button><button class="link" type="button" data-ag-close>Close ✕</button></div>
+    <div class="ag-head"><h2>${term ? `${TERM_SVG} Terminal sessions` : 'Chat'}</h2><span class="muted" style="font-size:12.5px">${esc(s.project)}</span>${ag.max ? chips : ''}${term && !EMBED ? '<button class="link ag-splitbtn" type="button" data-ag-split title="Two sessions next to each other, each with its own picker and input box (e.g. the one that implements and the one that reviews)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M12 4v16"/></svg>Side by side</button><button class="link ag-splitbtn" type="button" data-ag-pip hidden title="Detach this session into a small window that stays on top of other apps (picture in picture)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><rect x="3" y="4" width="18" height="16" rx="2.5"/><rect x="12" y="12" width="7" height="5" rx="1" fill="currentColor"/></svg>Pop out</button>' : ''}<button class="link ag-maxbtn" type="button" data-ag-max aria-pressed="${ag.max}" title="${ag.max ? 'Back to the side panel' : 'Use the whole window'}">${ag.max ? '⤡ Restore' : '⤢ Maximize'}</button><button class="link" type="button" data-ag-close>Close ✕</button></div>
     ${ag.max ? '' : chips}
     <div class="ag-bar" id="ag-bar"></div>
     <div class="ag-thread" id="ag-thread" aria-live="polite"></div>
@@ -4683,12 +4763,23 @@ function appHtml(app) {
   try { const u = new URL(app); if (REMOTE && /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])$/.test(u.hostname)) { u.hostname = location.hostname; url = u.toString(); } if (u.hostname === '0.0.0.0') { u.hostname = 'localhost'; url = u.toString(); } } catch { return ''; }
   return `<div class="app-row"><a class="btn primary" href="${esc(url)}" target="_blank" rel="noopener">Open the app ↗</a><code>${esc(url)}</code></div>`;
 }
-const quickHtml = () => `<span class="qk"><button type="button" class="rx-more qk-more" data-qk-more aria-expanded="${quick.open}" title="Quick messages" aria-label="Quick messages">⋯</button><span class="qk-bar" ${quick.open ? '' : 'hidden'}>${QUICK.map((q) => (q ? `<button type="button" class="rx" data-qk="${q[0]}" title="${esc(`${q[2]}: sends "${q[0]} ${q[1]}"`)}" aria-label="${esc(q[2])}">${q[0]}</button>` : '<span class="rx-sep"></span>')).join('')}</span></span>`;
+// 🗑️ at the end of the quick messages: /compact, typed into the session (only while writing to one in macOS Terminal)
+const compactOn = () => { const x = ag.term && termSessions().find((y) => y.sessionId === ag.term); return !!(ag.panel === 'chat' && ag.convo === 'terminal' && ag.termWrite && x?.typeable && !x.ended); };
+// the open quick messages stay in the tools row when they fit on one line there, else they get a row of their own
+function qkFit() {
+  for (const q of document.querySelectorAll('.qk')) {
+    const bar = q.querySelector('.qk-bar');
+    q.classList.remove('qk-row');
+    if (bar && !bar.hidden && bar.offsetHeight > (bar.querySelector('.rx')?.offsetHeight ?? 28) * 1.5) q.classList.add('qk-row');
+  }
+}
+addEventListener('resize', qkFit);
+const quickHtml = () => `<span class="qk"><button type="button" class="rx-more qk-more" data-qk-more aria-expanded="${quick.open}" title="Quick messages" aria-label="Quick messages">⋯</button><span class="qk-bar" ${quick.open ? '' : 'hidden'}>${QUICK.map((q) => (q ? `<button type="button" class="rx" data-qk="${q[0]}" title="${esc(`${q[2]}: sends "${q[0]} ${q[1]}"`)}" aria-label="${esc(q[2])}">${q[0]}</button>` : '<span class="rx-sep"></span>')).join('')}<span class="rx-sep ag-compact" ${compactOn() ? '' : 'hidden'}></span><button type="button" class="rx ag-compact" data-ctx-compact ${compactOn() ? '' : 'hidden'} title="Compact: types /compact into its terminal; the press runs while it compacts" aria-label="Compact the conversation (/compact)">🗑️</button></span></span>`;
 document.addEventListener('click', (e) => {
   const more = e.target.closest?.('[data-qk-more]'), qk = e.target.closest?.('[data-qk]');
   if (!more && !qk) return;
   e.stopPropagation();
-  if (more) { quick.open = !quick.open; for (const el of document.querySelectorAll('.qk')) el.outerHTML = quickHtml(); return; }
+  if (more) { quick.open = !quick.open; for (const el of document.querySelectorAll('.qk')) el.outerHTML = quickHtml(); return qkFit(); }
   const q = QUICK.find((y) => y?.[0] === qk.dataset.qk);
   if (q) agentSend(false, `${q[0]} ${q[1]}`);
 }, true);
@@ -5060,6 +5151,9 @@ function termAutoJoin() {
 }
 function renderAgentLive() {
   termAutoJoin();
+  termUrlSync();
+  for (const el of document.querySelectorAll('.qk .ag-compact')) el.hidden = !compactOn(); // 🗑️ in the quick messages
+  qkFit();
   updateAgentBtn();
   if (!ag.open || !ag.view) return;
   for (const el of document.querySelectorAll('[data-ag-voice]')) el.hidden = !ag.view.stt?.available;
@@ -5071,6 +5165,7 @@ function renderAgentLive() {
     if ($('ag-text')) $('ag-text').placeholder = chatPlaceholder(c, ui.state ? { project: ui.state.project } : { project: '' });
     if ($('ag-chips')) $('ag-chips').innerHTML = list.filter((x) => !x.terminal).map((x) => `<button type="button" class="chip" role="tab" data-ag-convo="${esc(x.id)}" aria-selected="${x.id === c?.id}">${x.live ? '<span class="dot on"></span>' : ''}${x.session ? 'Session · ' : ''}${esc(x.label)}</button>`).join('');
     morphHtml($('ag-bar'), barHtml(c)); // morph: an open session picker stays open
+    const pb = document.querySelector('#agent [data-ag-pip]'); if (pb) pb.hidden = !(ag.term && ag.termWrite); // pop out: while writing to a session
     const sb = document.querySelector('#agent [data-ag-split]'); // side by side needs a second running session
     if (sb) {
       const others = [...termSessions().filter((x) => !x.ended), ...(ag.view?.elsewhere ?? [])].filter((x) => x.sessionId !== ag.term).length;
@@ -5164,7 +5259,11 @@ async function waitForSession(jobId) {
 }
 document.addEventListener('click', (e) => {
   const t = e.target;
-  if (t.closest('#term-btn')) { e.stopPropagation(); if (ag.open && ag.panel === 'chat' && ag.convo === 'terminal') return closeAgent(); return PROJECT ? openChat('terminal') : openTermOverview(); }
+  if (t.closest('#term-btn')) {
+    e.stopPropagation(); if (ag.open && ag.panel === 'chat' && ag.convo === 'terminal') return closeAgent();
+    if (ag.term && bgList.some((y) => y.sessionId === ag.term)) Object.assign(ag, { term: null, termWrite: false, termDetails: false }); // sent to the background: the picker, not that session
+    return PROJECT ? openChat('terminal') : openTermOverview();
+  }
   const chatBtn = t.closest('[data-chat-btn]');
   if (chatBtn) { e.stopPropagation(); if (ag.open && ag.panel === 'chat' && ag.convo !== 'terminal') return closeAgent(); if (ag.convo === 'terminal') ag.convo = 'assistant'; return openChat(); }
   const chat = t.closest('[data-chat]');
@@ -5214,6 +5313,17 @@ document.addEventListener('click', (e) => {
     return closeAgent();
   }
   if (t.closest('[data-ag-term-details]')) { ag.termDetails = !ag.termDetails; renderAgentLive(); return; }
+  if (t.closest('[data-ag-term-write]')) {
+    // a session in a folder the dashboard does not follow ("session only"), seen from a project's page: written to in
+    // the projectless space (the overview), not in this project's panel; it can be followed or onboarded from there
+    const xo = PROJECT && !ag.termWrite && (ag.view?.elsewhere ?? []).find((y) => y.sessionId === ag.term && !y.projectId);
+    if (xo) {
+      const u = new URL(location.href);
+      for (const k of ['project', 'overview', 'panel', 'term', 'write', 'onboard', 'convo']) u.searchParams.delete(k);
+      u.searchParams.set('overview', ''); u.searchParams.set('term', xo.sessionId); u.searchParams.set('write', '1'); u.hash = '';
+      location.href = u.toString(); return;
+    }
+  }
   if (t.closest('[data-ag-term-write]')) { ag.termDetails = false; ag.termWrite = !ag.termWrite; renderAgentLive(); if (ag.termWrite) $('ag-text')?.focus(); return; }
   if (t.closest('[data-ag-term-new]')) return termNew();
   if (t.closest('[data-ctx-compact]')) {
@@ -6293,6 +6403,17 @@ document.addEventListener('click', async (e) => {
   } catch (err) { ui.ovNote = `✕ ${err.message}`; b.disabled = false; }
   if (ui.overview) renderOverview(ui.overview);
 }, true);
+// the address follows the joined session: ?term=<session> (&write=1 while writing; on a project's page also
+// panel=chat), so a reload joins it again and you go on where you were; once it is let go (⤓ Background, another
+// session, the panel closed) they leave the address, so a reload does not bring it back
+function termUrlSync() {
+  if (EMBED || SNAPSHOT) return;
+  const u = new URL(location.href), q = u.searchParams, on = ag.open && ag.panel === 'chat' && ag.convo === 'terminal' && !!ag.term;
+  const before = q.toString();
+  if (on) { q.set('term', ag.term); if (ag.termWrite) q.set('write', '1'); else q.delete('write'); if (PROJECT) q.set('panel', 'chat'); }
+  else if (q.has('term')) { q.delete('term'); q.delete('write'); if (PROJECT && q.get('panel') === 'chat') q.delete('panel'); }
+  if (q.toString() !== before) history.replaceState(null, '', u);
+}
 function renderOverview(o) {
   $('folder-btn').hidden = true;
   if (AGENT_TOKEN) { $('podman-btn').hidden = false; $('usage-btn').hidden = false; } // the overview has the room: Podman and the usage at a click
