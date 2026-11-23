@@ -457,10 +457,10 @@ question at a time. For the further questions the card has one field. When Claud
 when several may be chosen), and with several questions its recommendation for each. Answered questions stay in the
 thread with their answer.
 
-**When it asks for permission.** A permission prompt (run a command, edit a file, …, also one that a sub-agent asks
-for) shows up as a card too: **🔐 It asks for permission**, with what it wants to do (the command, the file, Claude
+**When it asks for permission.** A permission prompt (run a command, edit a file, read a file outside the project, …,
+also one that a sub-agent asks for) shows up as a card too: **🔐 It asks for permission**, with what it wants to do (the command, the file, Claude
 Code's warning) and the prompt's options (Yes, Yes and don't ask again, No). A click on an option and **Send answer**
-picks it in the terminal. Your own words in the field decline it (No) and go to the session as what it should do
+picks it in the terminal. Your own words in the field decline it (a No that changes no setting) and go to the session as what it should do
 instead. Other prompts that the dashboard cannot read still say "Needs you": answer those in the terminal.
 
 ![Claude's question as a card: the options, the recommended one marked, an own answer, 👍 Recommended](images/dashboard-ask.png)

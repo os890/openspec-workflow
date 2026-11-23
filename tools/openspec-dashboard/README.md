@@ -508,11 +508,12 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     interrupt). Ctrl+C interrupts a turn the same way, and the Return after it finds an empty prompt. Refused while
     the session waits (Claude Code then asks for a second Ctrl+C to quit), while a menu is on its screen, and within
     3 s of the last one. Otherwise Esc keeps its meaning on the page (shrink or close the panel).
-  - **Permission prompts** (a command, an edit, a fetch, also a sub-agent's): read from the Terminal tab the same
-    way (`ask.kind: 'permission'`): the "Do you want to …?" line, its numbered options, and above it up to the last
+  - **Permission prompts** (a command, an edit, a fetch, a read outside the working directories, also a sub-agent's):
+    read from the Terminal tab the same way (`ask.kind: 'permission'`): the question line right above numbered
+    options ("Do you want to …?", "Allow this read outside the working directories?"), its options, and above it up to the last
     horizontal rule what it wants to do (`title`, e.g. "Bash command · from the general-purpose agent", and `detail`:
     the command or file and Claude Code's warning; the id includes them). An option is typed as its digit; an own
-    answer picks the "No" option and, once the session is idle, types `[Declined: <title>] <your words>`.
+    answer picks a "No" option that changes no setting ("No, and ask again next time", not "…block … from now on") and, once the session is idle, types `[Declined: <title>] <your words>`.
   - **Context gauge**: the session list, the transcript and `/api/sessions/status` carry `ctx` (`used`, `window`,
     `compactions`): `used` from the last main-chain assistant message's `usage` (input + cache creation + cache read
     + output tokens) or, after a `compact_boundary`, its `postTokens`; `window` is 1M when the model id has `[1m]` or

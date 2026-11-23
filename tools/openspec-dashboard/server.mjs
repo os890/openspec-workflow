@@ -1504,10 +1504,11 @@ const askQuestions = (input) => (Array.isArray(input?.questions) ? input.questio
 }));
 // While the menu is open, the question is not in the transcript yet (Claude Code writes it with the answer): it is
 // read from the session's terminal screen.
-// a permission prompt of Claude Code (a command, an edit, a fetch, also one a sub-agent asks for): "Do you want to …?"
-// with numbered options, below what it wants to do (between the last horizontal rule and the question)
+// a permission prompt of Claude Code (a command, an edit, a fetch, a read outside the working directories, also one a
+// sub-agent asks for): a question ("Do you want to …?", "Allow this read …?") right above numbered options, below
+// what it wants to do (between the last horizontal rule and the question)
 function screenPermission(ls) {
-  const qi = ls.findLastIndex((l) => /^\s*Do you want to .+\?\s*$/.test(l));
+  const qi = ls.findLastIndex((l, i) => /\S.*\?\s*$/.test(l) && /^\s*(?:❯\s*)?1\.\s/.test(ls.slice(i + 1).find((x) => x.trim()) ?? ''));
   if (qi < 0 || ls.slice(qi).some((l) => /Enter to select/.test(l))) return null;
   const optRe = /^\s*(?:❯\s*)?(\d+)\.\s+(.*?)\s*$/, options = [];
   for (let i = qi + 1; i < ls.length; i++) {
@@ -1521,7 +1522,8 @@ function screenPermission(ls) {
   const body = ls.slice(top + 1, qi).map((l) => l.replace(/\s+$/, '')).filter((l) => l.trim() && !/^\s*[╌─]{10,}$/.test(l));
   const title = (body.shift() ?? '').trim();
   const detail = body.map((l) => l.replace(/^\s?│ ?/, '').replace(/^ /, '')).join('\n').slice(0, 2000);
-  const no = options.find((o) => /^No\b/i.test(o.label));
+  const nos = options.filter((o) => /^No\b/i.test(o.label)); // to decline with own words: a "No" that changes no setting ("No, and ask again next time", not "…block … from now on")
+  const no = nos.find((o) => !/from now on|block|don't ask|never|always/i.test(o.label)) ?? nos[0];
   return { kind: 'permission', question: ls[qi].trim(), title, detail, multi: false, tabs: [], options: options.map(({ label }) => ({ label, description: '' })), chat: no ? no.n : null };
 }
 function screenAsk(screen) {
