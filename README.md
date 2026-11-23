@@ -230,10 +230,10 @@ What makes it more than a status page:
 - **Quick replies in the chat.** React to an answer with one click (👍 ✅ 🙏 🎉 💡; 🌿 accepts a proposal but on a
   new branch), ask for it again in simpler
   words (🔁), as a summary (📝) or as a table (📊), have it tried again (🔄), or quote it (↩, also just a selected
-  part). Under the input box, one click has a working session commit (green arrow) or commit and push (blue arrow),
-  or asks it for its status (👀), blockers (❓), changes so far
+  part). Under the input box, one click asks a working session for its status (👀), blockers (❓), changes so far
   (🔍) or ticket progress (📍), has it pause after this step (⏸), stay on the ticket (🎯), wrap up (🧹) or run
-  the quality gate (🧪). Claude gets a short
+  the quality gate (🧪), or has it commit (green arrow) or commit and push (blue arrow); while its folder has
+  uncommitted files, those two arrows sit right next to ⚙. Claude gets a short
   reference to the answer, so it knows what you mean without the answer being sent again; the chat stays quiet
   with just a faint ⋯ until you hover an answer.
 - **Voice and rephrasing, locally.** Dictate into any text box with a local speech-to-text container, and let a

@@ -169,6 +169,21 @@ details.group.current > summary .num { color: var(--st-progress); background: co
 .val-table .op { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); }
 .val-table .op.ADDED { color: var(--st-complete); } .val-table .op.MODIFIED { color: var(--st-progress); } .val-table .op.REMOVED { color: var(--st-blocked); }
 .md { font-size: 14px; max-width: 78ch; }
+.ag-tools .ag-new { margin-left: auto; margin-right: 6px; font-size: 12.5px; white-space: nowrap; }
+.ag-tools .ag-new[hidden] { display: none; }
+.ag-tools .ag-new:not([hidden]) + [data-ag-send] { margin-left: 0; }
+.term-bg { margin: 4px 0 8px; font-size: 12px; display: grid; gap: 3px; }
+.term-bg-row { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.term-bg-row code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
+.term-bg-row .muted { white-space: nowrap; }
+.btw { margin: 8px 0; padding: 8px 12px; border: 1px dashed var(--line); border-radius: 12px; background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
+.btw-q { display: flex; align-items: baseline; gap: 8px; font-size: 13px; color: var(--muted); }
+.btw-q > span:nth-child(2) { flex: 1; min-width: 0; color: var(--ink); font-style: italic; }
+.btw-tag { font: 700 10.5px/1 var(--mono, ui-monospace, Menlo, monospace); text-transform: uppercase; letter-spacing: .05em; padding: 3px 6px; border-radius: 999px; color: var(--st-specified); background: color-mix(in srgb, var(--st-specified) 14%, transparent); flex: none; }
+.btw-a { margin-top: 6px; font-size: 13.5px; }
+.btw-q .meta { font-size: 10.5px; opacity: .7; white-space: nowrap; }
+.btw-a.muted { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.btw-a.warn { color: var(--st-blocked); }
 .md h1, .md h2, .md h3, .md h4 { line-height: 1.3; margin: 1.2em 0 .4em; text-wrap: balance; font-weight: 800; }
 .md h1 { font-size: 18px; } .md h2 { font-size: 16px; } .md h3 { font-size: 14.5px; } .md h4 { font-size: 13.5px; color: var(--muted); }
 .md > :first-child { margin-top: 0; }
@@ -527,9 +542,8 @@ details.as-sec summary.as-l { cursor: pointer; } .as-task { white-space: pre-wra
 .set-note { font-size: 12.5px; color: var(--muted); } .set-note.warn { color: var(--st-blocked); font-weight: 600; }
 .set-test { margin: 10px 0 4px; font-size: 13px; background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
 .set-dialog .ag-note { margin-top: 10px; }
-.ag-git { position: relative; display: inline-flex; align-items: center; padding: 0 4px; color: var(--muted); text-decoration: none; }
-.ag-git[hidden] { display: none; } .ag-git:hover { color: var(--accent); }
-.ag-git::after { content: ""; position: absolute; top: -3px; right: 0; width: 7px; height: 7px; border-radius: 50%; background: #e5484d; box-shadow: 0 0 0 1.5px var(--surface); }
+.ag-git { display: inline-flex; align-items: center; gap: 2px; }
+.ag-git[hidden] { display: none; }
 .ag-gear { font-size: 16px; text-decoration: none; padding: 0 4px; color: var(--muted); } .ag-gear:hover { color: var(--accent); }
 .set-tabs { display: flex; gap: 4px; margin: 4px 0 8px; }
 .pm-grid { display: grid; grid-template-columns: 96px 1fr; gap: 6px 12px; font-size: 13px; align-items: center; }
@@ -1883,7 +1897,7 @@ body.remote #folder-btn, body.remote #hm-install { display: none !important; }
 body.embed > header, body.embed > .wrap, body.embed #tt-bar, body.embed #board, body.embed .board-wrap { display: none !important; }
 body.embed { background: var(--surface); }
 body.embed #agent { inset: 0 !important; width: auto !important; border-radius: 0; box-shadow: none; border: 0; }
-body.embed [data-ag-max], body.embed [data-ag-close] { display: none; }
+body.embed [data-ag-max], body.embed [data-ag-close], body.embed [data-sc-max], body.embed [data-sc-close] { display: none; }
 .split { position: fixed; inset: 8px; z-index: 75; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; box-shadow: var(--shadow-hover), 0 24px 60px -12px rgba(0, 0, 0, .28); }
 .split-head { display: flex; align-items: baseline; gap: 12px; padding: 12px 18px 10px; border-bottom: 1px solid var(--line); }
 .split-head h2 { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -.02em; white-space: nowrap; }
@@ -3597,13 +3611,14 @@ function ntHtml(s) {
       <label>Area<input data-nt="area" value="${esc(n.area ?? '')}" placeholder="e.g. tasks" autocomplete="off"></label>
       <label>Milestone<select data-nt="milestone">${opt('', '— none —')}${s.milestones.map((m) => opt(m.id, `${m.id} ${m.title}`)).join('')}</select></label>
       <label>Depends on<input data-nt="deps" value="${esc(n.deps ?? '')}" placeholder="e.g. 3, 5a–5b (soft in parentheses)" autocomplete="off"></label>
+      <label class="wide" title="Where Add to roadmap puts its row: at the end of the milestone, or right below a row (after 3 → 3a), so it comes before the rows that build on what it changes">Position<select data-nt="after"><option value="" ${n.after ? '' : 'selected'}>At the end of the milestone</option>${s.changes.filter((c) => c.inRoadmap && c.order).sort((a, b) => (parseInt(a.order, 10) - parseInt(b.order, 10)) || String(a.order).localeCompare(String(b.order))).map((c) => `<option value="${esc(c.order)}" ${String(n.after ?? '') === String(c.order) ? 'selected' : ''}>After #${esc(c.order)} ${esc(c.name)}</option>`).join('')}</select></label>
       <label class="wide">Goal<input data-nt="goal" value="${esc(n.goal ?? '')}" placeholder="One line, as in the roadmap's Goal column" autocomplete="off"></label>
       <label class="wide"><span>Proposal <span class="muted" style="font-weight:400">· openspec/backlog/&lt;name&gt;.md</span></span><textarea data-nt="body" rows="11" spellcheck="true">${esc(n.body ?? NT_BODY)}</textarea></label>
     </div>
     ${planned ? `<div class="ag-note">This ticket is planned already as <b>#${esc(planned.order)}</b>${planned.milestone ? ` in ${esc(planned.milestone)}` : ''} and has not started: <b>Update draft</b> replaces its proposal; the roadmap row stays as it is.</div>` : ''}
     <div class="nt-actions">
       ${planned ? `<button class="btn primary" type="button" data-nt-save="update">Update draft #${esc(planned.order)}</button>` : ''}
-      <button class="btn ${planned ? '' : 'primary'}" type="button" data-nt-save="roadmap" title="Writes the draft and a roadmap row at the end of the milestone, ready to start">Add to roadmap</button>
+      <button class="btn ${planned ? '' : 'primary'}" type="button" data-nt-save="roadmap" title="Writes the draft and a roadmap row (at the position chosen above), ready to start">Add to roadmap</button>
       <button class="btn" type="button" data-nt-save="idea" title="Writes only the draft, marked as an idea that needs refinement">Save as idea</button>
       <button class="btn" type="button" data-nt-brainstorm title="Discuss it in the chat first; nothing is saved until you save the ticket">💡 Brainstorm it first</button>
       <span class="nt-note ${n.error ? 'warn' : ''}">${esc(n.note ?? '')}</span>
@@ -3631,14 +3646,14 @@ async function ntSave(mode) {
   if (mode === 'update') n.note = 'Updating…';
   renderBoard(ui.state);
   try {
-    const r = await fetch(withProject('/api/backlog/add'), { method: 'POST', headers: { 'content-type': 'application/json', 'x-osd-token': AGENT_TOKEN },
-      body: JSON.stringify({ name, area: n.area, milestone: n.milestone, dependsOn: n.deps, goal: n.goal, body: n.body, mode, replaces: n.replaces || undefined }) });
+    const r = await fetch(withProject('/api/backlog/add'), { method: 'POST', signal: AbortSignal.timeout(20000), headers: { 'content-type': 'application/json', 'x-osd-token': AGENT_TOKEN },
+      body: JSON.stringify({ name, area: n.area, milestone: n.milestone, dependsOn: n.deps, after: n.after || undefined, goal: n.goal, body: n.body, mode, replaces: n.replaces || undefined }) });
     const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
     if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
     ui.nt = { open: false };
     ui.ntDone = { name: d.saved, mode: d.mode, order: d.order, milestone: mode === 'roadmap' ? n.milestone : '' };
     ui.lastPick = d.saved;
-  } catch (e) { Object.assign(n, { note: '✕ ' + e.message, error: true }); }
+  } catch (e) { Object.assign(n, { note: '✕ ' + (e.name === 'TimeoutError' ? 'No answer from the dashboard within 20 s (too many dashboard tabs or windows open? Each holds a connection; close some, then try again). Nothing was saved by this click unless the roadmap shows it.' : e.message), error: true }); }
   renderBoard(ui.state);
 }
 async function ideaText(name) {
@@ -3651,7 +3666,7 @@ function startBrainstorm({ seed, idea } = {}) {
   ag.max = false;
   openChat('brainstorm');
   if (!seed) return;
-  ag.stick = true;
+  ag.stick = true; ag.fresh.delete('brainstorm');
   agentPost('chat', { text: seed, mode: 'brainstorm', fresh: true, idea }).catch((e) => { $('ag-route').innerHTML = `<span style="color:var(--st-blocked)">✕ ${esc(e.message)}</span>`; });
 }
 let ntTimer = null;
@@ -3709,7 +3724,16 @@ document.addEventListener('click', async (e) => {
     const tk = ag.tickets.get(hit.dataset.tkSave);
     if (!tk) return;
     const idea = tk.idea && ui.state.changes.some((c) => c.name === tk.idea && c.status === 'idea') ? tk.idea : null;
-    return ntOpen({ name: tk.name, area: tk.area, milestone: tk.milestone, deps: tk.deps, goal: tk.goal, body: tk.body, replaces: idea, fromBrainstorm: true });
+    const fields = { name: tk.name, area: tk.area, milestone: tk.milestone, deps: tk.deps, after: tk.after, goal: tk.goal, body: tk.body, replaces: idea, fromBrainstorm: true };
+    // a popped out chat has no board: the dashboard's window opens the form (it hears it through localStorage)
+    if (EMBED) {
+      try { localStorage.setItem('osd-tk-open', JSON.stringify({ project: PROJECT, fields, t: Date.now() })); } catch { /* not handed over */ }
+      hit.nextElementSibling.textContent = 'opened in the dashboard window, in its backlog';
+      return;
+    }
+    // the form is in the backlog behind the chat: a maximized chat goes back to the side panel first (as ⤡ Restore)
+    if (ag.max) { if ($('ag-text')) ag.drafts['chat-' + ag.convo] = $('ag-text').value; ag.max = false; try { localStorage.setItem('osd-chat-max', '0'); } catch {} buildAgent(); }
+    return ntOpen({ ...fields });
   }
 }, true);
 
@@ -3816,13 +3840,25 @@ function accept(next) {
   render();
   if (ag.open && !$('ag-thread') && !$('ag-body')) buildAgent(); else renderAgentLive();
 }
+// the live connection of a page. A browser keeps only 6 connections per address, and every dashboard tab and window
+// holds one: a 7th request (a save, a send) would wait forever. So a tab in the background lets go of it after 20 s
+// and takes it up again when it is shown (the server then sends the whole state again)
+function liveSource(url, setup) {
+  let es = null, timer = null;
+  const open = () => { if (es) return; es = new EventSource(url); setup(es); };
+  const close = () => { es?.close(); es = null; $('conn').innerHTML = '<span class="dot"></span>paused in the background'; };
+  document.addEventListener('visibilitychange', () => { clearTimeout(timer); if (document.hidden) timer = setTimeout(close, 20000); else open(); });
+  open();
+  return { close: () => { clearTimeout(timer); es?.close(); es = null; } };
+}
 function connect() {
-  const es = new EventSource(withProject('/events'));
-  es.onopen = () => { $('conn').innerHTML = '<span class="dot on"></span>live'; };
-  es.onmessage = (ev) => { const d = JSON.parse(ev.data); $('conn').innerHTML = `<span class="dot on"></span>live · ${hhmm(d.scannedAt)}`; accept(d); };
-  es.onerror = () => { $('conn').innerHTML = '<span class="dot off"></span>disconnected, retrying…'; };
-  es.addEventListener('agent', (ev) => { ag.view = JSON.parse(ev.data); renderAgentLive(); icRefresh(); if (pd.sent) renderPropose(); });
-  es.addEventListener('gone', () => { es.close(); location.href = hrefFor(null); }); // unfollowed or archived
+  const live = liveSource(withProject('/events'), (es) => {
+    es.onopen = () => { $('conn').innerHTML = '<span class="dot on"></span>live'; };
+    es.onmessage = (ev) => { const d = JSON.parse(ev.data); $('conn').innerHTML = `<span class="dot on"></span>live · ${hhmm(d.scannedAt)}`; accept(d); };
+    es.onerror = () => { $('conn').innerHTML = '<span class="dot off"></span>disconnected, retrying…'; };
+    es.addEventListener('agent', (ev) => { ag.view = JSON.parse(ev.data); renderAgentLive(); icRefresh(); if (pd.sent) renderPropose(); });
+    es.addEventListener('gone', () => { live.close(); location.href = hrefFor(null); }); // unfollowed or archived
+  });
 }
 
 // ------------------------------------------------------------ interaction
@@ -4169,15 +4205,23 @@ setInterval(() => ui.state && (renderHeader(ui.state), renderFeed(ui.state)), 30
 const AGENT_TOKEN = document.querySelector('meta[name="osd-agent"]')?.content || '';
 let chatMax = false;
 try { chatMax = localStorage.getItem('osd-chat-max') === '1'; } catch {}
-const ag = { tickets: new Map(), max: chatMax, open: false, panel: 'chat', view: null, convo: 'assistant', target: null, mode: 'ask', note: '', force: null, busy: false, expanded: new Map(), drafts: {}, term: '', termWrite: false };
+const ag = { tickets: new Map(), fresh: new Set(), max: chatMax, open: false, panel: 'chat', view: null, convo: 'assistant', target: null, mode: 'ask', note: '', force: null, busy: false, expanded: new Map(), drafts: {}, term: '', termWrite: false };
 const JOB_LABEL = { starting: 'starting', running: 'working', idle: 'waiting for you', done: 'ended', stopped: 'stopped', failed: 'failed' };
 const JOB_ST = { starting: 'in-progress', running: 'in-progress', idle: 'specified', done: 'complete', stopped: 'proposed', failed: 'missing' };
 const alive = (j) => ['starting', 'running', 'idle'].includes(j?.status);
 
+// never waiting forever: a request that gets no answer (the browser holds it back while all its 6 connections to this
+// address are taken by dashboard tabs and windows) fails after 90 s, and what was sent goes back into the input box
 async function agentPost(action, body) {
-  const r = await fetch(withProject('/api/agent/' + action), {
-    method: 'POST', headers: { 'content-type': 'application/json', 'x-osd-token': AGENT_TOKEN }, body: JSON.stringify(body),
-  });
+  let r;
+  try {
+    r = await fetch(withProject('/api/agent/' + action), {
+      method: 'POST', signal: AbortSignal.timeout(90000), headers: { 'content-type': 'application/json', 'x-osd-token': AGENT_TOKEN }, body: JSON.stringify(body),
+    });
+  } catch (e) {
+    if (e.name === 'TimeoutError') throw new Error('No answer from the dashboard within 90 s: probably too many dashboard tabs or windows are open (the browser keeps only 6 connections to it). Close or reload some, then send again.');
+    throw e;
+  }
   const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
   if (!r.ok) throw Object.assign(new Error(d.error || `HTTP ${r.status}`), d);
   return d;
@@ -4236,13 +4280,20 @@ function ctxHtml(c, short) {
 // a session a milestone's ▶ started: named after the milestone (its title as the board has it now), not its last prompt
 const termMs = (x) => (x?.milestone ? `▶ ${x.milestone} ${ui.state?.milestones?.find((m) => m.id === x.milestone && !x.elsewhere)?.title ?? x.milestoneTitle ?? ''}`.trim() : '');
 const termLabel = (x) => `${x.hookless && !x.ended && !x.typeable ? '◌ ' : x.ended ? '' : x.listening || x.listen ? '👂 ' : x.waiting ? '' : '● '}${termMs(x) || (x.prompt ? `“${x.prompt.replace(/\s+/g, ' ').slice(0, 48)}${x.prompt.length > 48 ? '…' : ''}”` : 'session')} · ${x.ended ? 'ended' : x.waiting ? 'waiting' : 'working'} · ${ago(x.t)} · ${x.sessionId.slice(0, 8)}${x.hookless && !x.ended && !x.typeable ? ' · read-only' : ''}`;
+// a side question (/btw) asked from here: Claude Code answers it in an overlay of its terminal and keeps neither, so
+// the server reads the answer from the screen and closes the overlay; a card of its own, not part of the conversation
+const btwHtml = (b) => `<div class="btw"><div class="btw-q"><span class="btw-tag" title="A side question (/btw): answered from the conversation, without tools, and not added to it">btw</span><span>${esc(b.q)}</span><span class="meta">${hhmm(b.t)}</span></div>${
+  b.state === 'answering' ? '<div class="btw-a muted"><span class="ag-spin"></span>Answering…</div>' : b.state === 'failed' ? `<div class="btw-a warn">✕ ${esc(b.error || 'No answer.')}</div>` : `<div class="btw-a md">${md(b.answer || '(empty)')}</div>`}</div>`;
+// what the session still runs in the background (Claude Code's "· 1 shell"): each command, its ports, how long it runs
+const bgDur = (s) => (s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min` : s >= 60 ? `${Math.floor(s / 60)} min` : `${s} s`);
+const bgHtml = (T) => (T.background?.length ? `<div class="term-bg"><span class="muted">Still running in the background, started by the session (⏹️ in the quick messages stops the app):</span>${T.background.map((b) => `<div class="term-bg-row"><code title="${esc(b.cmd)}">${esc(b.cmd.length > 90 ? b.cmd.slice(0, 89) + '…' : b.cmd)}</code><span class="muted">${b.ports.length ? `port ${b.ports.map((p) => esc(p)).join(', ')} · ` : ''}for ${bgDur(b.secs)}</span></div>`).join('')}</div>` : '');
 function termThreadHtml(sid) {
   const T = termLog.get(sid);
   if (!T) return '<div class="ag-empty">Loading the session…</div>';
   const xo = (ag.view?.elsewhere ?? []).find((y) => y.sessionId === sid && !y.projectId); // session only: its messages are in its folder's inbox
   const sx = xo ?? termSessions().find((y) => y.sessionId === sid), waitingNow = sx?.waiting && !sx?.listening;
   const mine = (xo ? xo.messages ?? [] : (ag.view?.messages ?? []).filter((m) => m.session === sid)).map((m) => ({ t: m.t, kind: 'mine', m, folder: xo?.folder }));
-  const items = [...T.entries.filter((e) => !(e.kind === 'user' && /from the OpenSpec dashboard/.test(e.text))), ...mine].sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
+  const items = [...T.entries.filter((e) => !(e.kind === 'user' && /from the OpenSpec dashboard/.test(e.text))), ...mine, ...(T.btw ?? []).map((b) => ({ t: b.t, kind: 'btw', b }))].sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
   const out = T.cut ? ['<div class="ag-note" style="text-align:center">Earlier parts of this session are not shown.</div>'] : [];
   // reactions and quotes, as in the chat: only while writing to it
   const canWrite = ag.termWrite && sx && !sx.ended && (!sx.hookless || sx.typeable);
@@ -4261,6 +4312,8 @@ function termThreadHtml(sid) {
   for (const e of items) {
     if (e.kind === 'result' || (e.kind === 'error' && e.id && cli)) continue;
     if (e.kind === 'user' || e.kind === 'mine') lastAsk = e.kind === 'mine' ? e.m.text : e.text;
+    if (e.kind === 'btw') { flush(); out.push(btwHtml(e.b)); continue; }
+    if (e.kind === 'agentmsg') { flush(); out.push(agentMsgHtml(e, (T.agents ?? []).find((a) => a.agent === e.from))); continue; }
     if (e.kind === 'agent') { flush(); out.push(agentMarkHtml(e, (T.agents ?? []).find((a) => a.toolUseId === e.id))); continue; }
     if (e.kind === 'ask') { flush(); const after = items.slice(items.indexOf(e) + 1, items.indexOf(e) + 8); out.push(askDoneHtml(e, results.get(e.id), after.some((x) => x.kind === 'user' && /^\[Answers to your question/.test(x.text)))); continue; }
     if (e.kind === 'note') { flush(); out.push(`<div class="term-note"><span>${esc(e.text)}</span>${e.t ? `<span class="meta">${hhmm(e.t)}</span>` : ''}</div>`); continue; }
@@ -4311,6 +4364,14 @@ const agMeta = (a) => [a.steps != null ? `${a.steps} step${a.steps === 1 ? '' : 
 // in the thread, where it was started: one line (a click shows the details)
 function agentMarkHtml(e, a) {
   return `<button type="button" class="ac-mark ${a ? AG_STATE[a.state][0] : 'ac-working'}" ${a ? `data-sa-open="${esc(a.agent)}"` : 'disabled'} title="${a ? 'Show the agent: its task, steps and result' : 'Starting…'}">🤖 <b>${esc(e.text)}</b> · ${agIcon(a)}${a ? AG_STATE[a.state][1] : 'starting'}</button>`;
+}
+// what an agent hands back to the session (a sub-agent's report, or another session's message): Claude Code puts it in
+// as a prompt, but you did not write it. One line, like where the agent was started (a click shows the agent with
+// its result); a message without a known agent unfolds to its text
+function agentMsgHtml(e, a) {
+  const what = e.handback ? 'reported back' : 'sent a message';
+  if (a) return `<button type="button" class="ac-mark ac-back ${AG_STATE[a.state][0]}" data-sa-open="${esc(a.agent)}" title="${esc(`The agent's report went to the session (as a message from the agent, not from you). Click to show the agent with its result.`)}">↩ 🤖 <b>${esc(a.description || 'Agent')}</b> · ${what}${e.t ? ` · ${hhmm(e.t)}` : ''}</button>`;
+  return `<details class="steps ac-back-msg"><summary>↩ 🤖 ${e.handback ? 'An agent reported back' : 'Another session sent a message'}${e.t ? ` · ${hhmm(e.t)}` : ''}</summary><div class="md">${md(e.text || '')}</div></details>`;
 }
 // the stack in the lower left corner: working ones first, then the ones done in the last hour (✕ puts one away)
 const agHidden = new Set(), agStack = { open: false };
@@ -4427,9 +4488,9 @@ function termStateHtml(T, items, canAnswer) {
   if (T.state === 'waiting' && items.length) { // the app the last answer started: its button next to "Done"
     const i = items.findLastIndex((e) => e.kind === 'text' && !e.sub), ask = items.slice(0, Math.max(0, i)).findLast((e) => e.kind === 'user' || e.kind === 'mine');
     const app = i >= 0 ? appOf(items[i].text, isStart(ask?.kind === 'mine' ? ask.m.text : ask?.text)) : null;
-    if (app && /^https?:/.test(app)) return `<div class="term-done-row"><div class="term-done">✓ Done · the app runs${T.shell ? ' in the background' : ''}</div>${appHtml(app).replace('class="app-row"', 'class="app-row inline"')}</div>`;
+    if (app && /^https?:/.test(app)) return `<div class="term-done-row"><div class="term-done">✓ Done · the app runs${T.shell ? ' in the background' : ''}</div>${appHtml(app).replace('class="app-row"', 'class="app-row inline"')}</div>${bgHtml(T)}`;
   }
-  if (T.state === 'waiting') return items.length ? `<div class="term-done">✓ Done · waiting for your next message${T.shell ? '<span class="muted"> · something it started still runs in the background (e.g. the app)</span>' : ''}</div>` : '<div class="term-done">Waiting for its first prompt</div>';
+  if (T.state === 'waiting') return items.length ? `<div class="term-done">✓ Done · waiting for your next message${T.shell && !T.background?.length ? '<span class="muted"> · something it started still runs in the background (e.g. the app)</span>' : ''}</div>${bgHtml(T)}` : '<div class="term-done">Waiting for its first prompt</div>';
   if (T.state === 'ended') return '<div class="term-done muted">Session ended</div>';
   return '';
 }
@@ -4450,8 +4511,9 @@ async function termPoll(force) {
     if (pend?.length) { const got = r.entries.filter((e) => e.kind === 'user').map((e) => sqz(e.text).slice(0, 80)); const left = pend.filter((p) => !got.includes(p.key.slice(0, 80)) && Date.now() - p.t < 30 * 60e3); if (left.length !== pend.length) termPending.set(sid, left); }
     T.entries.push(...r.entries); if (T.entries.length > 4000) T.entries.splice(0, T.entries.length - 4000);
     const stateChanged = T.state !== r.state || T.ctx?.used !== r.context?.used;
-    T.next = r.next; T.cut ||= r.cut; T.err = ''; T.state = r.state; T.shell = !!r.shell; const askChanged = (T.ask?.id ?? null) !== (r.ask?.id ?? null); T.ask = r.ask ?? null; const agSig = JSON.stringify((r.agents ?? []).map((a) => [a.agent, a.state, a.steps, a.last])), agentsChanged = agSig !== T.agSig; T.agSig = agSig; T.agents = r.agents ?? []; if (agentsChanged) agentStepsRefresh(); if (askChanged && r.ask) { askState.delete(r.ask.id); askSel.delete(r.ask.id); } // asked anew (the same question again): a fresh card
+    T.next = r.next; T.cut ||= r.cut; T.err = ''; T.state = r.state; T.shell = !!r.shell; const bgSig = JSON.stringify((r.background ?? []).map((b) => [b.cmd, b.ports])), bgChanged = bgSig !== T.bgSig; T.bgSig = bgSig; T.background = r.background ?? []; const askChanged = (T.ask?.id ?? null) !== (r.ask?.id ?? null); T.ask = r.ask ?? null; const agSig = JSON.stringify((r.agents ?? []).map((a) => [a.agent, a.state, a.steps, a.last])), agentsChanged = agSig !== T.agSig; T.agSig = agSig; T.agents = r.agents ?? []; if (agentsChanged) agentStepsRefresh(); if (askChanged && r.ask) { askState.delete(r.ask.id); askSel.delete(r.ask.id); } // asked anew (the same question again): a fresh card
     if (r.context) T.ctx = r.context;
+    const btwSig = JSON.stringify(r.btw ?? T.btw ?? null), btwChanged = 'btw' in r && btwSig !== T.btwSig; if (btwChanged) { T.btw = r.btw; T.btwSig = btwSig; }
     if (r.state === 'working') { T.waitStart ||= T.sentAt || Date.now(); T.sentAt = 0; }
     else if (!T.sentAt) T.waitStart = 0; // done (or not started yet): the wait is over
     // a compaction on its screen (auto-compaction, or /compact typed in its terminal): the press starts, but not again
@@ -4459,7 +4521,7 @@ async function termPoll(force) {
     if (r.compacting && T.compact) T.compact.seenAt = Date.now();
     if (r.compacting && !T.compact && Date.now() - (T.compactEnd ?? 0) > 20e3) T.compact = { since: Date.now(), before: T.ctx?.used ?? null, n: T.ctx?.compactions ?? 0, seenAt: Date.now() };
     termLog.set(sid, T);
-    if (fresh || force || stateChanged || askChanged || agentsChanged || gitChanged || T.sentAt) renderAgentLive();
+    if (fresh || force || stateChanged || askChanged || agentsChanged || gitChanged || btwChanged || bgChanged || T.sentAt) renderAgentLive();
   } catch (e) { T.err = e.message; termLog.set(sid, T); renderAgentLive(); }
   finally { termPolling = false; }
 }
@@ -4475,8 +4537,11 @@ function conversations() {
   const chats = groupBySession(v.jobs.filter((j) => j.kind === 'chat' && (j.mode ?? 'assistant') === 'assistant'));
   const cur = chats.at(-1);
   const bs = groupBySession(v.jobs.filter((j) => j.kind === 'chat' && j.mode === 'brainstorm')).at(-1);
-  const list = [{ id: 'assistant', label: 'Assistant', jobs: cur?.jobs ?? [], last: cur?.last, live: ['running', 'starting'].includes(cur?.last?.status) },
-    { id: 'brainstorm', label: '💡 Brainstorm', jobs: bs?.jobs ?? [], last: bs?.last, live: ['running', 'starting'].includes(bs?.last?.status), brainstorm: true }];
+  // "New chat" / "New brainstorm" (like /clear): an empty conversation; the next message starts it, the old one ends then
+  const keep = (id, g) => (ag.fresh.has(id) ? {} : g ?? {});
+  const a = keep('assistant', cur), b = keep('brainstorm', bs);
+  const list = [{ id: 'assistant', label: 'Assistant', jobs: a.jobs ?? [], last: a.last, live: ['running', 'starting'].includes(a.last?.status) },
+    { id: 'brainstorm', label: '💡 Brainstorm', jobs: b.jobs ?? [], last: b.last, live: ['running', 'starting'].includes(b.last?.status), brainstorm: true }];
   for (const g of groupBySession(v.jobs.filter((j) => j.kind === 'session')).reverse().slice(0, 5)) {
     list.push({ id: 'session:' + g.sid, label: title(g.last.change), jobs: g.jobs, last: g.last, live: alive(g.last), session: true });
   }
@@ -4618,7 +4683,7 @@ document.addEventListener('focusout', (e) => { if (e.target.matches?.('#agent se
 const split = { open: false };
 function splitUrl(sid, projectId) {
   const u = new URL(location.href);
-  for (const k of ['project', 'overview', 'panel', 'term', 'write', 'onboard', 'max', 'focus', 'view']) u.searchParams.delete(k);
+  for (const k of ['project', 'overview', 'panel', 'term', 'write', 'onboard', 'max', 'focus', 'view', 'convo', 'newproject', 'embed', 'pop']) u.searchParams.delete(k);
   if (projectId) { u.searchParams.set('project', projectId); u.searchParams.set('panel', 'chat'); } else u.searchParams.set('overview', '');
   if (sid) { u.searchParams.set('term', sid); u.searchParams.set('write', '1'); }
   u.searchParams.set('embed', ''); u.hash = '';
@@ -4637,29 +4702,83 @@ function splitOpen() {
     <div class="split-body"><iframe title="Left session" src="${esc(left)}"></iframe><iframe title="Right session" src="${esc(right)}"></iframe></div>`;
   el.hidden = false; split.open = true; document.body.classList.add('split-open');
 }
-// ---- pop out: the session you write to, detached into a small window that stays on top of other apps (Document
-// Picture-in-Picture, Chrome and the installed app); inside it the same embedded page as one half of "Side by side",
-// below a slim bar: "Back to the panel" and "Minimize". Without that API a popup window. The panel lets go of the
-// session meanwhile; one pop out at a time.
-// Closing the window (its ✕, Chrome's "back to tab" or "Back to the panel") brings the session back into the panel,
-// in write mode. "Minimize" closes it and leaves a terminal icon in the page's bottom right corner (kept across
-// reloads): a click pops the session out again, so the main write session stays at hand.
-const pip = { win: null, s: null, min: false, leaving: false };
-addEventListener('pagehide', () => { pip.leaving = true; }); // the page itself goes (a reload): its pop out closes with it, nothing to bring back
+// ---- pop out: a panel on the right (a chat, a ticket, a candidate's chat, the new-project brainstorm, the session you
+// write to) detached into a small window that stays on top of other apps (Document Picture-in-Picture, Chrome and the
+// installed app); inside it the page itself with ?embed&pop, showing only that panel, below a slim bar: "Back to the
+// panel" and "Minimize". Without that API a popup window. The panel lets go of it meanwhile; one pop out at a time.
+// Closing the window (its ✕, Chrome's "back to tab" or "Back to the panel") brings it back into the panel (a session in
+// write mode), with what was typed and not sent. "Minimize" closes it and leaves an icon in the page's bottom right
+// corner (kept across reloads): a click pops it out again.
+// The kinds: term (a terminal session), chat (Assistant, Brainstorm, a session's chat), ticket, scout (a candidate's
+// chat) and new (the new-project brainstorm).
+const pip = { win: null, s: null, key: null, min: false, leaving: false };
+addEventListener('pagehide', () => { pip.leaving = true; });
+// "Review and save…" in a popped out brainstorm: the ticket form opens here, in this project's backlog
+addEventListener('storage', (e) => {
+  if (e.key !== 'osd-tk-open' || !e.newValue || EMBED) return;
+  let h; try { h = JSON.parse(e.newValue); } catch { return; }
+  if (!h?.fields || (h.project || null) !== (PROJECT || null) || Date.now() - h.t > 10e3) return;
+  if (ag.max) { ag.max = false; buildAgent(); }
+  ntOpen(h.fields);
+  window.focus();
+}); // the page itself goes (a reload): its pop out closes with it, nothing to bring back
 const PIP_DOCK = 'osd-pip-dock';
 const pipDockGet = () => { try { return JSON.parse(localStorage.getItem(PIP_DOCK) || 'null'); } catch { return null; } };
 const pipDockSet = (s) => { try { if (s) localStorage.setItem(PIP_DOCK, JSON.stringify(s)); else localStorage.removeItem(PIP_DOCK); } catch { /* not kept */ } pipDockRender(); };
+const POP_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><rect x="3" y="4" width="18" height="16" rx="2.5"/><rect x="12" y="12" width="7" height="5" rx="1" fill="currentColor"/></svg>';
+const popBtnHtml = (what, hidden = false) => `<button class="link ag-splitbtn" type="button" data-ag-pip ${hidden ? 'hidden ' : ''}aria-label="Pop out" title="${esc(`Detach ${what} into a small window that stays on top of other apps (picture in picture)`)}">${POP_SVG}<span class="lbl">Pop out</span></button>`;
+const pipTerm = (s) => !s.kind || s.kind === 'term';
 function pipDockRender() {
   const s = AGENT_TOKEN && !EMBED ? pipDockGet() : null;
   let el = $('pip-dock');
   if (!s) { el?.remove(); return; }
   if (!el) { el = document.createElement('div'); el.id = 'pip-dock'; el.className = 'pip-dock'; document.body.append(el); }
-  el.innerHTML = `<button type="button" class="pip-dock-btn" data-pip-dock title="${esc(`Pop out again: ${s.label}`)}" aria-label="${esc(`Pop out the session ${s.label} again`)}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="2.5"/><path d="m7 10 3 2.5L7 15M12.5 15H17"/></svg></button><button type="button" class="pip-dock-x" data-pip-dock-x title="Remove the icon" aria-label="Remove the icon">✕</button>`;
+  const icon = pipTerm(s) ? '<rect x="2.5" y="4" width="19" height="16" rx="2.5"/><path d="m7 10 3 2.5L7 15M12.5 15H17"/>' : '<path d="M20.5 11.5a8 8 0 0 1-11.7 7.1L3.5 20l1.4-4.9a8 8 0 1 1 15.6-3.6Z"/>';
+  el.innerHTML = `<button type="button" class="pip-dock-btn" data-pip-dock title="${esc(`Pop out again: ${s.label}`)}" aria-label="${esc(`Pop out ${pipTerm(s) ? 'the session ' : ''}${s.label} again`)}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icon}</svg></button><button type="button" class="pip-dock-x" data-pip-dock-x title="Remove the icon" aria-label="Remove the icon">✕</button>`;
 }
 const pipLabel = (x) => termMs(x) || (x.prompt ? x.prompt.replace(/\s+/g, ' ').slice(0, 40) : `session ${x.sessionId.slice(0, 8)}`);
+// the page that shows one panel: a terminal session like one half of side by side, the others by their own parameters
+function popUrl(s) {
+  if (pipTerm(s)) return splitUrl(s.sid, s.projectId) + '&pop';
+  const u = new URL(splitUrl(null, s.projectId), location.href), q = u.searchParams;
+  if (s.kind === 'chat') q.set('convo', s.convo);
+  if (s.kind === 'ticket') q.set('panel', 'ticket:' + s.target);
+  if (s.kind === 'scout') q.set('onboard', s.path);
+  if (s.kind === 'new') q.set('newproject', s.parent ?? '');
+  q.set('pop', '');
+  return u.pathname + u.search;
+}
+const popKey = (s) => new URL(popUrl(s), location.href).search;
+// what goes along between the panel and its pop out (both ways): the text typed and not sent, the panel it shows now
+// (in the pop out you can switch to another chat) and, for the new project, whether expert mode's choices went along
+const POP_HAND = 'osd-pop-hand';
+const panelText = () => $('sc-text') ?? $('ag-text');
+const popPut = (key, s) => { try { localStorage.setItem(POP_HAND, JSON.stringify({ key, text: panelText()?.value ?? '', at: s, ...(s?.kind === 'new' ? { xp: { sent: xp.sent, fold: xp.fold } } : {}) })); } catch { /* not kept */ } };
+const popTake = (key) => { try { const h = JSON.parse(localStorage.getItem(POP_HAND) || 'null'); if (h?.key !== key) return null; localStorage.removeItem(POP_HAND); return h; } catch { return null; } };
+function popApply(h) { // after the panel is open again
+  if (!h) return;
+  if (h.xp && sc.open && sc.mode === 'new') { Object.assign(xp, h.xp); renderScout(); }
+  const ta = panelText();
+  if (ta && h.text) { ta.value = h.text; ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+}
+// the panel open now, as something to pop out
+function pipSpec() {
+  if (typeof sc !== 'undefined' && sc.open) {
+    if (sc.mode === 'new') return { kind: 'new', parent: sc.parent ?? null, projectId: null, label: 'New project' };
+    const c = candidate(sc.path);
+    return sc.path ? { kind: 'scout', path: sc.path, projectId: null, label: c ? candLabel(c) : sc.path.split('/').pop() } : null;
+  }
+  if (!ag.open) return null;
+  const projectId = PROJECT || null, proj = ui.state?.project ? ` · ${ui.state.project}` : '';
+  if (ag.panel === 'ticket') return ag.target ? { kind: 'ticket', target: ag.target, projectId, label: title(ag.target) + proj } : null;
+  if (ag.convo !== 'terminal') return projectId ? { kind: 'chat', convo: ag.convo, projectId, label: (conversations().find((x) => x.id === ag.convo)?.label ?? 'Chat') + proj } : null;
+  const all = [...termSessions().filter((x) => !x.ended), ...(ag.view?.elsewhere ?? [])], cur = all.find((x) => x.sessionId === ag.term);
+  return cur ? { kind: 'term', sid: cur.sessionId, projectId: cur.projectId || PROJECT || null, label: pipLabel(cur) } : null;
+}
 async function pipOpenFor(s) {
   try { pip.min = false; pip.win?.close(); } catch { /* gone */ }
-  const src = new URL(splitUrl(s.sid, s.projectId), location.href).href;
+  const src = new URL(popUrl(s), location.href).href;
+  pip.key = new URL(src).search; // what its page hands back under
   pipDockSet(null);
   if (window.documentPictureInPicture?.requestWindow) {
     const win = await documentPictureInPicture.requestWindow({ width: 440, height: 700 });
@@ -4673,11 +4792,11 @@ async function pipOpenFor(s) {
       .bar button:hover { border-color: #00d65a; color: #fff; } iframe { flex: 1; border: 0; width: 100%; display: block; }`;
     d.head.append(st);
     const bar = d.createElement('div'); bar.className = 'bar';
-    bar.innerHTML = `<b></b><button type="button" data-min title="Minimize: a terminal icon in the dashboard's bottom right corner brings it back">▁ Minimize</button><button type="button" data-back title="Back into the dashboard's panel">⤺ Back to the panel</button>`;
+    bar.innerHTML = `<b></b><button type="button" data-min title="Minimize: an icon in the dashboard's bottom right corner brings it back">▁ Minimize</button><button type="button" data-back title="Back into the dashboard's panel">⤺ Back to the panel</button>`;
     bar.querySelector('b').textContent = `▣ ${s.label}`;
     bar.querySelector('[data-min]').onclick = () => { pip.min = true; win.close(); };
     bar.querySelector('[data-back]').onclick = () => win.close();
-    const f = d.createElement('iframe'); f.src = src; f.title = 'Session'; f.allow = 'microphone; clipboard-write';
+    const f = d.createElement('iframe'); f.src = src; f.title = s.label; f.allow = 'microphone; clipboard-write';
     d.body.append(bar, f);
     Object.assign(pip, { win, s, min: false });
     win.addEventListener('pagehide', () => { if (pip.win === win) pipClosed(); });
@@ -4685,24 +4804,35 @@ async function pipOpenFor(s) {
   pipLeavePanel(s);
 }
 function pipLeavePanel(s) {
+  if (s.kind === 'scout' || s.kind === 'new') { if (sc.open) closeScout(); return; }
+  if (s.kind === 'chat' || s.kind === 'ticket') { if (ag.open) closeAgent(); return; }
   if (ag.term === s.sid) Object.assign(ag, { term: null, termWrite: false, termDetails: false });
   if (ag.open && ag.convo === 'terminal') closeAgent();
 }
 function pipClosed() {
-  const s = pip.s; pip.win = null;
+  const s = pip.s, key = pip.key; pip.win = null;
   if (!s || pip.leaving) return;
   if (pip.min) return pipDockSet(s); // minimized: the icon in the corner
-  // back into the panel, in write mode: here when it is this page's project (or the overview for a session only), else there
-  if ((s.projectId || null) === (PROJECT || null)) { openChat('terminal'); Object.assign(ag, { term: s.sid, termWrite: true, termDetails: false, stick: true }); renderAgentLive(); termPoll(true); return; }
-  const u = new URL(splitUrl(s.sid, s.projectId), location.href); u.searchParams.delete('embed'); location.href = u.toString();
+  // back into the panel (a session in write mode): here when it is this page's project (or the overview), else there.
+  // A moment later: the pop out hands over what it shows and what was typed when its page goes, after this window's
+  setTimeout(() => {
+    const h = popTake(key), t = h?.at && (h.at.projectId || null) === (s.projectId || null) ? h.at : s;
+    if ((t.projectId || null) !== (PROJECT || null)) { const u = new URL(popUrl(t), location.href); u.searchParams.delete('embed'); u.searchParams.delete('pop'); location.href = u.toString(); return; }
+    if (t.kind === 'new') { sc.parent = t.parent ?? sc.parent; openNewProject(); }
+    else if (t.kind === 'scout') openScout(t.path);
+    else if (t.kind === 'chat') openChat(t.convo);
+    else if (t.kind === 'ticket') openTicket(t.target);
+    else { openChat('terminal'); Object.assign(ag, { term: t.sid, termWrite: true, termDetails: false, stick: true }); renderAgentLive(); termPoll(true); }
+    popApply(h);
+  }, 120);
 }
 function pipOpen(min) {
-  const all = [...termSessions().filter((x) => !x.ended), ...(ag.view?.elsewhere ?? [])], cur = all.find((x) => x.sessionId === ag.term);
-  if (!cur) return;
-  const s = { sid: cur.sessionId, projectId: cur.projectId || PROJECT || null, label: pipLabel(cur) };
+  const s = pipSpec();
+  if (!s) return;
+  popPut(popKey(s), s);
   return min ? pipMinimize(s) : pipOpenFor(s);
 }
-// straight to the icon in the corner, without the window first (a window already popped out closes; the icon holds one session)
+// straight to the icon in the corner, without the window first (a window already popped out closes; the icon holds one)
 function pipMinimize(s) {
   const old = pip.win; Object.assign(pip, { win: null, s: null, min: false });
   try { old?.close(); } catch { /* gone */ }
@@ -4748,7 +4878,7 @@ function buildChatHtml(s, c, ph) {
   const term = c?.terminal || ag.convo === 'terminal'; // also before the session list has arrived
   const chips = term ? '' : '<div class="ag-chips" id="ag-chips" role="tablist"></div>'; // ⌨ Terminal sessions is a panel of its own
   return `
-    <div class="ag-head"><h2>${term ? `${TERM_SVG} Terminal sessions` : 'Chat'}</h2><span class="muted" style="font-size:12.5px">${esc(s.project)}</span>${ag.max ? chips : ''}${term && !EMBED ? '<button class="link ag-splitbtn" type="button" data-ag-split aria-label="Side by side" title="Two sessions next to each other, each with its own picker and input box (e.g. the one that implements and the one that reviews)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M12 4v16"/></svg><span class="lbl">Side by side</span></button><button class="link ag-splitbtn" type="button" data-ag-pip hidden aria-label="Pop out" title="Detach this session into a small window that stays on top of other apps (picture in picture)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><rect x="3" y="4" width="18" height="16" rx="2.5"/><rect x="12" y="12" width="7" height="5" rx="1" fill="currentColor"/></svg><span class="lbl">Pop out</span></button><button class="link ag-splitbtn" type="button" data-ag-pip="min" hidden aria-label="Minimize" title="Straight to a terminal icon in the bottom right corner: one click on it pops the session out when you need it"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="m7 10 3 2.5L7 15M12 15h5"/></svg><span class="lbl">Minimize</span></button>' : ''}<button class="link ag-maxbtn" type="button" data-ag-max aria-pressed="${ag.max}" title="${ag.max ? 'Back to the side panel' : 'Use the whole window'}">${ag.max ? '⤡ Restore' : '⤢ Maximize'}</button><button class="link" type="button" data-ag-close>Close ✕</button></div>
+    <div class="ag-head"><h2>${term ? `${TERM_SVG} Terminal sessions` : 'Chat'}</h2><span class="muted" style="font-size:12.5px">${esc(s.project)}</span>${ag.max ? chips : ''}${term && !EMBED ? '<button class="link ag-splitbtn" type="button" data-ag-split aria-label="Side by side" title="Two sessions next to each other, each with its own picker and input box (e.g. the one that implements and the one that reviews)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M12 4v16"/></svg><span class="lbl">Side by side</span></button>' + popBtnHtml('this session', true) + '<button class="link ag-splitbtn" type="button" data-ag-pip="min" hidden aria-label="Minimize" title="Straight to a terminal icon in the bottom right corner: one click on it pops the session out when you need it"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="m7 10 3 2.5L7 15M12 15h5"/></svg><span class="lbl">Minimize</span></button>' : !EMBED && PROJECT ? popBtnHtml('this chat') : ''}<button class="link ag-maxbtn" type="button" data-ag-max aria-pressed="${ag.max}" title="${ag.max ? 'Back to the side panel' : 'Use the whole window'}">${ag.max ? '⤡ Restore' : '⤢ Maximize'}</button><button class="link" type="button" data-ag-close>Close ✕</button></div>
     ${ag.max ? '' : chips}
     <div class="ag-bar" id="ag-bar"></div>
     <div class="ag-thread" id="ag-thread" aria-live="polite"></div>
@@ -4757,7 +4887,7 @@ function buildChatHtml(s, c, ph) {
     <div class="ag-compose">
       <div data-quote-slot>${quoteChipHtml()}</div>
       <textarea id="ag-text" rows="2" placeholder="${esc(ph)}">${esc(ag.drafts['chat-' + ag.convo] ?? '')}</textarea>
-      <div class="ag-tools">${micHtml()}${rephraseBtnHtml()}${gitHintHtml()}${quickHtml()}<button class="btn primary" type="button" data-ag-send>Send</button></div>
+      <div class="ag-tools">${micHtml()}${rephraseBtnHtml()}${gitHintHtml()}${quickHtml()}${term ? '' : '<button class="link ag-new" type="button" data-ag-new hidden title="Start over, like /clear: the conversation empties now; your next message starts the new one">↺ New chat</button>'}<button class="btn primary" type="button" data-ag-send>Send</button></div>
     </div>
     <div class="ag-note ag-route" id="ag-route"></div>`;
 }
@@ -4779,7 +4909,7 @@ function buildTicket(s) {
       <div class="ag-note">Permission mode <code>${esc(ag.view?.permissionMode ?? '')}</code>${ag.view?.model ? `, model <code>${esc(ag.view.model)}</code>` : ''}. Nobody answers permission prompts there, so they are declined: allow what the workflow needs (build, tests, <code>openspec</code>, <code>git</code>) in the project's <code>.claude/settings.json</code>.</div>`;
   }
   return `
-    <div class="ag-head"><h2>${esc(title(c.name))}</h2><button class="link ag-maxbtn" type="button" data-ag-max aria-pressed="${ag.max}" title="${ag.max ? 'Back to the side panel' : 'Use the whole window'}">${ag.max ? '⤡ Restore' : '⤢ Maximize'}</button><button class="link" type="button" data-ag-close>Close ✕</button></div>
+    <div class="ag-head"><h2>${esc(title(c.name))}</h2>${EMBED ? '' : popBtnHtml('this ticket')}<button class="link ag-maxbtn" type="button" data-ag-max aria-pressed="${ag.max}" title="${ag.max ? 'Back to the side panel' : 'Use the whole window'}">${ag.max ? '⤡ Restore' : '⤢ Maximize'}</button><button class="link" type="button" data-ag-close>Close ✕</button></div>
     <div class="ag-sub"><span class="pill" style="--st:${stVar(c.status)}">${esc(columnLabel(c))}</span><span class="slug">${esc(c.name)}</span><button class="link" type="button" data-chat="">Open chat →</button></div>
     <div class="ag-form">
       <div class="ag-modes" role="tablist">${modes.map(([k, l]) => `<button type="button" class="tab" role="tab" data-ag-mode="${k}" aria-selected="${k === ag.mode}">${l}</button>`).join('')}</div>
@@ -4801,12 +4931,14 @@ const REQUESTS = [['🔁', 'Please say this again in other words, simpler and cl
   ['🔄', 'Please try this again: run it once more, I changed something in the meantime. If it fails again, tell me what is different this time.', 'Try again']];
 const rx = { msgs: new Map(), quote: null, openId: null };
 // quick messages under the input box (⋯): a whole message with one click, about no answer in particular
-// in groups: git · find out where it stands · steer the work · quality (null marks a gap between groups); a fourth
-// field draws the icon as a colored arrow box (there is no green arrow emoji), the first field stays its marker
-const QUICK = [
+// in groups: find out where it stands · steer the work · quality · the app · git (null marks a gap between groups);
+// a fourth field draws the icon as a colored arrow box (there is no green arrow emoji), the first field stays its
+// marker. Commit and Commit and push are also next to ⚙ while the session's folder has uncommitted files (QUICK_GIT)
+const QUICK_GIT = [
   ['⇧', 'Please ensure everything is up to date and commit, but don\'t push it.', 'Commit', 'green'],
   ['⬆️', 'Please ensure everything is up to date, commit and push it.', 'Commit and push', 'blue'],
-  null,
+];
+const QUICK = [
   ['👀', 'What is the current status of your work? Briefly: what is done, what you are doing right now, and what comes next.', 'Status'],
   ['❓', 'Is anything blocking you, or do you need a decision from me? If not, just say so and continue.', 'Blockers'],
   ['🔍', 'Summarize the changes so far: which files and why, in a few bullet points. Do not commit.', 'Changes so far'],
@@ -4821,6 +4953,8 @@ const QUICK = [
   ['▶️', 'Start the app in a clean way: stop whatever of it still runs, build it from a clean state, start it, and tell me whether it came up without errors. End your answer with one line exactly like "App: http://localhost:8080" (its URL), or "App: <command>" when it is not a web app.', 'Start the app'],
   ['⏹️', 'Stop the app: everything of it that runs (dev servers, containers, background commands you started for it), and check that nothing listens on its ports any more. Change no code.', 'Stop the app'],
   ['🔃', 'Restart the app: stop it, rebuild what changed, start it again, and tell me whether it came up without errors. End your answer with one line exactly like "App: http://localhost:8080" (its URL), or "App: <command>" when it is not a web app.', 'Restart the app'],
+  null,
+  ...QUICK_GIT,
 ];
 const quick = { open: false };
 // the app an answer started (▶️ asks for a last line "App: <URL or command>"; without it, the first local URL of the
@@ -5092,7 +5226,8 @@ function parseTicket(src) {
   const f = {};
   for (const l of head.split('\n')) { const m = l.match(/^\s*([a-z][a-z ]*):\s*(.*)$/i); if (m) f[m[1].trim().toLowerCase()] = m[2].trim(); }
   const none = (v) => !v || /^(none|—|-|n\/a)$/i.test(v);
-  return { name: (f.name ?? '').replace(/`/g, ''), area: f.area ?? '', milestone: none(f.milestone) ? '' : f.milestone.split(/\s/)[0], deps: none(f['depends on']) ? '' : f['depends on'], goal: f.goal ?? '', body: body.trim() };
+  const after = (f.after ?? '').replace(/[`#]/g, '').trim().match(/^\d+[a-z]?/)?.[0] ?? '';
+  return { name: (f.name ?? '').replace(/`/g, ''), area: f.area ?? '', milestone: none(f.milestone) ? '' : f.milestone.split(/\s/)[0], deps: none(f['depends on']) ? '' : f['depends on'], after, goal: f.goal ?? '', body: body.trim() };
 }
 function brainstormMd(text, key, idea) {
   const parts = text.split(/```ticket[^\n]*\n([\s\S]*?)(?:```|$)/);
@@ -5105,7 +5240,7 @@ function brainstormMd(text, key, idea) {
     return `<div class="tk-card">
       <div class="tk-h">🎫 Ticket <code>${esc(tk.name || '?')}</code></div>
       <div class="tk-goal">${esc(tk.goal)}</div>
-      <div class="tk-meta">${[tk.milestone ? `${esc(tk.milestone)}${ms ? ` ${esc(ms.title)}` : ''}` : 'no milestone', tk.area && `area ${esc(tk.area)}`, tk.deps && `after ${esc(tk.deps)}`].filter(Boolean).join(' · ')}</div>
+      <div class="tk-meta">${[tk.milestone ? `${esc(tk.milestone)}${ms ? ` ${esc(ms.title)}` : ''}` : 'no milestone', tk.area && `area ${esc(tk.area)}`, tk.deps && `needs ${esc(tk.deps)}`, tk.after && `goes after #${esc(tk.after)}`].filter(Boolean).join(' · ')}</div>
       ${tk.body ? `<details class="tk-body"><summary>Proposal</summary><div class="md">${md(tk.body)}</div></details>` : ''}
       <div class="ag-row"><button class="btn primary" type="button" data-tk-save="${esc(id)}">Review and save…</button><span class="ag-note">opens it in the backlog to plan it or keep it as an idea</span></div>
     </div>`;
@@ -5179,9 +5314,9 @@ function barInner(c) {
   }
   if (c.brainstorm) {
     const idea = c.jobs.find((j) => j.idea)?.idea;
-    return c.jobs.length ? `<div class="ag-row"><span class="ag-note">Brainstorming${idea ? ` on the idea <code>${esc(idea)}</code>` : ''} · read-only · nothing is saved until you save the ticket</span><button class="link" type="button" data-ag-chat-bg style="margin-left:auto" title="Keep it working in the background: the button with the number in the header shows how it is doing and when the answer is in">⤓ Background</button><button class="link" type="button" data-ag-new>New brainstorm</button></div>` : '';
+    return c.jobs.length ? `<div class="ag-row"><span class="ag-note">Brainstorming${idea ? ` on the idea <code>${esc(idea)}</code>` : ''} · read-only · nothing is saved until you save the ticket</span><button class="link" type="button" data-ag-chat-bg style="margin-left:auto" title="Keep it working in the background: the button with the number in the header shows how it is doing and when the answer is in">⤓ Background</button></div>` : '';
   }
-  if (!c.session) return c.jobs.length ? `<div class="ag-row"><span class="ag-note">Read-only assistant · remembers this conversation</span><button class="link" type="button" data-ag-chat-bg style="margin-left:auto" title="Keep it working in the background: the button with the number in the header shows how it is doing and when the answer is in">⤓ Background</button><button class="link" type="button" data-ag-new>New chat</button></div>` : '';
+  if (!c.session) return c.jobs.length ? `<div class="ag-row"><span class="ag-note">Read-only assistant · remembers this conversation</span><button class="link" type="button" data-ag-chat-bg style="margin-left:auto" title="Keep it working in the background: the button with the number in the header shows how it is doing and when the answer is in">⤓ Background</button></div>` : '';
   const j = c.last;
   return `<div class="ag-row"><span class="pill" style="--st:${stVar(JOB_ST[j.status])}">${JOB_LABEL[j.status] ?? j.status}</span>
       ${j.status === 'running' ? `<button class="btn" type="button" data-ag-control="end" data-job="${esc(j.id)}" title="Finish the current turn, then end">End after this turn</button><button class="btn" type="button" data-ag-control="stop" data-job="${esc(j.id)}">Stop now</button>` : ''}
@@ -5231,7 +5366,7 @@ function renderAgentLive() {
   termAutoJoin();
   termUrlSync();
   for (const el of document.querySelectorAll('.qk .ag-compact')) el.hidden = !compactOn(); // 🗑️ in the quick messages
-  { const g = gitHintOf(); for (const el of document.querySelectorAll('[data-ag-git]')) { el.hidden = !g; if (g) { el.title = gitHintTitle(g); el.setAttribute('aria-label', `${g.uncommitted} uncommitted file${g.uncommitted === 1 ? '' : 's'}`); } } }
+  { const g = gitHintOf(); for (const el of document.querySelectorAll('[data-ag-git]')) { el.hidden = !g; if (g) el.querySelectorAll('[data-qk]').forEach((b, k) => { b.title = gitBtnTitle(QUICK_GIT[k], g); b.setAttribute('aria-label', `${QUICK_GIT[k][2]} (${g.uncommitted} uncommitted file${g.uncommitted === 1 ? '' : 's'})`); }); } }
   qkFit();
   updateAgentBtn();
   if (!ag.open || !ag.view) return;
@@ -5244,7 +5379,8 @@ function renderAgentLive() {
     if ($('ag-text')) $('ag-text').placeholder = chatPlaceholder(c, ui.state ? { project: ui.state.project } : { project: '' });
     if ($('ag-chips')) $('ag-chips').innerHTML = list.filter((x) => !x.terminal).map((x) => `<button type="button" class="chip" role="tab" data-ag-convo="${esc(x.id)}" aria-selected="${x.id === c?.id}">${x.live ? '<span class="dot on"></span>' : ''}${x.session ? 'Session · ' : ''}${esc(x.label)}</button>`).join('');
     morphHtml($('ag-bar'), barHtml(c)); // morph: an open session picker stays open
-    for (const pb of document.querySelectorAll('#agent [data-ag-pip]')) pb.hidden = !(ag.term && ag.termWrite); // pop out and minimize: while writing to a session
+    for (const nb of document.querySelectorAll('#agent [data-ag-new]')) { nb.hidden = !(c && !c.terminal && !c.session && c.jobs.length); nb.textContent = c?.brainstorm ? '↺ New brainstorm' : '↺ New chat'; }
+    for (const pb of document.querySelectorAll('#agent [data-ag-pip]')) pb.hidden = ag.convo === 'terminal' && !(ag.term && ag.termWrite); // a session's pop out and minimize: while writing to it (a chat's pop out always)
     // maximized while writing: no ⤡ Restore next to Pop out (Pop out does more); Close ✕ then also ends the maximized view
     const mb = document.querySelector('#agent .ag-head [data-ag-max]'); if (mb) mb.hidden = !!(ag.max && ag.convo === 'terminal' && ag.term && ag.termWrite && !EMBED);
     const sb = document.querySelector('#agent [data-ag-split]'); // side by side needs a second running session
@@ -5263,7 +5399,7 @@ function renderAgentLive() {
     if (c?.terminal) agentStackRender();
     edFill();
     if (atEnd || ag.stick) { th.scrollTop = th.scrollHeight; ag.stick = false; }
-    $('ag-route').innerHTML = c?.terminal ? (ag.note.startsWith('✕') ? `<span style="color:var(--st-blocked)">${esc(ag.note)}</span>` : '') : 'Enter sends · Shift+Enter for a new line';
+    $('ag-route').innerHTML = c?.terminal ? (ag.note.startsWith('✕') ? `<span style="color:var(--st-blocked)">${esc(ag.note)}</span>` : escNoteHtml()) : 'Enter sends · Shift+Enter for a new line';
   } else {
     termViewApply(false);
     if (!$('ag-body')) return;
@@ -5303,6 +5439,17 @@ async function agentSend(force = false, direct = null) {
       if (c?.terminal) {
         const xo = (ag.view?.elsewhere ?? []).find((y) => y.sessionId === ag.term && !y.projectId);
         const tx = termSessions().find((y) => y.sessionId === ag.term) ?? xo;
+        if (!direct && /^\/btw(\s|$)/i.test(typed)) { // a side question: its own card, never a message of the conversation
+          if (!/^\/btw\s+\S/i.test(typed)) throw new Error('Write the question after /btw.');
+          if (!tx?.typeable) throw new Error('/btw is answered in its terminal, and this session does not run in macOS Terminal (through the hook it would be a normal message): ask it there.');
+          const sid = ag.term, T = termLog.get(sid), before = T?.btw ?? [];
+          if (T) T.btw = [...before, { id: 'local', q: typed.replace(/^\/btw\s+/i, ''), t: Date.now(), state: 'answering' }];
+          ag.drafts['chat-' + ag.convo] = ''; ta.value = ''; cleared = true; ag.stick = true; renderAgentLive();
+          try { const r = await agentPost('btw', { session: sid, text: typed }); if (T) { T.btw = r.btw; T.btwSig = JSON.stringify(r.btw); } }
+          catch (err) { if (T) T.btw = before; if (ta && !ta.value.trim()) ta.value = typed; throw err; }
+          ag.note = ''; renderAgentLive(); termPoll(true);
+          return;
+        }
         if (tx?.typeable) {
           // the bubble at once, the input box free for the next message; typing it in may take a few seconds
           const sid = ag.term, p = { key: sqz(text), text, t: Date.now(), typed: false };
@@ -5316,7 +5463,8 @@ async function agentSend(force = false, direct = null) {
         else await agentPost('message', { text, to: 'inbox', session: ag.term || undefined, ...(xo ? { folder: xo.folder } : {}) });
       }
       else if (c?.session) await agentPost('message', { change: c.last.change, text, job: c.last.id });
-      else await agentPost('chat', { text, mode: c?.brainstorm ? 'brainstorm' : 'assistant' });
+      else if (!direct && /^\/(clear|new)$/i.test(typed) && !c?.session) { ag.fresh.add(c?.id ?? ag.convo); ag.drafts['chat-' + ag.convo] = ''; ta.value = ''; cleared = true; ag.stick = true; buildAgent(); }
+      else { await agentPost('chat', { text, mode: c?.brainstorm ? 'brainstorm' : 'assistant', ...(ag.fresh.has(c?.id) ? { fresh: true } : {}) }); ag.fresh.delete(c?.id); }
       if (!direct && !cleared) { ag.drafts['chat-' + ag.convo] = ''; ta.value = ''; rx.quote = null; showQuoteChip(); }
       ag.stick = true;
       ag.note = '';
@@ -5432,10 +5580,11 @@ document.addEventListener('click', (e) => {
   if (t.closest('[data-ag-send]')) return agentSend(false);
   if (t.closest('[data-ag-force]')) return agentSend(true);
   if (t.closest('[data-ag-new]')) {
-    const text = $('ag-text')?.value.trim();
-    if (!text) { $('ag-route').textContent = `Write the first message, then press ${ag.convo === 'brainstorm' ? 'New brainstorm' : 'New chat'}.`; return $('ag-text')?.focus(); }
-    const mode = ag.convo === 'brainstorm' ? 'brainstorm' : 'assistant';
-    return agentPost('chat', { text, fresh: true, mode }).then(() => { $('ag-text').value = ''; ag.drafts['chat-' + ag.convo] = ''; ag.stick = true; }).catch((err) => { $('ag-route').textContent = '✕ ' + err.message; });
+    // like /clear: the thread empties at once, your next message starts the new conversation (with text in the box: right away)
+    const text = $('ag-text')?.value.trim(), id = ag.convo;
+    if (!text) { ag.fresh.add(id); ag.stick = true; buildAgent(); return $('ag-text')?.focus(); }
+    const mode = id === 'brainstorm' ? 'brainstorm' : 'assistant';
+    return agentPost('chat', { text, fresh: true, mode }).then(() => { ag.fresh.delete(id); $('ag-text').value = ''; ag.drafts['chat-' + id] = ''; ag.stick = true; }).catch((err) => { $('ag-route').textContent = '✕ ' + err.message; });
   }
   const ctl = t.closest('[data-ag-control]');
   if (ctl) return agentPost('control', { job: ctl.dataset.job, action: ctl.dataset.agControl }).catch((err) => { ag.note = '✕ ' + err.message; renderAgentLive(); });
@@ -5486,6 +5635,20 @@ document.addEventListener('click', (e) => {
   if (it) { e.preventDefault(); return slashTake(Number(it.dataset.slash)); }
   if (slash.open && !e.target.closest?.('#slash-pop, #ag-text')) slashClose();
 });
+// Esc in the input box while the session works: interrupts it, as Esc in its terminal (the server sends Ctrl+C, the
+// one key that can be typed there for it); otherwise Esc does what it always does here (it shrinks or closes the panel)
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || e.target.id !== 'ag-text' || e.isComposing || slash.open || !slashOn()) return;
+  const sid = ag.term, T = termLog.get(sid);
+  if (T?.state !== 'working') return;
+  e.preventDefault(); e.stopPropagation();
+  const say = (html) => { ag.escNote = { html, t: Date.now() }; const r = $('ag-route'); if (r) r.innerHTML = html; clearTimeout(ag.escTimer); ag.escTimer = setTimeout(() => ag.open && renderAgentLive(), 6100); };
+  say('<span class="muted">Interrupting…</span>');
+  agentPost('interrupt', { session: sid }).then(() => { say('<span class="muted">Interrupted (Ctrl+C in its terminal)</span>'); termPoll(true); })
+    .catch((err) => say(`<span style="color:var(--st-blocked)">✕ ${esc(err.message)}</span>`));
+}, true);
+// under the input box of a session you write to: what Esc did, for a few seconds
+const escNoteHtml = () => (ag.escNote && Date.now() - ag.escNote.t < 6000 ? ag.escNote.html : '');
 document.addEventListener('keydown', (e) => { // capture: before Enter sends the message
   if (!slash.open || e.target.id !== 'ag-text' || e.isComposing) return;
   const n = slash.items.length;
@@ -5656,9 +5819,8 @@ document.addEventListener('change', (e) => {
 const rps = { state: 'idle', text: null, ms: 0, key: null, ctl: null, error: null, started: 0 };
 const RP_SVG = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M10 2.5l1.6 4.4 4.4 1.6-4.4 1.6L10 14.5l-1.6-4.4L4 8.5l4.4-1.6L10 2.5Zm7.5 9l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9.9-2.6ZM6 15l.7 1.8 1.8.7-1.8.7L6 20l-.7-1.8-1.8-.7 1.8-.7L6 15Z"/></svg>';
 const draftKey = () => (ag.panel === 'chat' ? 'chat-' + ag.convo : 'ticket-' + ag.mode);
-// the git hint next to ⚙ while writing to a session: its folder has uncommitted files (shown once an answer is in;
-// hidden again when everything is committed). A click opens the quick messages with Commit and Commit and push
-const GIT_SVG = '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M15.7 7.3 8.7.3a1 1 0 0 0-1.4 0L5.8 1.8l1.8 1.8a1.2 1.2 0 0 1 1.5 1.5l1.8 1.8a1.2 1.2 0 1 1-.7.7L8.5 5.9v4.4a1.2 1.2 0 1 1-1-.1V5.8a1.2 1.2 0 0 1-.6-1.6L5.1 2.4.3 7.3a1 1 0 0 0 0 1.4l7 7a1 1 0 0 0 1.4 0l7-7a1 1 0 0 0 0-1.4z"/></svg>';
+// next to ⚙ while writing to a session whose folder has uncommitted files (checked once an answer is in; gone again
+// when everything is committed): Commit and Commit and push, one click each; their tooltip lists the files
 function gitHintOf() {
   if (!(ag.panel === 'chat' && ag.convo === 'terminal' && ag.term && ag.termWrite)) return null;
   const g = termLog.get(ag.term)?.git;
@@ -5666,13 +5828,10 @@ function gitHintOf() {
 }
 function gitHintTitle(g) {
   const more = g.uncommitted - g.files.length;
-  return `${g.uncommitted} uncommitted file${g.uncommitted === 1 ? '' : 's'}${g.branch ? ` on ${g.branch}` : ''} in the session's folder:\n${g.files.join('\n')}${more > 0 ? `\n… and ${more} more` : ''}\n\nClick for Commit and Commit and push.`;
+  return `${g.uncommitted} uncommitted file${g.uncommitted === 1 ? '' : 's'}${g.branch ? ` on ${g.branch}` : ''} in the session's folder:\n${g.files.join('\n')}${more > 0 ? `\n… and ${more} more` : ''}`;
 }
-const gitHintHtml = () => { const g = gitHintOf(); return `<button type="button" class="link ag-git" data-ag-git ${g ? '' : 'hidden'} title="${g ? esc(gitHintTitle(g)) : ''}" aria-label="${g ? `${g.uncommitted} uncommitted files` : 'Uncommitted files'}">${GIT_SVG}</button>`; };
-document.addEventListener('click', (e) => {
-  if (!e.target.closest?.('[data-ag-git]')) return;
-  if (!quick.open) { quick.open = true; for (const el of document.querySelectorAll('.qk')) el.outerHTML = quickHtml(); qkFit(); }
-});
+const gitBtnTitle = (q, g) => `${q[2]}: sends "${q[0]} ${q[1]}"${g ? `\n\n${gitHintTitle(g)}` : ''}`;
+const gitHintHtml = () => { const g = gitHintOf(); return `<span class="ag-git" data-ag-git ${g ? '' : 'hidden'}>${QUICK_GIT.map((q) => `<button type="button" class="rx" data-qk="${q[0]}" title="${esc(gitBtnTitle(q, g))}" aria-label="${esc(`${q[2]}${g ? ` (${g.uncommitted} uncommitted file${g.uncommitted === 1 ? '' : 's'})` : ''}`)}">${qkIcon(q)}</button>`).join('')}</span>`; };
 function rephraseBtnHtml() {
   const on = !!ag.view?.rephrase?.available;
   return `<button class="btn ag-rp" type="button" data-ag-rephrase ${on ? '' : 'hidden'} ${rps.state === 'busy' ? 'disabled' : ''}
@@ -6401,6 +6560,11 @@ const SNAPSHOT = PARAMS.has('snapshot');
 // ?embed: only the terminal sessions panel, filling the page (one half of "Side by side")
 const EMBED = PARAMS.has('embed') && !!AGENT_TOKEN;
 if (EMBED) document.body.classList.add('embed');
+// what it shows: a terminal session (side by side, or popped out), or a popped out chat, ticket, candidate's chat or the
+// new-project brainstorm (?pop: a pop out; it hands over what it shows and what was typed when it closes)
+const POP_KIND = !EMBED ? null : PARAMS.has('newproject') ? 'new' : PARAMS.has('onboard') ? 'scout' : PARAMS.get('panel')?.startsWith('ticket:') ? 'ticket' : (PARAMS.get('convo') ?? 'terminal') !== 'terminal' ? 'chat' : 'term';
+const POP = EMBED && PARAMS.has('pop'), POP_KEY = location.search;
+if (POP) addEventListener('pagehide', () => popPut(POP_KEY, pipSpec()));
 let PROJECT = PARAMS.get('project');
 function withProject(u) { const p = PROJECT ?? (AGENT_TOKEN ? ag.ovProject : null); return p ? `${u}${u.includes('?') ? '&' : '?'}project=${encodeURIComponent(p)}` : u; } // the overview's ⌨ panel goes through the first followed project
 function hrefFor(id) {
@@ -6541,7 +6705,7 @@ function renderOverview(o) {
   if (AGENT_TOKEN) { $('podman-btn').hidden = false; $('usage-btn').hidden = false; } // the overview has the room: Podman and the usage at a click
   if (AGENT_TOKEN && !ag.ovProject && o.projects?.length) setTimeout(async () => {
     await ovTermFetch(); // ⌨ with its badge right away
-    if ((PARAMS.get('term') || EMBED) && !ag.open) { await openTermOverview(); ag.term = PARAMS.get('term') || null; ag.termWrite = PARAMS.get('write') === '1'; renderAgentLive(); termPoll(true); } // from the background list, or one half of "Side by side"
+    if ((PARAMS.get('term') || POP_KIND === 'term') && !ag.open) { await openTermOverview(); ag.term = PARAMS.get('term') || null; ag.termWrite = PARAMS.get('write') === '1'; renderAgentLive(); termPoll(true); } // from the background list, or one half of "Side by side"
   }, 0);
   $('git-btn').hidden = true;
   const prev = new Map((ui.overview?.projects ?? []).map((p) => [p.id, p.lastEvent?.t ?? 0]));
@@ -6697,7 +6861,7 @@ function scoutPanel(placeholder, max = false, attach = false) {
   termViewApply(false);
   $('agent').hidden = false;
   document.body.classList.add('ag-open');
-  $('agent').innerHTML = `<div class="ag-head"><h2 id="sc-title"></h2><button class="link ag-maxbtn" type="button" data-sc-max></button><button class="link" type="button" data-sc-close>Close ✕</button></div>
+  $('agent').innerHTML = `<div class="ag-head"><h2 id="sc-title"></h2>${EMBED ? '' : popBtnHtml('this chat')}<button class="link ag-maxbtn" type="button" data-sc-max></button><button class="link" type="button" data-sc-close>Close ✕</button></div>
     <div class="ag-bar" id="sc-bar"></div>
     <div class="ag-thread" id="ag-thread" aria-live="polite"></div>
     <div class="ag-compose">
@@ -6884,7 +7048,7 @@ function openScout(p) {
   $('sc-text').focus();
   if (ui.overview) renderOverview(ui.overview);
 }
-function closeScout() { sc.open = false; scoutMax(false); $('agent').hidden = true; document.body.classList.remove('ag-open'); if (ui.overview) renderOverview(ui.overview); }
+function closeScout() { if (EMBED) return; sc.open = false; scoutMax(false); $('agent').hidden = true; document.body.classList.remove('ag-open'); if (ui.overview) renderOverview(ui.overview); }
 function renderScout() {
   if (sc.mode === 'new') return $('sc-bar') && renderNewProject();
   const c = candidate(sc.path);
@@ -7019,17 +7183,19 @@ function startProject() {
   if (AGENT_TOKEN && PARAMS.get('panel')?.startsWith('ticket:')) { // ?panel=ticket:<change> opens a ticket's panel
     Object.assign(ag, { open: true, panel: 'ticket', target: PARAMS.get('panel').slice(7), max: ag.max || PARAMS.has('max') }); $('agent').hidden = false; document.body.classList.add('ag-open');
   }
-  if (AGENT_TOKEN && (PARAMS.get('term') || EMBED)) { ag.convo = 'terminal'; ag.term = PARAMS.get('term') || null; ag.termWrite = PARAMS.get('write') === '1'; } // ?term=<session id> joins that session (&write=1: writing)
-  if (EMBED) { ag.open = true; ag.panel = 'chat'; ag.stick = true; $('agent').hidden = false; document.body.classList.add('ag-open'); }
-  if (AGENT_TOKEN && PARAMS.get('convo')) ag.convo = PARAMS.get('convo'); // ?convo=assistant|brainstorm|session:<id> (from the background list)
+  if (AGENT_TOKEN && (PARAMS.get('term') || POP_KIND === 'term')) { ag.convo = 'terminal'; ag.term = PARAMS.get('term') || null; ag.termWrite = PARAMS.get('write') === '1'; } // ?term=<session id> joins that session (&write=1: writing)
+  if (EMBED) { ag.open = true; ag.panel = POP_KIND === 'ticket' ? 'ticket' : 'chat'; ag.stick = true; $('agent').hidden = false; document.body.classList.add('ag-open'); }
+  if (AGENT_TOKEN && PARAMS.get('convo')) ag.convo = PARAMS.get('convo');
+  if (POP) { const h = popTake(POP_KEY); if (h?.text) ag.drafts[ag.panel === 'ticket' ? 'ticket-ask' : 'chat-' + ag.convo] = h.text; } // what was typed in the panel // ?convo=assistant|brainstorm|session:<id> (from the background list)
   if (AGENT_TOKEN && PARAMS.get('panel') === 'chat') { ag.open = true; ag.panel = 'chat'; ag.stick = true; ag.max = ag.max || PARAMS.has('max'); $('agent').hidden = false; document.body.classList.add('ag-open'); } // ?panel=chat opens the chat, &max maximized
   if (SNAPSHOT && AGENT_TOKEN) fetch(withProject('/api/agent')).then((r) => r.json()).then((v) => { ag.view = v; renderAgentLive(); });
   if (SNAPSHOT) fetch(withProject('/api/state')).then((r) => r.json()).then((d) => { $('conn').innerHTML = `<span class="dot"></span>snapshot ${hhmm(d.scannedAt)}`; accept(d); });
-  else if (EMBED) { // one half of side by side: no lasting connection (a browser keeps only 6 per address, and every
-    // dashboard tab and window holds one): the state once, the sessions every 3 s
-    fetch(withProject('/api/state')).then((r) => r.json()).then(accept).catch(() => {});
+  else if (EMBED) { // one half of side by side, or a pop out: no lasting connection (a browser keeps only 6 per address,
+    // and every dashboard tab and window holds one; a 7th request waits forever): the state every 15 s, the sessions
+    // and chats every 2 s
+    const state = () => fetch(withProject('/api/state')).then((r) => r.json()).then(accept).catch(() => {});
     const poll = () => fetch(withProject('/api/agent')).then((r) => r.json()).then((v) => { ag.view = v; renderAgentLive(); }).catch(() => {});
-    poll(); setInterval(poll, 3000);
+    state(); poll(); setInterval(poll, 2000); setInterval(state, 15000);
   }
   else connect();
 }
@@ -7042,15 +7208,22 @@ function startOverview() {
     fetch('/api/projects').then((r) => r.json()).then((d) => { $('conn').innerHTML = `<span class="dot"></span>snapshot ${hhmm(d.scannedAt)}`; renderOverview(d); });
     return;
   }
-  if (EMBED) { fetch('/api/projects').then((r) => r.json()).then(renderOverview).catch(() => {}); return; } // one half of side by side: no lasting connection (the sessions are polled)
-  const es = new EventSource('/events?overview=1');
-  es.onopen = () => { $('conn').innerHTML = '<span class="dot on"></span>live'; };
+  if (POP_KIND === 'term') { fetch('/api/projects').then((r) => r.json()).then(renderOverview).catch(() => {}); return; } // one half of side by side: no lasting connection (the sessions are polled)
   let onboardFrom = AGENT_TOKEN ? PARAMS.get('onboard') : null; // ?onboard=<folder>: "Onboard it as a project…" from a session-only session
-  es.onmessage = (ev) => {
-    const d = JSON.parse(ev.data); $('conn').innerHTML = `<span class="dot on"></span>live · ${hhmm(d.scannedAt)}`; renderOverview(d);
-    if (onboardFrom && candidate(onboardFrom)) { const p = onboardFrom; onboardFrom = null; const u = new URL(location.href); u.searchParams.delete('onboard'); history.replaceState(null, '', u.pathname + u.search); openScout(p); }
+  let newFrom = AGENT_TOKEN && PARAMS.has('newproject') ? PARAMS.get('newproject') : null; // ?newproject[=<parent folder>]: the new-project brainstorm
+  const got = (d) => {
+    $('conn').innerHTML = `<span class="dot on"></span>live · ${hhmm(d.scannedAt)}`; renderOverview(d);
+    if (onboardFrom && candidate(onboardFrom)) { const p = onboardFrom; onboardFrom = null; if (!EMBED) { const u = new URL(location.href); u.searchParams.delete('onboard'); history.replaceState(null, '', u.pathname + u.search); } openScout(p); if (POP) popApply(popTake(POP_KEY)); }
+    if (newFrom != null) { sc.parent = newFrom || sc.parent; newFrom = null; if (!EMBED) { const u = new URL(location.href); u.searchParams.delete('newproject'); history.replaceState(null, '', u.pathname + u.search); } openNewProject(); if (POP) popApply(popTake(POP_KEY)); }
   };
-  es.onerror = () => { $('conn').innerHTML = '<span class="dot off"></span>disconnected, retrying…'; };
+  if (EMBED) { // a popped out chat about a candidate or a new project: polled, no lasting connection (see startProject)
+    const poll = () => fetch('/api/projects').then((r) => r.json()).then(got).catch(() => {});
+    poll(); setInterval(poll, 2500);
+  } else liveSource('/events?overview=1', (es) => {
+    es.onopen = () => { $('conn').innerHTML = '<span class="dot on"></span>live'; };
+    es.onmessage = (ev) => got(JSON.parse(ev.data));
+    es.onerror = () => { $('conn').innerHTML = '<span class="dot off"></span>disconnected, retrying…'; };
+  });
   setInterval(() => ui.overview && renderOverview(ui.overview), 30000);
 }
 (async () => {

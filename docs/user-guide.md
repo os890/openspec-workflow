@@ -199,7 +199,9 @@ move that would put a change before one of its prerequisites.
 ![Backlog with the opened change highlighted](images/dashboard-backlog.png)
 
 With `--agent` the backlog also takes new work. **＋ New ticket** opens a form for the draft and its roadmap entry:
-**Add to roadmap** plans it at the end of the chosen milestone, ready to start; **Save as idea** keeps it as a draft
+**Add to roadmap** plans it, ready to start: at the end of the chosen milestone, or, with **Position**, right below
+a row (after #3 it becomes 3a), so it comes before the rows that build on what it changes. A ticket from the
+brainstorming brings the position Claude suggests. **Save as idea** keeps it as a draft
 that still needs refinement, listed under **Ideas** at the end of the backlog and nowhere else.
 
 ![New ticket form in the backlog](images/dashboard-backlog-new.png)
@@ -207,7 +209,8 @@ that still needs refinement, listed under **Ideas** at the end of the backlog an
 **💡 Brainstorm an idea** (or **Refine** on an idea) starts a brainstorming conversation in the chat. Claude asks
 questions, checks the roadmap and the specs for overlaps and prerequisites, and keeps the ticket small; when you
 agree, it writes the ticket as a card. **Review and save…** opens it in the form, where you plan it or keep it as an
-idea. If the brainstorming does not lead anywhere, nothing is saved.
+idea (the form is in the backlog: a maximized chat goes back to the side panel, and from a popped out chat the
+form opens in the dashboard's window). If the brainstorming does not lead anywhere, nothing is saved.
 
 ![Brainstorming an idea in the chat](images/dashboard-brainstorm.png)
 
@@ -290,8 +293,10 @@ node tools/openspec-dashboard/server.mjs --agent examples/todo-app
 ```
 
 **Chat** (in the header and on the full-screen board) is a messenger, independent of any ticket. The
-**Assistant** reads the project but never changes it, knows its status and remembers the conversation; **New chat**
-starts over. Every session started from the dashboard becomes a conversation of its own. Sessions running in a
+**Assistant** reads the project but never changes it, knows its status and remembers the conversation; **↺ New chat**
+next to **Send** starts over, like /clear (typing `/clear` works too): the conversation empties at once, and your
+next message starts the new one (**↺ New brainstorm** does the same for 💡 Brainstorm; the earlier conversation
+ends then). Every session started from the dashboard becomes a conversation of its own. Sessions running in a
 terminal have a panel of their own, behind the terminal button (see below). Enter sends, Shift+Enter starts a new line.
 
 ![Chat next to the full-screen board](images/dashboard-chat.png)
@@ -318,15 +323,21 @@ skills synced from claude.ai. Commands are blue, skills green; each shows where 
 ↑/↓ pick one, Tab or Enter takes it (Enter on a name typed in full sends it), Esc closes the list. Skills that
 are only for agents (`user-invocable: false`) are left out.
 
+**/btw** asks a side question: Claude answers it from the conversation, without tools, also while it works, and
+neither the question nor the answer becomes part of the conversation. Claude Code shows the answer only in an
+overlay of its terminal and keeps it nowhere, so the dashboard reads it from the terminal and closes the overlay
+again; in the thread it is a card of its own (**BTW**, the question, then *Answering…* and the answer). It needs a
+session in macOS Terminal. Until the overlay is closed nothing else is typed into that terminal (every key would go
+to the overlay). A /btw typed in the terminal itself stays there.
+
+**Esc** in the input box while the session works interrupts it, like Esc in its terminal. A bare Esc cannot be typed into Terminal, so the dashboard sends Ctrl+C, which interrupts
+the same way. It does nothing while the session waits (there Ctrl+C would ask to press it again to quit) or asks
+something; then Esc does what it always does here (it shrinks or closes the panel).
+
 **⋯ under the input box** opens quick messages that are not about one answer but sent with one click as they are.
 They are handy while a session works: the message reaches it mid-turn, and it answers before it continues. The
 thread shows each one short, e.g. **👀 Status**.
 
-- git: the green arrow (**Commit**) asks it to make sure everything is up to date and commit, but not push; the blue
-  arrow (**Commit and push**) to make sure everything is up to date, commit and push. While you write to a session
-  whose folder is a git repository, a git icon with a red dot next to ⚙ shows that it has uncommitted files (checked
-  once an answer is in, then every few seconds while the session waits); hovering lists them, a click opens these
-  quick messages, and the icon goes away once everything is committed;
 - find out where it stands: 👀 the current status (done, now, next), ❓ whether anything blocks it or it needs a
   decision, 🔍 a summary of the changes so far (files and why, nothing committed), 📍 which task of the current
   change it is on and how many are left;
@@ -339,6 +350,11 @@ thread shows each one short, e.g. **👀 Status**.
   it takes the first local URL of the answer (on a phone or tablet, `localhost` becomes the computer's address).
   ⏹️ stops the app (everything it started, until nothing listens on its ports), 🔃 restarts it (stop, rebuild what
   changed, start) and ends with the same `App:` line.
+- git, at the end: the green arrow (**Commit**) asks it to make sure everything is up to date and commit, but not
+  push; the blue arrow (**Commit and push**) to make sure everything is up to date, commit and push. While you write
+  to a session whose folder is a git repository and has uncommitted files, the two arrows also sit right next to ⚙,
+  one click each (checked once an answer is in, then every few seconds while the session waits; hovering one lists
+  the files). They go away once everything is committed; in ⋯ they are always there, also before the first answer.
 
 ![Quick messages under the input box](images/dashboard-quick-messages.png)
 
@@ -375,7 +391,9 @@ whether it is working or waiting for input, and when it last did something; ende
 hours. Pick one to join it: you see what it does, live (your prompts, Claude's replies and its steps). The end of
 the thread says where it stands: **Working: <its current step> · since <time>** while it works (the time that step started; hover it for
 when it started on your message; an answer is on its way), **✓ Done · waiting for your next message** once it has answered (also when a command it started, e.g. the app,
-keeps running in the background; the line then says so), or **Session ended**. Following a session
+keeps running in the background; below it, the dashboard then lists what still runs: the command, the ports it
+listens on and for how long, e.g. `java -jar …quarkus-run.jar` · port 8091 · for 1 h 50 min — it is what Claude Code
+shows as "· 1 shell"; you can go on writing, and ⏹️ in the quick messages stops the app), or **Session ended**. Following a session
 needs no setup: the dashboard finds the running sessions in Claude Code's own records (`~/.claude/sessions`) and
 reads their transcripts.
 
@@ -421,7 +439,9 @@ agent opens its details: its task, the kind of agent, steps and time, its result
 live while it works. In the thread, where it was started, only a slim line remains (🤖 *its task* · done), which
 opens the same details. Agents that are done stay in the stack for an hour; ✕ puts one away. **🤖 2 working** in the
 bar says how many are still running. The dashboard reads them from Claude Code's own records; nothing needs to be
-set up.
+set up. When an agent's report goes back to the session, Claude Code hands it over like a message; the thread
+shows it as a slim line too (↩ 🤖 *its task* · reported back), not as a message of yours, and a click opens the agent
+with its result. A message from another session unfolds to its text.
 
 ![Two agents working in the background, fanned out in the lower left corner](images/dashboard-agents.png)
 
@@ -496,6 +516,11 @@ write session is always one click away; its ✕ removes the icon. **Minimize** n
 away, without the window first: for a session you'll want later, not right now. In the side panel the three sit
 together as small icons (hover for the name); maximized they have their labels, and there is no **⤡ Restore** next
 to them while you write (`Esc` or **Close ✕** brings back the side panel).
+
+The other panels on the right pop out the same way, with the pop out icon next to **⤢ Maximize**: a project's chat
+(Assistant, Brainstorm, a session's chat), a ticket's panel, the chat about a folder to onboard and the new-project
+brainstorm. What you typed and did not send goes along, and comes back with **⤺ Back to the panel**; if you switched
+to another chat in the small window, that one comes back. Minimized, their icon in the corner is a speech bubble.
 
 **Send it to the background.** For a longer task, **⤓ Background** (next to **Read only**) closes the panel and
 keeps the session in a list; the panel lets go of it, so the terminal button opens with the picker, for another

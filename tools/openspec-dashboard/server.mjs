@@ -160,7 +160,7 @@ function parseRoadmap(md) {
       lastMilestone = null;
       continue;
     }
-    const ms = line.match(/^- \*\*(M\d+)\s+"([^"]+)"\*\*\s*\(([^)]+)\):\s*(.*)$/);
+    const ms = line.match(/^- \*\*(M\d+[a-z]?)\s+"([^"]+)"\*\*\s*\(([^)]+)\):\s*(.*)$/);
     if (ms) {
       const [from, to] = parseRange(ms[3]);
       lastMilestone = { id: ms[1], title: ms[2], from, to, summary: ms[4].trim() };
@@ -1094,6 +1094,15 @@ function trusted(root) {
   return !!(trustCache.projects[real] ?? trustCache.projects[root])?.hasTrustDialogAccepted; // a trusted parent does not count
 }
 
+// what an agent (a sub-agent's report, or another session's message) hands to the session: Claude Code puts it in as a
+// prompt (<agent-message from="<agent id>">, a queued one while it works), but nobody typed it: its own entry
+const AGENT_MSG = /^\s*(?:Another Claude session sent a message:\s*)?<agent-message from="([^"]*)"[^>]*>\s*([\s\S]*?)\s*(?:<\/agent-message>\s*)?$/;
+const agentMsg = (text, t, sub) => {
+  const a = String(text ?? '').replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').match(AGENT_MSG);
+  if (!a) return null;
+  const body = a[2].replace(/^\[Subagent hand-back\][\s\S]*?The report follows:\s*\n/, '').replace(/^ {2}/gm, '');
+  return { t, kind: 'agentmsg', from: a[1], handback: /^\[Subagent hand-back\]/.test(a[2]), text: body.slice(0, 6000), sub };
+};
 const cleanUser = (t) => {
   t = String(t ?? '').replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
   if (/^<(local-command-stdout|local-command-caveat|local-command-stderr|task-notification|bash-stdout|bash-stderr)>/.test(t)) return ''; // Claude Code's own, not typed
@@ -1114,6 +1123,7 @@ const CLAUDE_DIR = process.env.OPENSPEC_DASHBOARD_CLAUDE_DIR || path.join(os.hom
 const BUILTIN_SLASH = [
   ['clear', 'command', 'Start a new conversation (clears the context)'], ['compact', 'command', 'Summarize the conversation so far to free context', '[instructions]'],
   ['context', 'command', 'Show what fills the context window'], ['model', 'command', 'Switch the model (a menu in the terminal, or /model <name>)', '[model]'],
+  ['btw', 'command', 'A side question: answered from the conversation, without tools, and not added to it', '<question>'],
   ['memory', 'command', 'Edit the memory files (CLAUDE.md)'], ['init', 'skill', 'Write a CLAUDE.md with the codebase documentation'],
   ['review', 'command', 'Review a pull request'], ['code-review', 'skill', 'Review the current diff for correctness bugs', '[level] [target]'],
   ['security-review', 'skill', 'Security review of the pending changes'], ['simplify', 'skill', 'Review the changed code for reuse and simplification, then fix'],
@@ -1181,7 +1191,7 @@ function transcriptInfo(file) {
         if (m.isSidechain || m.isMeta || m.isCompactSummary) continue;
         const ct = m.message?.content;
         const t = cleanUser(typeof ct === 'string' ? ct : Array.isArray(ct) ? ct.filter((x) => x.type === 'text').map((x) => x.text).join('\n') : '');
-        if (t && !/^(<|\/|\[Request interrupted|This session is being continued from a previous conversation)/.test(t) && !/from the OpenSpec dashboard/.test(t)) return t.slice(0, 200);
+        if (t && !AGENT_MSG.test(t) && !/^(<|\/|\[Request interrupted|This session is being continued from a previous conversation)/.test(t) && !/from the OpenSpec dashboard/.test(t)) return t.slice(0, 200);
       }
       return null;
     };
@@ -1330,7 +1340,8 @@ function typeableOf(pid) {
   if (!termApps.has(pid)) termAppOf(pid);
   return termApps.get(pid) === 'Terminal';
 }
-// modes: check (the tab's visible text), type (the text, followed by Return), enter (Return alone). Tabs by index:
+// modes: check (the tab's visible text), type (the text, followed by Return), enter (Return alone), ctrlc (Ctrl+C,
+// followed by Return). Tabs by index:
 // in "repeat with t in tabs", "contents of t" would be the loop reference, not the tab's text
 const TYPE_SCRIPT = `on run argv
   set theTty to item 1 of argv
@@ -1342,6 +1353,8 @@ const TYPE_SCRIPT = `on run argv
           if theMode is "check" then return contents of tab i of w
           if theMode is "enter" then
             do script "" in tab i of w
+          else if theMode is "ctrlc" then
+            do script (ASCII character 3) in tab i of w
           else
             do script (item 3 of argv) in tab i of w
           end if
@@ -1371,7 +1384,8 @@ const squash = (t) => t.replace(/\s+/g, ' ').trim();
 // the input box of Claude Code: the lines between the last two horizontal rules
 const inputBox = (contents) => { const ls = contents.replace(/\s+$/, '').split('\n'); const rules = ls.map((l, i) => (/^─{10,}/.test(l.trim()) ? i : -1)).filter((i) => i >= 0); return rules.length >= 2 ? squash(ls.slice(rules.at(-2) + 1, rules.at(-1)).join(' ')).replace(/^❯\s*/, '') : ''; };
 const ASKING = /Do you want to|\b1\. Yes\b|❯ 1\.|Enter to confirm|Enter to select|Esc to cancel/; // a question or menu of Claude Code (permission, trust, choice)
-async function typeInto(pid, text) {
+async function typeInto(pid, text, { own = false } = {}) {
+  if (!own) await termLocks.get(pid)?.catch(() => {}); // a /btw overlay is open there: every key would go to it
   if (process.platform === 'darwin') await termAppOf(pid); // a session that just started: wait for the lookup
   if (!typeableOf(pid)) throw httpError(409, 'This session does not run in macOS Terminal; the message can only go through the hook.');
   const ps = (await runCmd('ps', ['-o', 'tty=,stat=', '-p', String(pid)])).out.trim().split(/\s+/);
@@ -1395,11 +1409,90 @@ async function typeInto(pid, text) {
     await new Promise((res) => setTimeout(res, i < 4 ? 300 : 500));
     const now = (await termScript(tty, 'check', '')).out;
     if (ASKING.test(tail(now))) return;
-    inBox = inputBox(now).includes(head);
+    const box = inputBox(now);
+    // a long text shows as "[Pasted text #1]" (in parts: "[Pasted text #1][Pasted text #2]" and a typed tail), not as itself
+    inBox = box.includes(head) || /\[Pasted text #\d+/.test(box);
     if (inBox) { await termScript(tty, 'enter', ''); continue; }
     if (squash(now).includes(head) || i >= 5) return; // shown outside the box, or not seen in ~2 s (sent and scrolled, or wrapped)
   }
   if (inBox) throw httpError(502, 'The text is in its input box but Return did not go through: press Return in its terminal.');
+}
+// ---- what a session runs in the background (Claude Code's status "shell": a command started with run_in_background,
+// e.g. the app): every Bash call of Claude Code is a child shell of its process ("zsh -c source …/shell-snapshots/…"),
+// so the commands below such shells are what still runs; with the ports they listen on and how long they run.
+// Read at most every 5 s per session
+const bgCache = new Map(); // pid -> { t, list }
+const etimeSec = (e) => { const m = String(e).trim().match(/^(?:(\d+)-)?(?:(\d+):)?(\d+):(\d+)$/); return m ? ((+m[1] || 0) * 86400 + (+m[2] || 0) * 3600 + +m[3] * 60 + +m[4]) : 0; };
+async function backgroundOf(pid) {
+  const c = bgCache.get(pid);
+  if (c && Date.now() - c.t < 5000) return c.list;
+  const rows = (await runCmd('ps', ['-A', '-o', 'pid=,ppid=,etime=,command='])).out.split('\n').map((l) => l.trim().match(/^(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/)).filter(Boolean)
+    .map((m) => ({ pid: +m[1], ppid: +m[2], secs: etimeSec(m[3]), cmd: m[4] }));
+  const kids = (p) => rows.filter((r) => r.ppid === p);
+  const wrappers = kids(pid).filter((r) => /shell-snapshots\//.test(r.cmd));
+  const list = [];
+  for (const w of wrappers) for (const k of kids(w.pid)) {
+    const desc = [k.pid]; for (let i = 0; i < desc.length && i < 50; i++) desc.push(...kids(desc[i]).map((r) => r.pid));
+    const ports = desc.length ? (await runCmd('lsof', ['-nP', '-a', '-iTCP', '-sTCP:LISTEN', '-p', desc.join(',')])).out.split('\n').slice(1).map((l) => l.match(/:(\d+) \(LISTEN\)/)?.[1]).filter(Boolean) : [];
+    list.push({ cmd: k.cmd.replace(/\s+/g, ' ').slice(0, 300), ports: [...new Set(ports)].sort((p, q) => p - q), secs: k.secs });
+  }
+  bgCache.set(pid, { t: Date.now(), list: list.slice(0, 8) });
+  return list.slice(0, 8);
+}
+// ---- /btw: a side question. Claude Code answers it from the conversation (no tools), in an overlay of its terminal,
+// also while it works, and keeps neither the question nor the answer (not in the transcript, nowhere on disk). So it
+// is typed there and the answer is read from the screen: "/btw <question>" (it may wrap), "✳ Answering…" and
+// "Esc to close" while it answers, then the answer and "c to copy · f to fork · Esc to close". Return closes the
+// overlay; until then every key goes to it (c copies, f forks), so nothing else is typed into that terminal meanwhile.
+const btwLog = new Map(); // session id -> [{ id, q, t, state: 'answering' | 'done' | 'failed', answer, error }]
+const termLocks = new Map(); // pid -> the /btw that holds its terminal (settles when its overlay is closed)
+function screenBtw(screen, q) {
+  const ls = String(screen ?? '').replace(/\s+$/, '').split('\n');
+  const foot = ls.findLastIndex((l) => /Esc to close/.test(l));
+  if (foot < 0) return null;
+  const head = ls.slice(0, foot).findLastIndex((l) => /^\s*\/btw\b/.test(l));
+  if (head < 0) return null;
+  // the question's lines (wrapped, or cut with …), then the answer
+  const want = squash(`/btw ${q}`);
+  let i = head + 1, got = squash(ls[head]);
+  while (i < foot && ls[i].trim()) {
+    const next = squash(`${got} ${ls[i]}`);
+    if (!want.startsWith(next.replace(/…$/, ''))) break;
+    got = next; i++;
+  }
+  const body = ls.slice(i, foot).map((l) => l.replace(/\s+$/, ''));
+  while (body.length && !body[0].trim()) body.shift();
+  while (body.length && !body.at(-1).trim()) body.pop();
+  if (!/copy|fork/i.test(ls[foot])) return { done: false }; // still answering
+  const ind = Math.min(...body.filter((l) => l.trim()).map((l) => l.match(/^\s*/)[0].length), 99);
+  return { done: true, answer: body.map((l) => l.slice(ind)).join('\n').trim() };
+}
+async function btwAsk(x, q) {
+  await termLocks.get(x.pid)?.catch(() => {}); // one at a time per terminal
+  let release;
+  const lock = new Promise((r) => { release = r; });
+  termLocks.set(x.pid, lock);
+  const done = () => { if (termLocks.get(x.pid) === lock) termLocks.delete(x.pid); release(); };
+  const e = { id: randomBytes(4).toString('hex'), q, t: Date.now(), state: 'answering', answer: '', error: '' };
+  try { await typeInto(x.pid, `/btw ${q}`, { own: true }); } catch (err) { done(); throw err; }
+  const list = [...(btwLog.get(x.sessionId) ?? []), e].slice(-30);
+  btwLog.set(x.sessionId, list);
+  (async () => {
+    try {
+      const tty = `/dev/${(await runCmd('ps', ['-o', 'tty=', '-p', String(x.pid)])).out.trim()}`;
+      let seen = false;
+      for (let i = 0; i < 170 && e.state === 'answering'; i++) { // up to about 2 minutes
+        await new Promise((r) => setTimeout(r, 700));
+        const sc = await termScript(tty, 'check', '').catch(() => null);
+        const r = sc && !sc.err ? screenBtw(sc.out, q) : null;
+        if (r) seen = true;
+        if (r?.done) { Object.assign(e, { state: 'done', answer: r.answer.slice(0, 20000) }); await termScript(tty, 'enter', '').catch(() => {}); }
+        else if (!r && (seen || i >= 8)) Object.assign(e, { state: 'failed', error: seen ? 'The overlay was closed in its terminal before the answer could be read.' : 'The question did not show in its terminal.' });
+      }
+      if (e.state === 'answering') Object.assign(e, { state: 'failed', error: 'No answer within 2 minutes: it may still show in its terminal (Esc closes it there).' });
+    } finally { done(); }
+  })();
+  return list;
 }
 // ---- Claude's questions (AskUserQuestion) in a joined session, answered from the page. In the terminal they are a
 // menu: a digit picks an option and moves on, the Return that follows every typed text would pick the next one. So a
@@ -1790,12 +1883,14 @@ function createAgent(project) {
       'How to brainstorm: ask at most three focused questions at a time; challenge assumptions; offer options with their trade-offs; keep a ticket to one reviewable vertical slice and say when it should be split; point out related or conflicting roadmap entries by their number.',
       idea ? `The user wants to refine the idea in openspec/backlog/${idea}.md; read it first.` : '',
       ms ? `Milestones: ${ms}. A row with a letter (8a, 10b) was added later and belongs to the milestone of its number.` : '',
+      'Its place in the roadmap ("after"): before the rows that build on what it changes (a change of a type or a table comes before the rows that use it), after its prerequisites; "end" only when no later row is affected. The dashboard puts the row right below that row with a letter (after 3 → 3a), so no other number changes.',
       'When the ticket is clear and the user agrees (or asks for it), write it as one fenced code block with the info string "ticket", in this form, and nothing after the block except one short sentence:',
       '```ticket',
       'name: <kebab-case change name starting with a verb, e.g. add-recurring-todos>',
       'area: <area or bounded context, as in the roadmap>',
       'milestone: <milestone id such as M1, or none>',
       'depends on: <roadmap numbers of hard prerequisites, e.g. 3, 5, or —>',
+      'after: <the roadmap number of the row it belongs right after, e.g. 3, or end (the end of its milestone)>',
       'goal: <one line, as in the roadmap Goal column>',
       '---',
       '# Proposal',
@@ -2011,12 +2106,49 @@ function createAgent(project) {
   const sessionOf = (sid) => allSessions().find((x) => x.sessionId === String(sid ?? '')) ?? elsewhere().find((x) => x.sessionId === String(sid ?? ''));
   // "Write to it" for a session in macOS Terminal: typed into its tab (one line, sent with Return)
   async function type({ session, text }) {
-    text = String(text ?? '').replace(/\s*\n\s*/g, ' ').trim().slice(0, 4000);
+    text = String(text ?? '').replace(/\s*\n\s*/g, ' ').trim();
     if (!text) throw httpError(400, 'The message is empty.');
+    if (text.length > 20000) throw httpError(413, `The message is too long to type into its terminal (${text.length} characters, at most 20000): split it into parts.`);
     const x = sessionOf(session);
     if (!x || x.ended || !x.pid) throw httpError(404, 'No running session with that id.');
     await typeInto(x.pid, text);
     return { typed: true };
+  }
+  // /btw <question>: typed into its terminal, the answer read from its screen (it comes with the transcript as "btw")
+  async function btw({ session, text }) {
+    const q = String(text ?? '').replace(/^\s*\/btw\b/, '').replace(/\s*\n\s*/g, ' ').trim().slice(0, 2000);
+    if (!q) throw httpError(400, 'Write the question after /btw.');
+    const x = sessionOf(session);
+    if (!x || x.ended || !x.pid) throw httpError(404, 'No running session with that id.');
+    if (process.platform === 'darwin') await termAppOf(x.pid);
+    if (!typeableOf(x.pid)) throw httpError(409, '/btw is answered in its terminal, and this session does not run in macOS Terminal (through the hook it would be a normal message): ask it in its terminal.');
+    return { btw: await btwAsk(x, q) };
+  }
+  // Esc in the input box while it works: interrupts the turn, as Esc in its terminal would. A bare Esc cannot be typed
+  // into Terminal (every scripted text ends with Return, and Esc+Return arrives as Option+Return: a new line in its
+  // input box), so it is Ctrl+C, which interrupts the same way (the Return after it finds an empty prompt). Never
+  // while it waits (there Ctrl+C asks "again to exit", and a second one would end the session), never into a menu,
+  // and at most one every 3 s
+  const lastInterrupt = new Map(); // pid -> time
+  async function interrupt({ session }) {
+    const x = sessionOf(session);
+    if (!x || x.ended || !x.pid) throw httpError(404, 'No running session with that id.');
+    if (process.platform === 'darwin') await termAppOf(x.pid);
+    if (!typeableOf(x.pid)) throw httpError(409, 'This session does not run in macOS Terminal: interrupt it there (Esc).');
+    if (Date.now() - (lastInterrupt.get(x.pid) ?? 0) < 3000) throw httpError(429, 'Interrupted a moment ago.');
+    await termLocks.get(x.pid)?.catch(() => {});
+    runningCache.t = 0;
+    const r = runningSessions().find((y) => y.sessionId === x.sessionId);
+    if (!r) throw httpError(409, 'The session has ended.');
+    if (r.waiting) throw httpError(409, 'It is not working right now: nothing to interrupt.');
+    const ps = (await runCmd('ps', ['-o', 'tty=', '-p', String(x.pid)])).out.trim();
+    if (!ps || ps === '??') throw httpError(409, 'The session has ended.');
+    const tty = `/dev/${ps}`, sc = await termScript(tty, 'check', '');
+    if (ASKING.test(String(sc.out).replace(/\s+$/, '').split('\n').slice(-30).join('\n'))) throw httpError(409, 'It asks something in its terminal: answer it (or press Esc there).');
+    lastInterrupt.set(x.pid, Date.now());
+    const t = await termScript(tty, 'ctrlc', '');
+    if (t.err || t.out.trim() !== 'typed') throw httpError(502, `Could not interrupt it: ${(t.errOut || t.out || t.err?.message || '').trim().slice(0, 200)}`);
+    return { interrupted: true };
   }
   // the answer to Claude's open question, from the page: answers[i] = { choice: <option index> } | { choices: [...] } | { text }
   // answer: { choice: <option index> } | { choices: [...] } | { text }; rest: the answers to the other questions (tabs)
@@ -2135,6 +2267,8 @@ function createAgent(project) {
     let m; try { m = JSON.parse(line); } catch { return []; }
     // a message typed while the session works: Claude Code takes it in mid-turn and keeps it as an attachment
     if (m.type === 'attachment' && m.attachment?.type === 'queued_command' && m.attachment.prompt) {
+      const am = agentMsg(m.attachment.prompt, Date.parse(m.timestamp) || null, !!m.isSidechain);
+      if (am) return [am];
       const x = cleanUser(m.attachment.prompt);
       return x ? [{ t: Date.parse(m.timestamp) || null, kind: 'user', text: x, sub: !!m.isSidechain }] : [];
     }
@@ -2146,9 +2280,9 @@ function createAgent(project) {
     const t = Date.parse(m.timestamp) || null, sub = !!m.isSidechain;
     const c = m.message.content;
     if (m.type === 'user') {
-      if (typeof c === 'string') { const x = cleanUser(c); return x ? [{ t, kind: 'user', text: x, sub }] : []; }
+      if (typeof c === 'string') { const am = agentMsg(c, t, sub); if (am) return [am]; const x = cleanUser(c); return x ? [{ t, kind: 'user', text: x, sub }] : []; }
       return (Array.isArray(c) ? c : []).flatMap((b) => {
-        if (b.type === 'text') { const x = cleanUser(b.text); return x ? [{ t, kind: 'user', text: x, sub }] : []; }
+        if (b.type === 'text') { const am = agentMsg(b.text, t, sub); if (am) return [am]; const x = cleanUser(b.text); return x ? [{ t, kind: 'user', text: x, sub }] : []; }
         if (b.type === 'tool_result' && b.is_error) return [{ t, kind: 'error', text: (Array.isArray(b.content) ? b.content.map((y) => y.text ?? '').join(' ') : String(b.content ?? '')).slice(0, 400), sub, id: b.tool_use_id }];
         // the result of a tool call, for the CLI-like view: its first lines and how many there are
         if (b.type === 'tool_result') {
@@ -2252,7 +2386,8 @@ function createAgent(project) {
     // a question of Claude's that waits in its terminal (a menu): read from the screen
     const ask = r?.asking && r.typeable ? await screenAskOf(r.pid) : null;
     const compacting = state === 'working' && r?.typeable ? await screenCompacting(r.pid) : false;
-    return { entries, next: start + Math.max(end, from0), cut, size, state, shell: !!r?.shell, agents: agentsOf(file), compacting, ...(withGit ? { git: await gitHint(x.cwd) } : {}), ask: ask && { id: ask.id, kind: ask.kind, title: ask.title, detail: ask.detail, chat: !!ask.chat, question: ask.question, multi: ask.multi, tabs: ask.tabs, options: ask.options }, context: transcriptInfo(file)?.ctx ?? null };
+    const background = r?.shell && r.pid ? await backgroundOf(r.pid).catch(() => []) : [];
+    return { entries, next: start + Math.max(end, from0), cut, size, state, shell: !!r?.shell, background, agents: agentsOf(file), compacting, ...(btwLog.has(x.sessionId) ? { btw: btwLog.get(x.sessionId) } : {}), ...(withGit ? { git: await gitHint(x.cwd) } : {}), ask: ask && { id: ask.id, kind: ask.kind, title: ask.title, detail: ask.detail, chat: !!ask.chat, question: ask.question, multi: ask.multi, tabs: ask.tabs, options: ask.options }, context: transcriptInfo(file)?.ctx ?? null };
   }
 
   function control({ job: jobId, action }) {
@@ -2320,7 +2455,7 @@ function createAgent(project) {
     changed(0);
     return { tagged: true };
   }
-  return { view, ask, chat, start, message, control, cancel, brief, jobState, startWatching, stopWatching, busy, onboard, listen, transcript, hook, type, newSession, answer, agentSteps, tag, commands };
+  return { view, ask, chat, start, message, control, cancel, brief, jobState, startWatching, stopWatching, busy, onboard, listen, transcript, hook, type, btw, interrupt, newSession, answer, agentSteps, tag, commands };
 }
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => { for (const c of children) { try { c.kill('SIGTERM'); } catch { /* gone */ } } process.exit(0); });
@@ -2960,7 +3095,9 @@ async function writeOpenspecFile(project, { path: rel, content, base }) {
 //   - as an idea: with the idea marker and no roadmap row (it still needs refinement), or
 //   - planned: without the marker and with a roadmap row at the end of the chosen milestone, so it can be started.
 // A row added to a milestone gets the next free label after its last row (9 → 9a, 9a → 9b), so no other number
-// changes; without a milestone it gets the next whole number at the end of the table.
+// changes; without a milestone it gets the next whole number at the end of the table. With a position ("after" a
+// row, e.g. 3) it goes right below that row as 3a (below 3a, 3b … when they exist: still before 4), so a change that
+// later rows build on comes before them; its milestone is then the one of that row.
 const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const cell = (v) => String(v ?? '').replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ').trim();
 async function writeAtomic(file, text) {
@@ -2981,7 +3118,7 @@ function proposalText(body, idea, goal) {
   }
   return md.replace(/\n{3,}/g, '\n\n') + '\n';
 }
-function insertRoadmapRow(md, { name, area, dependsOn, goal, milestone }) {
+function insertRoadmapRow(md, { name, area, dependsOn, goal, milestone, after }) {
   const lines = md.split('\n');
   const rows = [];
   let header = -1;
@@ -2994,9 +3131,20 @@ function insertRoadmapRow(md, { name, area, dependsOn, goal, milestone }) {
   const { milestones } = parseRoadmap(md);
   const labels = new Set(rows.map((r) => r.order));
   let label, at;
-  const ms = milestone ? milestones.find((m) => m.id === milestone) : null;
-  if (milestone && !ms) throw httpError(400, `No milestone ${milestone}.`);
-  if (ms) {
+  const ms = milestone && !after ? milestones.find((m) => m.id === milestone) : null;
+  if (milestone && !after && !ms) throw httpError(400, `No milestone ${milestone}.`);
+  if (after) {
+    let k = rows.findIndex((r) => r.order === after);
+    if (k < 0) throw httpError(400, `No roadmap row #${after} to put it after.`);
+    const n = orderNum(after);
+    while (rows[k + 1] && orderNum(rows[k + 1].order) === n) k++; // below its letters (3a, 3b), still before the next number
+    const last = rows[k].order, letter = last.slice(String(n).length);
+    let c = letter ? String.fromCharCode(letter.charCodeAt(0) + 1) : 'a';
+    while (labels.has(`${n}${c}`) && c < 'z') c = String.fromCharCode(c.charCodeAt(0) + 1);
+    if (labels.has(`${n}${c}`)) throw httpError(409, `No free label after #${last}.`);
+    label = `${n}${c}`;
+    at = rows[k].line + 1;
+  } else if (ms) {
     const inMs = rows.filter((r) => orderNum(r.order) >= ms.from && orderNum(r.order) <= ms.to);
     const last = inMs.at(-1);
     const lastNum = last ? orderNum(last.order) : ms.from - 1;
@@ -3017,7 +3165,7 @@ function insertRoadmapRow(md, { name, area, dependsOn, goal, milestone }) {
   lines.splice(at, 0, `| ${cells.join(' | ')} |`);
   return { md: lines.join('\n'), label };
 }
-async function addToBacklog(project, { name, area, milestone, dependsOn, goal, body, mode, replaces }) {
+async function addToBacklog(project, { name, area, milestone, dependsOn, goal, body, mode, replaces, after }) {
   name = String(name ?? '').trim();
   if (!NAME_RE.test(name)) throw httpError(400, 'The name must be kebab-case (lower-case words joined by "-"), e.g. add-recurring-todos.');
   if (!['roadmap', 'idea', 'update'].includes(mode)) throw httpError(400, 'Save it as an idea or add it to the roadmap.');
@@ -3049,7 +3197,7 @@ async function addToBacklog(project, { name, area, milestone, dependsOn, goal, b
     const st = await statOf(rmFile);
     const md = await readText(rmFile);
     if (md === null) throw httpError(404, 'There is no openspec/roadmap.md to plan the ticket in; save it as an idea.');
-    const out = insertRoadmapRow(md, { name, area, dependsOn: String(dependsOn ?? '').trim(), goal, milestone: milestone || null });
+    const out = insertRoadmapRow(md, { name, area, dependsOn: String(dependsOn ?? '').trim(), goal, milestone: milestone || null, after: String(after ?? '').trim() || null });
     label = out.label;
     const now = await statOf(rmFile);
     if (now && st && now.mtimeMs !== st.mtimeMs) throw httpError(409, 'roadmap.md changed meanwhile; try again.');
@@ -3847,7 +3995,7 @@ async function readBody(req, max = 100_000) {
   for await (const chunk of req) { raw += chunk; if (raw.length > max) throw httpError(413, 'Too large.'); }
   try { return JSON.parse(raw || '{}'); } catch { throw httpError(400, 'Expected JSON.'); }
 }
-const AGENT_ACTIONS = { ask: 'ask', chat: 'chat', start: 'start', message: 'message', control: 'control', cancel: 'cancel', listen: 'listen', transcript: 'transcript', hook: 'hook', type: 'type', 'new-session': 'newSession', answer: 'answer', 'agent-steps': 'agentSteps', tag: 'tag', commands: 'commands' };
+const AGENT_ACTIONS = { ask: 'ask', chat: 'chat', start: 'start', message: 'message', control: 'control', cancel: 'cancel', listen: 'listen', transcript: 'transcript', hook: 'hook', type: 'type', btw: 'btw', interrupt: 'interrupt', 'new-session': 'newSession', answer: 'answer', 'agent-steps': 'agentSteps', tag: 'tag', commands: 'commands' };
 
 // ---------------------------------------------------------------- phones and tablets (Settings › Phone and tablet)
 // Off by default. On, the dashboard also listens on this computer's addresses in the local network (same port), and

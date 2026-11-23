@@ -218,7 +218,8 @@ Prerequisites come from the *Depends on* column of `openspec/roadmap.md` (row nu
 numbers in parentheses are soft and never block). A row added later between two others can carry a letter (`2a`,
 `10b`, ranges like `10a–10c`), and a mark after the number (`3 ✓`) is ignored; a lettered row belongs to the
 milestone of its number. Milestones come from lines like
-`- **M1 "First release"** (3–9): …`. Both formats match the templates of the
+`- **M1 "First release"** (3–9): …`; a milestone added later between two others can carry a letter too (`M1b`).
+Both formats match the templates of the
 [`openspec-ticket-workflow`](../../skills/openspec-ticket-workflow/references/templates.md) skill. Without a
 roadmap the dashboard still works and lists every change.
 
@@ -241,7 +242,10 @@ and the proposal. Then:
 
 - **Add to roadmap** writes `openspec/backlog/<name>.md` and a roadmap row at the end of the milestone. The row
   gets the next free number after the milestone's last row (`9` → `9a`, `9a` → `9b`), so no other number changes;
-  without a milestone it gets the next number at the end of the table. The ticket is ready to start (**Start a
+  without a milestone it gets the next number at the end of the table. With **Position** (`after`: a row's label)
+  it goes right below that row instead, below its lettered rows if there are any (after `3`: `3a`, then `3b`, still
+  before `4`), in that row's milestone. The brainstorming's ticket block has an `after:` line (the row it belongs
+  right after, or `end`), which the form preselects. The ticket is ready to start (**Start a
   session…**).
 - **Save as idea** writes only the draft, marked as an idea that needs refinement, and no roadmap row. Ideas are
   listed in their own group at the end of the backlog (and as a chip on the board) and count nowhere else: not on
@@ -351,6 +355,10 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     read-only tools (Read, Grep, Glob), never changes it, knows the project status when the chat starts and
     remembers the conversation; **New chat** starts over.
   - **💡 Brainstorm**: shape an idea into a ticket (see above); **New brainstorm** starts over.
+  - Both start over like /clear (**↺ New chat** / **↺ New brainstorm** next to Send, shown once the conversation has
+    started, or `/clear` / `/new` typed into the box): with an empty input box the thread empties at once (`ag.fresh`: the conversation
+    is shown without its jobs) and the next message goes with `fresh: true` (the server ends the old chat then);
+    with text in the box that text starts the new one right away. A reload before that brings the old one back.
   - **Session · <ticket>**: every session started from the dashboard is a conversation with its steps and replies.
     Your messages go straight to it; you can end it after the current turn or stop it, and a message to an ended
     session continues it. `claude --resume <session-id>` takes it over in a terminal.
@@ -367,12 +375,15 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     the bubble at once (`termPending`): ◷ while the `type` request runs, ✓ once it answered, ✓✓ on the transcript's
     bubble once the transcript has the text (compared without whitespace runs), only on the latest own message. While the session is not
     working, the page asks `transcript` for `git` as well (every 8 s; `gitHint`: `git status --porcelain --branch` in
-    the session's folder with the read-only git options, cached 4 s): with uncommitted files, a git icon with a red dot
-    shows next to ⚙ (the files as its tooltip, a click opens the quick messages), hidden again once all is committed; it glides
+    the session's folder with the read-only git options, cached 4 s): with uncommitted files, ⇧ Commit and ⬆️ Commit and push
+    (`QUICK_GIT`) show next to ⚙, one click each (the files in their tooltips), hidden again once all is committed; it glides
     in at `termView.popSpeed` (`POP_MS`, 1.3 s to instant, default 0.8 s; Settings › Write mode › Your messages); a failed send removes it and puts the
     text back into the input box. The end of a joined session's thread shows its state (working with the current step, done and
     waiting, listening, ended), polled with the transcript every 2 s from Claude Code's own idle/busy (its status `shell`, a finished turn with
-    a background command still running, counts as done). In write mode
+    a background command still running, counts as done; the transcript response then carries `background`: the
+    processes below Claude Code's Bash shells — children of its process whose command sources
+    `~/.claude/shell-snapshots/` — with the TCP ports they and their children listen on (`lsof`) and their run time,
+    read at most every 5 s; the page lists them under ✓ Done). In write mode
     the bar folds into one line (**Details ▾** unfolds it), and Claude's answers get the reactions, requests and
     quotes of the chat; **⤓ Background** puts the session into the background list (`localStorage` `osd-bg`; the
     Assistant, a brainstorm and a session on a ticket have the button too, as `kind: 'chat'` entries with their
@@ -424,6 +435,16 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     every 3 s), since a browser keeps only six connections per address and every dashboard tab holds one. The button
     is disabled until a second session runs. The left one is the joined session, the
     right one the most recent other running session.
+  - **Connections:** a browser keeps only six connections per address, and a further request waits until one is
+    free, which can be forever (a save stuck at "Planning…"). So every page holds at most one live connection
+    (`liveSource`, `/events`), and lets go of it 20 s after its tab went to the background ("paused in the
+    background"; shown again, it reconnects and the server sends the whole state). Embedded pages (side by side, pop
+    outs) poll instead. Saving a ticket gives up after 20 s with a message instead of waiting.
+    Every other request of the panel (`agentPost`) gives up after 90 s; a message that did not go out goes back into
+    the input box.
+  - **Long messages** typed into a terminal session (up to 20000 characters, one line): Claude Code shows a long text
+    as `[Pasted text #1]` (or in parts with a typed tail) in its input box, so "still in the box" is that marker as
+    well as the text itself; then Return is sent.
   - **Pop out** (while writing to a session): the same `?embed` page for that session in a Document Picture-in-Picture
     window (`documentPictureInPicture.requestWindow`, 440×680, always on top; Chrome and the installed app), else a
     popup window; the panel lets go of the session (like ⤓ Background); one pop out at a time. A bar on top of the
@@ -434,6 +455,15 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     session). Side by side, Pop out and Minimize are one group; in the 480px side panel icons only (title and
     `aria-label` name them), with their labels when maximized. Maximized while writing, **⤡ Restore** is hidden (Pop out does more); `Esc`
     shrinks the panel as before, and Close ✕ also ends the maximized view (`osd-chat-max` 0).
+    The other panels on the right pop out too (the pop out icon before **⤢ Maximize**): a project's chat
+    (`?embed&convo=<id>`), a ticket's panel (`?embed&panel=ticket:<change>`), a candidate's chat
+    (`?overview&embed&onboard=<folder>`) and the new-project brainstorm (`?overview&embed&newproject=<parent>`), each
+    with `&pop`. Like the halves of side by side they hold no live connection: they poll (the chats every 2 s, the
+    state every 15 s, a candidate's chat or the new project every 2.5 s), and closing the scout panel does nothing there. Text typed and not sent goes along both ways (`localStorage` `osd-pop-hand`, under
+    the pop out's address): the panel writes it before it pops out, the pop out on `pagehide`, together with the panel
+    it shows (a switch to another chat in the pop out comes back) and, for the new project, whether expert mode's
+    choices went along. Attached files stay behind. Minimized, the corner icon is a speech bubble instead of the
+    terminal. History is not popped out (it drives the board's time travel).
   - **Agents of a session** (subagents): an `Agent`/`Task` call in the transcript becomes a slim line in the thread and a card in a
     stack in the lower left corner of the conversation (working ones first, done ones for an hour), with a popup for
     its task, result and steps; its state comes
@@ -441,7 +471,11 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     background, `toolUseId` to match the call, `finished`): done when `finished` is set, the agent called
     `SubagentHandback` (its report, shown as the result) or its last answer ended the turn; working while it wrote in
     the last 10 minutes; else stopped. Steps are its unique tool call ids; the transcript response carries `agents`,
-    `POST /api/agent/agent-steps` returns one agent's steps (its last 1 MB).
+    `POST /api/agent/agent-steps` returns one agent's steps (its last 1 MB). What an agent hands back comes in as a
+    prompt (`<agent-message from="<agent id>">`, while it works as a `queued_command` attachment, which had been shown
+    as a message typed by the user): the server makes it an `agentmsg` entry (`from`, `handback`, the report without
+    the hand-back frame), the page a slim line (↩ 🤖 · reported back) that opens that agent, or, for a sender that is
+    not one of its agents (another session), a fold with the text. Such a prompt never becomes the session's label.
   - **Claude's questions** (AskUserQuestion): while the menu is open, Claude Code has not written the question to the
     transcript yet, so the server reads it from the session's Terminal tab (the question above the numbered options,
     their descriptions, `[ ]` for several choices, the tabs of further questions, the number of "Chat about this")
@@ -459,6 +493,21 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     `.claude/`, of `~/.claude/`, of the enabled plugins in `plugins/installed_plugins.json` (`plugin:name`) and the
     skills synced from claude.ai (`skills/synced/<bucket>/`, as `anthropic-skills:name`); name, kind, source,
     description and `argument-hint` from the frontmatter, cached for 30 s per folder. Commands are blue, skills green.
+  - **/btw** (write mode): Claude Code answers a side question in an overlay of its terminal and writes neither the
+    question nor the answer anywhere (not to the transcript). `POST /api/agent/btw` types `/btw <question>` and then
+    reads the screen every 0.7 s (`screenBtw`): the `/btw` line (the question, wrapped or cut with …), `✳ Answering…`
+    and `Esc to close` while it answers, then the answer and `c to copy · f to fork · Esc to close`. The answer is
+    taken (dedented), Return closes the overlay. Up to 2 minutes, then failed. The questions and answers are kept in
+    the server's memory per session (the last 30) and come with the transcript as `btw`; the page shows them as cards
+    in the thread at their time. While the overlay is open the terminal is locked (`termLocks`): every key would go to
+    the overlay (`c` copies, `f` forks), so other typing waits until it is closed. Only for sessions in macOS
+    Terminal; through the hook `/btw` would arrive as a normal message, so it is refused.
+  - **Esc** (write mode, in the input box, while the session works): `POST /api/agent/interrupt` sends Ctrl+C
+    (`do script (ASCII character 3)`). A bare Esc cannot be scripted into Terminal: every `do script` ends with
+    Return, and Esc+Return arrives in one read as Option+Return (a new line in Claude Code's input box, no
+    interrupt). Ctrl+C interrupts a turn the same way, and the Return after it finds an empty prompt. Refused while
+    the session waits (Claude Code then asks for a second Ctrl+C to quit), while a menu is on its screen, and within
+    3 s of the last one. Otherwise Esc keeps its meaning on the page (shrink or close the panel).
   - **Permission prompts** (a command, an edit, a fetch, also a sub-agent's): read from the Terminal tab the same
     way (`ask.kind: 'permission'`): the "Do you want to …?" line, its numbered options, and above it up to the last
     horizontal rule what it wants to do (`title`, e.g. "Bash command · from the general-purpose agent", and `detail`:
@@ -489,11 +538,11 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     to quote just that part). Claude sees no timestamps of the dashboard, so the reference it gets is the answer's
     first sentence, or the selected part, in a fixed form (`[Reaction 👍 to your message: "…"]`,
     `[Request 📝 about your message: "…"]`, `[Replying to your message: "…"]`), which it finds in its own conversation; the whole answer is not sent again. **⋯ under the input box** holds
-    quick messages about no answer in particular, in groups (⇧ commit and ⬆️ commit and push, both
-    drawn as colored arrow boxes — green and blue, `qkIcon` — and asking to make sure everything is up to date first · 👀 status, ❓ blockers, 🔍 changes so far, 📍 ticket
+    quick messages about no answer in particular, in groups (👀 status, ❓ blockers, 🔍 changes so far, 📍 ticket
     progress · ⏸ pause after this step, 🎯 stay on the ticket, 🧹 wrap up · 🧪 run the quality gate, ▶️ start the app cleanly and end with `App: <URL or command>`, which becomes an
     **Open the app ↗** button in the thread, next to ✓ Done and in the background list (`app` in
-    `/api/sessions/status`); without that line the first `localhost`/`127.0.0.1` URL of the answer; ⏹️ stops the app, 🔃 restarts it and ends with the same line), sent as they
+    `/api/sessions/status`); without that line the first `localhost`/`127.0.0.1` URL of the answer; ⏹️ stops the app, 🔃 restarts it and ends with the same line · ⇧ commit and ⬆️ commit and push, both drawn as colored
+    arrow boxes — green and blue, `qkIcon` — and asking to make sure everything is up to date first), sent as they
     are and shown short in the thread. A message typed into a working terminal session is absorbed mid-turn; Claude Code keeps it as a
     `queued_command` attachment in the transcript, which the thread shows like a prompt.
     Reactions show as small badges on the answer they belong to.
