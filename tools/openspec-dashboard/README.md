@@ -373,7 +373,10 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     on its own. It looks for up to ~5 s until the text shows, in the box or above it (a busy session may draw it
     late; an empty box alone is no proof), and answers 502 when it still sits in the box at the end. The page shows
     the bubble at once (`termPending`): ◷ while the `type` request runs, ✓ once it answered, ✓✓ on the transcript's
-    bubble once the transcript has the text (compared without whitespace runs), only on the latest own message. While the session is not
+    bubble once the transcript has the text (compared without whitespace runs, first 80 characters, only entries
+    written after it was sent, against everything read so far), only on the latest own message. A session the panel
+    has not read for 3 minutes (`termStale`: another session shown, panel closed, popped out) is read anew like a
+    reload instead of catching up from its old offset. While the session is not
     working, the page asks `transcript` for `git` as well (every 8 s; `gitHint`: `git status --porcelain --branch` in
     the session's folder with the read-only git options, cached 4 s): with uncommitted files, ⇧ Commit and ⬆️ Commit and push
     (`QUICK_GIT`) show next to ⚙, one click each (the files in their tooltips), hidden again once all is committed; it glides
@@ -429,6 +432,17 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     AppleScript calls to Terminal time out after 8 s; when macOS has not allowed the dashboard to control Terminal
     (an unanswered or denied Automation request, typical for a LaunchAgent), the server says so and does not try
     again for a minute.
+  - **Activity** (header of the terminal sessions in write mode, a project's page): `ag.act` (localStorage
+    `osd-ag-act`) lays `<details class="ag-act">` over the left half of the header: the title and the "Writing to"
+    note stay in the layout with `visibility: hidden` (class `act-on`), so nothing on the right moves, and
+    `placeAgentAct` sizes the overlay up to the first element on the right of either line (on every header draw and
+    resize). The summary holds the three newest events of `state.events` (as many as fit), its list the last ten,
+    both from `feedWhat`, which the board's feed uses too. While the joined session has agents working or
+    background commands (`T.agents`, `T.background` of the transcript poll), `agentActRunHtml` puts them in the
+    first line ("Background:", from the earliest start: an agent's `start`, a command's poll time minus `secs`)
+    with animated dots and two events follow; the poll redraws it when either changes. `renderFeed` fills it on every state update (in a
+    pop-out: the 15 s poll); a new first event slides in. Ticket names in the list call `pick` (not in a pop-out or
+    behind a maximized panel, where the board is not visible). The toggle shows only while the "Writing to" line does.
   - **Side by side**: an overlay with two frames of the page itself, each with `?embed` (only the terminal sessions
     panel, filling the frame; no header, no close or maximize) and `term=<session>&write=1` on the session's project
     page (or the overview); each half polls, joins and writes on its own, without a lasting connection (the state once, the sessions
@@ -496,8 +510,18 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
   - **/btw** (write mode): Claude Code answers a side question in an overlay of its terminal and writes neither the
     question nor the answer anywhere (not to the transcript). `POST /api/agent/btw` types `/btw <question>` and then
     reads the screen every 0.7 s (`screenBtw`): the `/btw` line (the question, wrapped or cut with …), `✳ Answering…`
-    and `Esc to close` while it answers, then the answer and `c to copy · f to fork · Esc to close`. The answer is
-    taken (dedented), Return closes the overlay. Up to 2 minutes, then failed. The questions and answers are kept in
+    and `Esc to close` while it answers, then the answer and `c to copy · f to fork · Esc to close` (newer versions: a footer over two lines with
+    `↑/↓ to scroll · ⇧←/→ to browse · … · x to clear history ·`, read as one block by `btwFoot`; at the bottom of the screen, or while the session works right above its input box).
+    When the answer is taller than the window, the `/btw` line is above the screen: a footer with `f to fork` (only
+    there) still marks a finished answer, taken whole by copy. The answer is
+    taken (dedented), Return closes the overlay. With `to scroll` in the footer the answer is longer than the screen:
+    `btwCopy` types `c` (copy; the Return after it closes the overlay), reads it with `pbpaste` and puts the
+    clipboard's text back with `pbcopy`, not when `clipboard info` lists more than text (then the visible part).
+    An overlay open in the terminal without the page's lock (a /btw typed there) is an `ask` of kind `btw`, also while
+    the session works (the screen read of `screenCompacting` finds it)
+    (`screenBtwOpen`: question, `done`, `answer`); the `answer` action closes it (copy or Return) and adds it to the
+    session's btw list, and `typeInto` closes such an overlay (`btwClose`, keeping a finished answer in the list) before it types
+    anything, a new `/btw` included; while its answer is still coming it refuses. Up to 2 minutes, then failed. The questions and answers are kept in
     the server's memory per session (the last 30) and come with the transcript as `btw`; the page shows them as cards
     in the thread at their time. While the overlay is open the terminal is locked (`termLocks`): every key would go to
     the overlay (`c` copies, `f` forks), so other typing waits until it is closed. Only for sessions in macOS
@@ -512,7 +536,9 @@ Started with `--agent`, the dashboard talks to Claude Code in two places:
     read from the Terminal tab the same way (`ask.kind: 'permission'`): the question line right above numbered
     options ("Do you want to …?", "Allow this read outside the working directories?"), its options, and above it up to the last
     horizontal rule what it wants to do (`title`, e.g. "Bash command · from the general-purpose agent", and `detail`:
-    the command or file and Claude Code's warning; the id includes them). An option is typed as its digit; an own
+    the command or file and Claude Code's warning; the id includes them). A confirmation without numbers ("Permanently delete …?" with "❯ No" and "Yes", footer "Esc to cancel") is read
+    too (`menu: 'arrows'`, `cursor`: the selected line). An option is typed as its digit, in a menu without numbers
+    as arrow keys from the selected line plus Return (then the server checks that the menu closed); an own
     answer picks a "No" option that changes no setting ("No, and ask again next time", not "…block … from now on") and, once the session is idle, types `[Declined: <title>] <your words>`.
   - **Context gauge**: the session list, the transcript and `/api/sessions/status` carry `ctx` (`used`, `window`,
     `compactions`): `used` from the last main-chain assistant message's `usage` (input + cache creation + cache read

@@ -190,7 +190,8 @@ so the open work gets the space (`?focus` in a link):
 
 ![Board in focus mode](images/dashboard-board-focus.png)
 
-**Backlog** shows the roadmap as a list per milestone, like the backlog of an issue tracker. The change you opened
+**Backlog** shows the roadmap as a list per milestone, like the backlog of an issue tracker (with a milestone picked
+above the board, only that milestone). The change you opened
 last stays highlighted, so you find your place in the list again. With `--agent` you can reorder the changes that
 have not started: drag one by its handle (⠿) within its milestone, or use Alt+↑/↓. The dashboard rewrites
 `openspec/roadmap.md`, keeps the numbers of the positions and updates every *Depends on* reference; it refuses a
@@ -328,7 +329,11 @@ neither the question nor the answer becomes part of the conversation. Claude Cod
 overlay of its terminal and keeps it nowhere, so the dashboard reads it from the terminal and closes the overlay
 again; in the thread it is a card of its own (**BTW**, the question, then *Answering…* and the answer). It needs a
 session in macOS Terminal. Until the overlay is closed nothing else is typed into that terminal (every key would go
-to the overlay). A /btw typed in the terminal itself stays there.
+to the overlay). A long answer, which scrolls in the overlay, is taken whole: the dashboard uses the overlay's
+"c to copy" and puts back the text that was on your clipboard (when the clipboard holds an image or files, it takes
+what shows instead). A /btw typed in the terminal itself shows up in the write session as a card with its answer
+while it is open there (also while the session works); **Close it** closes it in the terminal and keeps the answer in the thread. A message or a new
+/btw you send while such an overlay is open closes it first; its answer stays in the thread.
 
 **Esc** in the input box while the session works interrupts it, like Esc in its terminal. A bare Esc cannot be typed into Terminal, so the dashboard sends Ctrl+C, which interrupts
 the same way. It does nothing while the session waits (there Ctrl+C would ask to press it again to quit) or asks
@@ -458,7 +463,7 @@ when several may be chosen), and with several questions its recommendation for e
 thread with their answer.
 
 **When it asks for permission.** A permission prompt (run a command, edit a file, read a file outside the project, …,
-also one that a sub-agent asks for) shows up as a card too: **🔐 It asks for permission**, with what it wants to do (the command, the file, Claude
+also one that a sub-agent asks for, and confirmations such as "Permanently delete …?" with No and Yes) shows up as a card too: **🔐 It asks for permission**, with what it wants to do (the command, the file, Claude
 Code's warning) and the prompt's options (Yes, Yes and don't ask again, No). A click on an option and **Send answer**
 picks it in the terminal. Your own words in the field decline it (a No that changes no setting) and go to the session as what it should do
 instead. Other prompts that the dashboard cannot read still say "Needs you": answer those in the terminal.
@@ -496,6 +501,16 @@ already and continues the session there. **Details ▾** shows the session picke
 **Fewer details ▴** folds them. Claude's answers have the same quick replies as the chat (👍 ✅ 🌿 🙏 🎉 💡, 🔁 📝 📊 🔄
 and ↩ to quote, also a selected part); they are typed into the session like any message, and the thread shows them
 as reactions and quotes.
+
+**Activity.** While you write to a session, **Activity** in the panel's header (the pulse icon) puts the board's
+activity feed on the left half of the header, in place of the title and the line "Writing to … · Working", which
+hardly change: the two or three newest entries (a task done, a ticket moved or added), the newest on top, where a new
+one slides in. While the session runs something in the background (its agents, or a command it left running such as
+the app), the first line says so, from the time the earliest of them started, so you see how long it runs, e.g.
+"20:41 Background: 🤖 Review ticket 4 · ⚙ node :3000", with dots that move, and two entries follow; hover it for
+the full list with each start time. The right half stays as it is, and the header does not grow. A click on the entries opens the last
+ten; a ticket name there shows the ticket on the board. Another click on **Activity** brings the title back; the page
+remembers the choice.
 
 **Side by side.** **Side by side** in the panel's header shows two sessions next to each other (one above the
 other on a narrow screen), e.g. the session that implements a ticket and the one that reviews it. Each half is a

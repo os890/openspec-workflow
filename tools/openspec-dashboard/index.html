@@ -183,6 +183,7 @@ details.group.current > summary .num { color: var(--st-progress); background: co
 .btw-a { margin-top: 6px; font-size: 13.5px; }
 .btw-q .meta { font-size: 10.5px; opacity: .7; white-space: nowrap; }
 .btw-a.muted { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.btw-open { margin-top: 6px; font-size: 12.5px; }
 .btw-a.warn { color: var(--st-blocked); }
 .md h1, .md h2, .md h3, .md h4 { line-height: 1.3; margin: 1.2em 0 .4em; text-wrap: balance; font-weight: 800; }
 .md h1 { font-size: 18px; } .md h2 { font-size: 16px; } .md h3 { font-size: 14.5px; } .md h4 { font-size: 13.5px; color: var(--muted); }
@@ -1916,6 +1917,34 @@ body.embed [data-ag-max], body.embed [data-ag-close], body.embed [data-sc-max], 
 .agent-panel:not(.max) .ag-splitbtn svg { margin-right: 0 !important; }
 .agent-panel:not(.max) .ag-head .ag-splitbtn + .ag-splitbtn { margin-left: -2px; }
 .ag-head .ag-splitbtn + .ag-maxbtn { margin-left: 8px; } /* a little apart from the panel's own maximize and close */
+/* the small activity feed on the left half of the write sessions' header (toggle "Activity"): laid over the title
+   and the "Writing to" line, which stay in the layout, invisible; two or three entries, the list drops down */
+.agent-panel.act-on .ag-head > h2, .agent-panel.act-on .ag-head > h2 + .muted, .agent-panel.act-on .term-compact > .ag-note { visibility: hidden; }
+.ag-act { position: absolute; z-index: 5; }
+.ag-act > summary { list-style: none; cursor: pointer; height: 100%; overflow: hidden; border-radius: 6px; }
+.ag-act > summary::-webkit-details-marker { display: none; }
+.ag-act-now { list-style: none; margin: 0; padding: 0; font-size: 12.5px; line-height: 19px; }
+.ag-act-now li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.ag-act-now li:first-child { color: var(--ink); }
+.ag-act > summary:hover .ag-act-now li { color: var(--ink); }
+.ag-act-now time { color: var(--faint); font-variant-numeric: tabular-nums; font-size: 12px; margin-right: 2px; }
+.ag-act-now .ch { color: var(--accent); font-weight: 600; }
+.ag-act-now li.ag-act-run { display: flex; min-width: 0; color: var(--ink); }
+.ag-act-what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-dots { flex-shrink: 0; padding-left: 1px; }
+.ag-act-run > time { flex-shrink: 0; }
+.ag-act-bgl { color: var(--muted); }
+.ag-dots { display: inline-block; width: 1.6em; }
+.ag-dots::after { content: '.'; animation: ag-dots 2s steps(1, end) infinite; } /* .  ..  ...  ..  . */
+@keyframes ag-dots { 0% { content: '.'; } 25% { content: '..'; } 50% { content: '...'; } 75% { content: '..'; } }
+@media (prefers-reduced-motion: reduce) { .ag-dots::after { content: '...'; animation: none; } }
+.ag-act-now.new { animation: ag-act-in .5s ease-out; }
+@keyframes ag-act-in { from { transform: translateY(-19px); } to { transform: none; } }
+.ag-act-now.new li:first-child { animation: ag-act-fade .5s ease-out; }
+@keyframes ag-act-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .ag-act-now.new, .ag-act-now.new li:first-child { animation: none; } }
+.ag-act-list { position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; width: min(440px, 86vw); max-height: 340px; margin: 0; padding: 4px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,.18); }
+.ag-head .ag-actbtn[aria-pressed="true"] { color: var(--accent); }
 /* time travel: the history shrinks to a small box at the bottom right, the board is the earlier state */
 .gh-panel.travel, .gh-panel.travel.max { inset: auto 12px 12px auto; top: auto; height: min(44vh, 420px); width: min(400px, calc(100vw - 24px)); }
 .gh-panel.travel .gh-detail { display: none; }
@@ -2824,18 +2853,71 @@ function renderMilestone(s) {
       Overall <span class="num">${s.changes.filter(isDone).length}/${s.changes.filter(isTicket).length}</span> changes · <span class="num">${td.done}/${td.total}</span> tasks written so far</div>`;
 }
 
+// one entry of the activity feed (the board's, and the small one in the write-session header): what happened
+function feedWhat(e, link = true) {
+  const name = (n) => link ? `<button type="button" class="ch" data-pick="${esc(n)}">${esc(title(n))}</button>` : `<span class="ch">${esc(title(n))}</span>`;
+  let what;
+  if (e.kind === 'task-done') what = `<span style="color:var(--st-complete)">✓</span> <span class="mono">${esc(e.task)}</span> ${inline(e.text)} <span class="muted">· ${name(e.change)}</span>`;
+  else if (e.kind === 'task-reopened') what = `<span style="color:var(--st-progress)">↺</span> <span class="mono">${esc(e.task)}</span> ${inline(e.text)} <span class="muted">· ${name(e.change)}</span>`;
+  else if (e.kind === 'status') what = `${name(e.change)} → <b style="color:${stVar(e.to)}">${STATUS[e.to]?.label ?? e.to}</b>`;
+  else if (e.kind === 'added') what = `${name(e.change)} added`;
+  else if (e.kind === 'scope') what = `${name(e.change)}: <b>+${e.to - e.from}</b> task${e.to - e.from === 1 ? '' : 's'} added after work started`;
+  else what = `<span class="mono">${esc(e.change)}</span> removed`;
+  return what;
+}
+const feedItemHtml = (e, link) => `<li><time title="${new Date(e.t).toLocaleString()}">${hhmm(e.t)}</time><span class="what">${feedWhat(e, link)}</span></li>`;
+// ---- the small activity feed in the header of the write sessions (toggle "Activity", write mode only): it takes
+// the place of the left half of the header, the title and the line "Writing to … · Working", which hardly change, so
+// it needs no room of its own; the right half stays as it is. Two or three entries, the newest on top (it slides
+// in); a click opens the last ten. Laid over that area (the left parts stay in the layout, invisible, so nothing on
+// the right moves); placed again whenever the header is drawn or the window resizes
+const ACT_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>';
+const agentActHtml = (s) => `<details class="ag-act" id="ag-act" hidden title="Activity of ${esc(s.project)}"><summary><ul class="ag-act-now" id="ag-act-now"></ul></summary><ul class="feed ag-act-list" id="ag-act-list"></ul></details>`;
+function renderAgentAct(s) {
+  const now = $('ag-act-now'), list = $('ag-act-list');
+  if (!now || !list || !s?.events) return;
+  const ev = s.events, key = ev[0] ? `${ev[0].t}|${ev[0].kind}|${ev[0].change}|${ev[0].task ?? ''}` : '';
+  const run = agentActRunHtml();
+  const html = run + (ev.length ? ev.slice(0, run ? 2 : 3).map((e) => `<li><time>${hhmm(e.t)}</time> ${feedWhat(e, false)}</li>`).join('') : '<li class="muted">No activity yet</li>');
+  if (now.dataset.html !== html) { now.innerHTML = html; now.dataset.html = html; } // only when it changed: a redraw restarts the animations
+  if (ag.actKey && key !== ag.actKey) { now.classList.remove('new'); void now.offsetWidth; now.classList.add('new'); clearTimeout(ag.actNewT); ag.actNewT = setTimeout(() => now.classList.remove('new'), 600); } // the newest slides in once
+  ag.actKey = key;
+  list.innerHTML = ev.slice(0, 10).map((e) => feedItemHtml(e, !EMBED && !ag.max)).join('') || '<li><time></time><span class="what muted">Nothing yet. Checked-off tasks show up here as soon as they happen.</span></li>';
+  placeAgentAct();
+}
+// what the joined session runs in the background (its agents that work, the commands it left running, e.g. the app):
+// the first line of the small feed, with dots that move, while there is any
+function agentActRunHtml() {
+  const T = ag.term ? termLog.get(ag.term) : null;
+  if (!T) return '';
+  const agents = (T.agents ?? []).filter((a) => a.state === 'working'), cmds = T.background ?? [];
+  if (!agents.length && !cmds.length) return '';
+  const cmdName = (c) => (c.cmd.match(/(?:^|\/)([\w.+-]+)(?=\s|$)/)?.[1] ?? c.cmd).slice(0, 30) + (c.ports?.length ? ` :${c.ports[0]}` : '');
+  const parts = [agents.length && `🤖 ${agents.length === 1 ? esc(agents[0].description || 'an agent') : `${agents.length} agents working`}`, cmds.length && `⚙ ${cmds.length === 1 ? esc(cmdName(cmds[0])) : `${cmds.length} commands running`}`].filter(Boolean);
+  // since when: the earliest start of what runs now (an agent's first step; a command: its running time at the last poll)
+  const starts = [...agents.map((a) => a.start), ...cmds.map((c) => (c.secs != null ? Date.now() - c.secs * 1000 : null))].filter((t) => t > 0), since = starts.length ? Math.min(...starts) : 0;
+  const tip = [...agents.map((a) => `Agent: ${a.description || 'an agent'}${a.start ? ` (since ${hhmm(a.start)})` : ''}`), ...cmds.map((c) => `Command: ${c.cmd.slice(0, 120)}${c.ports?.length ? ` (port ${c.ports.join(', ')})` : ''}${c.secs != null ? ` (since ${hhmm(Date.now() - c.secs * 1000)})` : ''}`)].join('\n');
+  return `<li class="ag-act-run" title="${esc('Running in the background:\n' + tip)}">${since ? `<time>${hhmm(since)}</time>&nbsp;` : ''}<span class="ag-act-what"><span class="ag-act-bgl">Background:</span> ${parts.join(' · ')}</span><span class="ag-dots" aria-hidden="true"></span></li>`;
+}
+function placeAgentAct() {
+  const panel = $('agent'), a = $('ag-act');
+  if (!panel || !a) return;
+  const h2 = panel.querySelector('.ag-head > h2'), note = panel.querySelector('.term-compact > .ag-note'), btn = panel.querySelector('[data-ag-act]');
+  if (btn) btn.hidden = !note;
+  const on = !!(ag.act && h2 && note);
+  panel.classList.toggle('act-on', on);
+  a.hidden = !on;
+  if (!on) return void (a.open = false);
+  // the free width: up to the first thing on the right of each of the two lines
+  const P = panel.getBoundingClientRect(), H = h2.getBoundingClientRect(), N = note.getBoundingClientRect();
+  const lefts = (row, skip) => [...row.parentElement.children].filter((c) => !skip.includes(c) && c.offsetParent && c.getBoundingClientRect().width && Math.abs(c.getBoundingClientRect().top - row.getBoundingClientRect().top) < row.getBoundingClientRect().height).map((c) => c.getBoundingClientRect().left);
+  const right = Math.min(...lefts(h2, [h2, h2.nextElementSibling]), ...lefts(note, [note]), P.right - 16);
+  Object.assign(a.style, { left: `${H.left - P.left}px`, top: `${H.top - P.top - 2}px`, width: `${Math.max(120, right - H.left - 14)}px`, height: `${N.bottom - H.top + 4}px` });
+}
+addEventListener('resize', placeAgentAct);
 function renderFeed(s) {
-  const name = (n) => `<button type="button" class="ch" data-pick="${esc(n)}">${esc(title(n))}</button>`;
-  const items = s.events.slice(0, 40).map((e) => {
-    let what;
-    if (e.kind === 'task-done') what = `<span style="color:var(--st-complete)">✓</span> <span class="mono">${esc(e.task)}</span> ${inline(e.text)} <span class="muted">· ${name(e.change)}</span>`;
-    else if (e.kind === 'task-reopened') what = `<span style="color:var(--st-progress)">↺</span> <span class="mono">${esc(e.task)}</span> ${inline(e.text)} <span class="muted">· ${name(e.change)}</span>`;
-    else if (e.kind === 'status') what = `${name(e.change)} → <b style="color:${stVar(e.to)}">${STATUS[e.to]?.label ?? e.to}</b>`;
-    else if (e.kind === 'added') what = `${name(e.change)} added`;
-    else if (e.kind === 'scope') what = `${name(e.change)}: <b>+${e.to - e.from}</b> task${e.to - e.from === 1 ? '' : 's'} added after work started`;
-    else what = `<span class="mono">${esc(e.change)}</span> removed`;
-    return `<li><time title="${new Date(e.t).toLocaleString()}">${hhmm(e.t)}</time><span class="what">${what}</span></li>`;
-  });
+  renderAgentAct(s);
+  const items = s.events.slice(0, 40).map((e) => feedItemHtml(e));
   $('feed').innerHTML = items.join('') || '<li><time></time><span class="what muted">Nothing yet. Checked-off tasks show up here as soon as they happen.</span></li>';
   const w = s.workspace;
   $('burn').innerHTML = burn(s) + (w?.recent?.length ? `<details class="files"><summary>${w.changedLast15m} files written in the last 15 min</summary><ul>${w.recent.slice(0, 10).map((f) => `<li><span class="p" title="${esc(f.path)}"><bdi>${esc(f.path)}</bdi></span><span>${ago(f.mtime)}</span></li>`).join('')}</ul></details>` : '');
@@ -3540,7 +3622,9 @@ addEventListener('resize', () => { clearTimeout(chartResize); chartResize = setT
 const BL_MOVABLE = new Set(['proposed', 'missing']);
 function backlogHtml(s, shown, picked) {
   const focus = ui.boardFocus;
-  const groups = s.milestones.map((m) => ({ id: m.id, title: m.title, cs: shown.filter((c) => c.milestone === m.id) }));
+  // with a milestone picked above (ui.ms), only its group: the others would look empty ("Nothing open here") only
+  // because the filter hides their tickets
+  const groups = s.milestones.filter((m) => !ui.ms || m.id === ui.ms).map((m) => ({ id: m.id, title: m.title, cs: shown.filter((c) => c.milestone === m.id) }));
   const loose = shown.filter((c) => !c.milestone && isTicket(c));
   if (loose.length) groups.push({ id: '', title: 'Not in a milestone', cs: loose });
   const row = (c) => {
@@ -3577,7 +3661,7 @@ function backlogHtml(s, shown, picked) {
       const doneN = g.cs.filter(isDone).length;
       return `<section class="bl-group">
         <div class="bl-head"><b>${esc(g.id)}</b> ${esc(g.title)}<span class="muted num">${doneN}/${g.cs.length} done${focus && g.cs.some((c) => c.status === 'archived') ? ` · ${g.cs.filter((c) => c.status === 'archived').length} archived hidden` : ''}</span></div>
-        <ol class="bl-list" data-blms="${esc(g.id)}">${cs.map(row).join('') || '<li class="bl-empty">Nothing open here.</li>'}</ol>
+        <ol class="bl-list" data-blms="${esc(g.id)}">${cs.map(row).join('') || `<li class="bl-empty">${g.cs.length ? 'Nothing open here.' : 'No tickets planned yet.'}</li>`}</ol>
       </section>`;
     }).join('')}
     ${ideasHtml}
@@ -3985,6 +4069,7 @@ document.addEventListener('click', (e) => {
   const tab = e.target.closest('[data-tab]');
   if (tab && !tab.disabled) { ui.tab = tab.dataset.tab; ui.drawerScroll = 0; render(); }
 });
+document.addEventListener('click', (e) => { const a = $('ag-act'); if (a?.open && !a.contains(e.target)) a.open = false; }); // the activity list of the write sessions closes on a click elsewhere
 document.addEventListener('toggle', (e) => {
   const d = e.target;
   if (d.matches?.('details.group')) ui.open.set(d.dataset.key, d.open);
@@ -4205,7 +4290,9 @@ setInterval(() => ui.state && (renderHeader(ui.state), renderFeed(ui.state)), 30
 const AGENT_TOKEN = document.querySelector('meta[name="osd-agent"]')?.content || '';
 let chatMax = false;
 try { chatMax = localStorage.getItem('osd-chat-max') === '1'; } catch {}
-const ag = { tickets: new Map(), fresh: new Set(), max: chatMax, open: false, panel: 'chat', view: null, convo: 'assistant', target: null, mode: 'ask', note: '', force: null, busy: false, expanded: new Map(), drafts: {}, term: '', termWrite: false };
+let actOn0 = false;
+try { actOn0 = localStorage.getItem('osd-ag-act') === '1'; } catch {}
+const ag = { act: actOn0, actKey: '', tickets: new Map(), fresh: new Set(), max: chatMax, open: false, panel: 'chat', view: null, convo: 'assistant', target: null, mode: 'ask', note: '', force: null, busy: false, expanded: new Map(), drafts: {}, term: '', termWrite: false };
 const JOB_LABEL = { starting: 'starting', running: 'working', idle: 'waiting for you', done: 'ended', stopped: 'stopped', failed: 'failed' };
 const JOB_ST = { starting: 'in-progress', running: 'in-progress', idle: 'specified', done: 'complete', stopped: 'proposed', failed: 'missing' };
 const alive = (j) => ['starting', 'running', 'idle'].includes(j?.status);
@@ -4282,14 +4369,21 @@ const termMs = (x) => (x?.milestone ? `▶ ${x.milestone} ${ui.state?.milestones
 const termLabel = (x) => `${x.hookless && !x.ended && !x.typeable ? '◌ ' : x.ended ? '' : x.listening || x.listen ? '👂 ' : x.waiting ? '' : '● '}${termMs(x) || (x.prompt ? `“${x.prompt.replace(/\s+/g, ' ').slice(0, 48)}${x.prompt.length > 48 ? '…' : ''}”` : 'session')} · ${x.ended ? 'ended' : x.waiting ? 'waiting' : 'working'} · ${ago(x.t)} · ${x.sessionId.slice(0, 8)}${x.hookless && !x.ended && !x.typeable ? ' · read-only' : ''}`;
 // a side question (/btw) asked from here: Claude Code answers it in an overlay of its terminal and keeps neither, so
 // the server reads the answer from the screen and closes the overlay; a card of its own, not part of the conversation
+// a /btw overlay open in its terminal (asked there, or one the page could not close): its answer, and Close, which
+// closes it there (Return) and keeps the answer in the thread
+const btwOpenHtml = (q, canAnswer) => { const st = askState.get(q.id) ?? {}; return `<div class="btw" data-ask="${esc(q.id)}"><div class="btw-q"><span class="btw-tag" title="A side question (/btw), open in its terminal">btw</span><span>${q.question ? esc(q.question) : '<span class="muted">its question is above the screen of its terminal</span>'}</span></div>${
+  q.done ? `<div class="btw-a md">${md(q.answer || '(empty)')}</div>${q.scroll ? '<div class="btw-open muted">Longer than its screen: <b>Close it</b> takes the whole answer into the thread.</div>' : ''}` : '<div class="btw-a muted"><span class="ag-spin"></span>Answering…</div>'}<div class="btw-open muted">Open in its terminal; it takes every key there until it is closed.${canAnswer ? ` <button class="link" type="button" data-btw-close ${st.busy ? 'disabled' : ''}>${st.busy ? 'Closing…' : 'Close it'}</button>` : ''}${st.err ? ` <span class="warn">✕ ${esc(st.err)}</span>` : ''}</div></div>`; };
 const btwHtml = (b) => `<div class="btw"><div class="btw-q"><span class="btw-tag" title="A side question (/btw): answered from the conversation, without tools, and not added to it">btw</span><span>${esc(b.q)}</span><span class="meta">${hhmm(b.t)}</span></div>${
-  b.state === 'answering' ? '<div class="btw-a muted"><span class="ag-spin"></span>Answering…</div>' : b.state === 'failed' ? `<div class="btw-a warn">✕ ${esc(b.error || 'No answer.')}</div>` : `<div class="btw-a md">${md(b.answer || '(empty)')}</div>`}</div>`;
+  b.state === 'answering' ? '<div class="btw-a muted"><span class="ag-spin"></span>Answering…</div>' : b.state === 'failed' ? `<div class="btw-a warn">✕ ${esc(b.error || 'No answer.')}</div>` : `<div class="btw-a md">${md(b.answer || '(empty)')}</div>${b.closeHint ? `<div class="btw-open warn">${esc(b.closeHint)}</div>` : ''}`}</div>`;
 // what the session still runs in the background (Claude Code's "· 1 shell"): each command, its ports, how long it runs
 const bgDur = (s) => (s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min` : s >= 60 ? `${Math.floor(s / 60)} min` : `${s} s`);
 const bgHtml = (T) => (T.background?.length ? `<div class="term-bg"><span class="muted">Still running in the background, started by the session (⏹️ in the quick messages stops the app):</span>${T.background.map((b) => `<div class="term-bg-row"><code title="${esc(b.cmd)}">${esc(b.cmd.length > 90 ? b.cmd.slice(0, 89) + '…' : b.cmd)}</code><span class="muted">${b.ports.length ? `port ${b.ports.map((p) => esc(p)).join(', ')} · ` : ''}for ${bgDur(b.secs)}</span></div>`).join('')}</div>` : '');
+// a session not read for a while (the panel showed another one, was closed, popped out): read anew, like a reload,
+// rather than drawing the old state and catching up with everything written since
+const termStale = (T) => !!T?.polledAt && Date.now() - T.polledAt > 180e3;
 function termThreadHtml(sid) {
   const T = termLog.get(sid);
-  if (!T) return '<div class="ag-empty">Loading the session…</div>';
+  if (!T || termStale(T)) return '<div class="ag-empty">Loading the session…</div>';
   const xo = (ag.view?.elsewhere ?? []).find((y) => y.sessionId === sid && !y.projectId); // session only: its messages are in its folder's inbox
   const sx = xo ?? termSessions().find((y) => y.sessionId === sid), waitingNow = sx?.waiting && !sx?.listening;
   const mine = (xo ? xo.messages ?? [] : (ag.view?.messages ?? []).filter((m) => m.session === sid)).map((m) => ({ t: m.t, kind: 'mine', m, folder: xo?.folder }));
@@ -4449,6 +4543,15 @@ function askCardHtml(q, canAnswer) {
     ${canAnswer ? `<div class="ag-row">${q.options.some((o) => /\(recommended\)/i.test(o.label)) || q.tabs.length > 1 ? `<button class="btn" type="button" data-ask-rec ${off ? 'disabled' : ''} title="${q.tabs.length > 1 ? 'Take its recommended option for every question' : q.multi ? 'Take all the options it recommends' : 'Take the option it recommends'}">👍 Recommended</button>` : ''}<button class="btn primary" type="button" data-ask-send ${askReady(q) && !off ? '' : 'disabled'}>${st.busy ? '<span class="ag-spin"></span>Answering…' : st.sent ? '✓ Sent' : 'Send answer'}</button>${st.err ? `<span class="ag-note warn">✕ ${esc(st.err)}</span>` : '<span class="ag-note">goes to its terminal as if you answered it there</span>'}</div>`
       : '<div class="ag-note">Answer it in its terminal, or <b>✎ Write to it</b> to answer here.</div>'}</div>`;
 }
+document.addEventListener('click', async (e) => { // Close on a /btw overlay open in its terminal
+  if (!e.target.closest?.('[data-btw-close]')) return;
+  const q = termLog.get(ag.term)?.ask, id = e.target.closest('[data-ask]')?.dataset.ask;
+  if (!q || q.id !== id) return;
+  askState.set(id, { busy: true }); renderAgentLive();
+  try { await agentPost('answer', { session: ag.term, id, answer: { close: true } }); askState.set(id, { sent: true }); }
+  catch (err) { askState.set(id, { err: err.message }); }
+  ag.stick = true; renderAgentLive(); termPoll(true);
+});
 document.addEventListener('click', async (e) => {
   const opt = e.target.closest?.('[data-ask-opt]'), send = e.target.closest?.('[data-ask-send]'), recb = e.target.closest?.('[data-ask-rec]');
   if (!opt && !send && !recb) return;
@@ -4472,7 +4575,9 @@ document.addEventListener('input', (e) => {
   const btn = card.querySelector('[data-ask-send]'); if (btn) btn.disabled = !askReady(q);
 });
 // the end of a joined session's thread: is it working (and on what), done, or ended
+// a /btw overlay open in its terminal (asked there, also while it works): its card, then the state as usual
 function termStateHtml(T, items, canAnswer) {
+  if (T.ask?.kind === 'btw') return btwOpenHtml(T.ask, canAnswer) + (T.state === 'asking' ? '' : termStateHtml({ ...T, ask: null }, items, canAnswer));
   if (T.state === 'asking' && T.ask) return askCardHtml(T.ask, canAnswer); // its question, to answer here
   const sent = T.sentAt && Date.now() - T.sentAt < 20000 && T.state !== 'working'; // just typed: it starts in a moment
   if (T.state === 'working' || sent) {
@@ -4499,19 +4604,24 @@ async function termPoll(force) {
   if (termPolling || !ag.open || ag.panel !== 'chat' || ag.convo !== 'terminal' || !ag.term) return;
   termPolling = true;
   const sid = ag.term;
-  const T = termLog.get(sid) ?? { entries: [], next: 0, cut: false, err: '' };
+  const old = termLog.get(sid), T = old && !termStale(old) ? old : { entries: [], next: 0, cut: false, err: '' };
   try {
     const wantGit = T.state !== 'working' && Date.now() - (T.gitAt ?? 0) > 8000; // once an answer is in, then every 8 s
     const r = await agentPost('transcript', { session: sid, from: T.next, ...(wantGit ? { git: 1 } : {}) });
     let gitChanged = false;
     if ('git' in r) { gitChanged = JSON.stringify(r.git) !== JSON.stringify(T.git); T.git = r.git; T.gitAt = Date.now(); }
     if (r.state === 'working') T.gitAt = 0; // the next answer is checked at once
-    const fresh = !termLog.has(sid) || r.entries.length || T.err;
-    const pend = termPending.get(sid); // typed from here and now in the transcript: picked up
-    if (pend?.length) { const got = r.entries.filter((e) => e.kind === 'user').map((e) => sqz(e.text).slice(0, 80)); const left = pend.filter((p) => !got.includes(p.key.slice(0, 80)) && Date.now() - p.t < 30 * 60e3); if (left.length !== pend.length) termPending.set(sid, left); }
+    const fresh = termLog.get(sid) !== T || r.entries.length || T.err;
     T.entries.push(...r.entries); if (T.entries.length > 4000) T.entries.splice(0, T.entries.length - 4000);
+    T.polledAt = Date.now();
+    // typed from here and now in the transcript: picked up. Against all it has read (also what came in while the panel
+    // showed something else), but only what was written after it was sent: an earlier message that starts the same
+    // way is not it
+    const pend = termPending.get(sid);
+    if (pend?.length) { const left = pend.filter((p) => Date.now() - p.t < 30 * 60e3 && !T.entries.some((e) => e.kind === 'user' && (e.t ?? 0) >= p.t - 5000 && sqz(e.text).slice(0, 80) === p.key.slice(0, 80))); if (left.length !== pend.length) termPending.set(sid, left); }
     const stateChanged = T.state !== r.state || T.ctx?.used !== r.context?.used;
     T.next = r.next; T.cut ||= r.cut; T.err = ''; T.state = r.state; T.shell = !!r.shell; const bgSig = JSON.stringify((r.background ?? []).map((b) => [b.cmd, b.ports])), bgChanged = bgSig !== T.bgSig; T.bgSig = bgSig; T.background = r.background ?? []; const askChanged = (T.ask?.id ?? null) !== (r.ask?.id ?? null); T.ask = r.ask ?? null; const agSig = JSON.stringify((r.agents ?? []).map((a) => [a.agent, a.state, a.steps, a.last])), agentsChanged = agSig !== T.agSig; T.agSig = agSig; T.agents = r.agents ?? []; if (agentsChanged) agentStepsRefresh(); if (askChanged && r.ask) { askState.delete(r.ask.id); askSel.delete(r.ask.id); } // asked anew (the same question again): a fresh card
+    if (agentsChanged || bgChanged) renderAgentAct(ui.state); // the background line of the small activity feed
     if (r.context) T.ctx = r.context;
     const btwSig = JSON.stringify(r.btw ?? T.btw ?? null), btwChanged = 'btw' in r && btwSig !== T.btwSig; if (btwChanged) { T.btw = r.btw; T.btwSig = btwSig; }
     if (r.state === 'working') { T.waitStart ||= T.sentAt || Date.now(); T.sentAt = 0; }
@@ -4864,6 +4974,7 @@ function buildAgent() {
   const s = ui.state ?? (!PROJECT && ag.convo === 'terminal' ? { project: 'all projects', changes: [] } : null); // the overview has only the ⌨ panel
   if (!ag.open || !s) return;
   $('agent').innerHTML = ag.panel === 'chat' ? buildChat(s) : buildTicket(s);
+  renderAgentAct(s);
   applyAgentMax();
   renderAgentLive();
 }
@@ -4877,8 +4988,9 @@ const chatPlaceholder = (c, s) => (c?.terminal || ag.convo === 'terminal' ? 'Mes
 function buildChatHtml(s, c, ph) {
   const term = c?.terminal || ag.convo === 'terminal'; // also before the session list has arrived
   const chips = term ? '' : '<div class="ag-chips" id="ag-chips" role="tablist"></div>'; // ⌨ Terminal sessions is a panel of its own
+  const act = term && Array.isArray(s.events); // the small activity feed on the left of the header (a project's write sessions)
   return `
-    <div class="ag-head"><h2>${term ? `${TERM_SVG} Terminal sessions` : 'Chat'}</h2><span class="muted" style="font-size:12.5px">${esc(s.project)}</span>${ag.max ? chips : ''}${term && !EMBED ? '<button class="link ag-splitbtn" type="button" data-ag-split aria-label="Side by side" title="Two sessions next to each other, each with its own picker and input box (e.g. the one that implements and the one that reviews)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M12 4v16"/></svg><span class="lbl">Side by side</span></button>' + popBtnHtml('this session', true) + '<button class="link ag-splitbtn" type="button" data-ag-pip="min" hidden aria-label="Minimize" title="Straight to a terminal icon in the bottom right corner: one click on it pops the session out when you need it"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="m7 10 3 2.5L7 15M12 15h5"/></svg><span class="lbl">Minimize</span></button>' : !EMBED && PROJECT ? popBtnHtml('this chat') : ''}<button class="link ag-maxbtn" type="button" data-ag-max aria-pressed="${ag.max}" title="${ag.max ? 'Back to the side panel' : 'Use the whole window'}">${ag.max ? '⤡ Restore' : '⤢ Maximize'}</button><button class="link" type="button" data-ag-close>Close ✕</button></div>
+    <div class="ag-head"><h2>${term ? `${TERM_SVG} Terminal sessions` : 'Chat'}</h2><span class="muted" style="font-size:12.5px">${esc(s.project)}</span>${ag.max ? chips : ''}${act ? `<button class="link ag-splitbtn ag-actbtn" type="button" data-ag-act hidden aria-pressed="${ag.act}" title="The latest activity of the board (tasks done, tickets moved) in place of the title and the session line on the left">${ACT_SVG}<span class="lbl">Activity</span></button>` : ''}${term && !EMBED ? '<button class="link ag-splitbtn" type="button" data-ag-split aria-label="Side by side" title="Two sessions next to each other, each with its own picker and input box (e.g. the one that implements and the one that reviews)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M12 4v16"/></svg><span class="lbl">Side by side</span></button>' + popBtnHtml('this session', true) + '<button class="link ag-splitbtn" type="button" data-ag-pip="min" hidden aria-label="Minimize" title="Straight to a terminal icon in the bottom right corner: one click on it pops the session out when you need it"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="m7 10 3 2.5L7 15M12 15h5"/></svg><span class="lbl">Minimize</span></button>' : !EMBED && PROJECT ? popBtnHtml('this chat') : ''}<button class="link ag-maxbtn" type="button" data-ag-max aria-pressed="${ag.max}" title="${ag.max ? 'Back to the side panel' : 'Use the whole window'}">${ag.max ? '⤡ Restore' : '⤢ Maximize'}</button><button class="link" type="button" data-ag-close>Close ✕</button></div>
     ${ag.max ? '' : chips}
     <div class="ag-bar" id="ag-bar"></div>
     <div class="ag-thread" id="ag-thread" aria-live="polite"></div>
@@ -4889,7 +5001,7 @@ function buildChatHtml(s, c, ph) {
       <textarea id="ag-text" rows="2" placeholder="${esc(ph)}">${esc(ag.drafts['chat-' + ag.convo] ?? '')}</textarea>
       <div class="ag-tools">${micHtml()}${rephraseBtnHtml()}${gitHintHtml()}${quickHtml()}${term ? '' : '<button class="link ag-new" type="button" data-ag-new hidden title="Start over, like /clear: the conversation empties now; your next message starts the new one">↺ New chat</button>'}<button class="btn primary" type="button" data-ag-send>Send</button></div>
     </div>
-    <div class="ag-note ag-route" id="ag-route"></div>`;
+    <div class="ag-note ag-route" id="ag-route"></div>${act ? agentActHtml(s) : ''}`;
 }
 function buildTicket(s) {
   if (!s.changes.some((c) => c.name === ag.target)) ag.target = currentChange(s)?.name ?? '';
@@ -5379,6 +5491,7 @@ function renderAgentLive() {
     if ($('ag-text')) $('ag-text').placeholder = chatPlaceholder(c, ui.state ? { project: ui.state.project } : { project: '' });
     if ($('ag-chips')) $('ag-chips').innerHTML = list.filter((x) => !x.terminal).map((x) => `<button type="button" class="chip" role="tab" data-ag-convo="${esc(x.id)}" aria-selected="${x.id === c?.id}">${x.live ? '<span class="dot on"></span>' : ''}${x.session ? 'Session · ' : ''}${esc(x.label)}</button>`).join('');
     morphHtml($('ag-bar'), barHtml(c)); // morph: an open session picker stays open
+    placeAgentAct();
     for (const nb of document.querySelectorAll('#agent [data-ag-new]')) { nb.hidden = !(c && !c.terminal && !c.session && c.jobs.length); nb.textContent = c?.brainstorm ? '↺ New brainstorm' : '↺ New chat'; }
     for (const pb of document.querySelectorAll('#agent [data-ag-pip]')) pb.hidden = ag.convo === 'terminal' && !(ag.term && ag.termWrite); // a session's pop out and minimize: while writing to it (a chat's pop out always)
     // maximized while writing: no ⤡ Restore next to Pop out (Pop out does more); Close ✕ then also ends the maximized view
@@ -5514,6 +5627,14 @@ document.addEventListener('click', (e) => {
     if (document.querySelector('#agent .ag-head [data-ag-max]')?.hidden) { ag.max = false; try { localStorage.setItem('osd-chat-max', '0'); } catch {} } // without ⤡ Restore: the next open is the side panel
     return closeAgent();
   }
+  const actBtn = t.closest('[data-ag-act]');
+  if (actBtn) {
+    ag.act = !ag.act;
+    try { localStorage.setItem('osd-ag-act', ag.act ? '1' : '0'); } catch {}
+    actBtn.setAttribute('aria-pressed', String(ag.act));
+    return placeAgentAct();
+  }
+  if (t.closest('#ag-act-list [data-pick]')) $('ag-act').open = false; // the ticket on the board; the list closes
   if (t.closest('[data-ag-max]')) {
     if ($('ag-text')) ag.drafts[ag.panel === 'chat' ? 'chat-' + ag.convo : 'ticket-' + ag.mode] = $('ag-text').value;
     ag.max = !ag.max;

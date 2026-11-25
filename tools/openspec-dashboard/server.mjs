@@ -117,11 +117,13 @@ async function walk(dir, onFile, { excludes = new Set(), maxFiles = Infinity } =
   await go(dir);
 }
 
+// the rows of a milestone: the range (or single row) at the start of its parentheses, "(22–40; …)" or "(41)"; a number
+// later in the text ("not planned in rows yet; after M3") is not one
 function parseRange(s) {
-  const m = String(s).match(/(\d+)\s*[–—-]\s*(\d+)/);
+  const m = String(s).match(/^\s*(\d+)\s*[–—-]\s*(\d+)/);
   if (m) return [Number(m[1]), Number(m[2])];
-  const n = String(s).match(/\d+/);
-  return n ? [Number(n[0]), Number(n[0])] : [null, null];
+  const n = String(s).match(/^\s*(\d+)\b/);
+  return n ? [Number(n[1]), Number(n[1])] : [null, null];
 }
 
 // Roadmap rows are numbered 1, 2, 3 …, optionally with a letter for a ticket added later between two others (2a,
@@ -1397,6 +1399,11 @@ async function typeInto(pid, text, { own = false } = {}) {
   if (check.out.trim() === 'no tab') throw httpError(409, 'Its Terminal tab was not found.');
   const tail = (c) => c.replace(/\s+$/, '').split('\n').slice(-30).join('\n');
   if (ASKING.test(tail(check.out))) throw httpError(409, 'The session is asking something in its terminal (e.g. a permission); answer it there first.');
+  const ov = screenBtwOpen(check.out);
+  if (ov) { // a /btw overlay takes every key (c copies, f forks, x clears its history): closed first, also before a new /btw
+    if (!ov.done) throw httpError(409, 'A /btw answer is still coming in its terminal: wait for it, then send this.');
+    if (!(await btwClose(runningSessions().find((y) => y.pid === pid)?.sessionId, tty, ov))) throw httpError(409, 'A /btw answer is open in its terminal: close it there (Esc) first.');
+  }
   const r = await termScript(tty, 'type', text);
   if (r.err || r.out.trim() !== 'typed') throw httpError(502, `Typing failed: ${(r.errOut || r.out || r.err?.message || '').trim().slice(0, 200)}`);
   // a long text arrives as a paste, where the Return becomes part of it: if it still sits in the input box, send Return.
@@ -1446,12 +1453,47 @@ async function backgroundOf(pid) {
 // overlay; until then every key goes to it (c copies, f forks), so nothing else is typed into that terminal meanwhile.
 const btwLog = new Map(); // session id -> [{ id, q, t, state: 'answering' | 'done' | 'failed', answer, error }]
 const termLocks = new Map(); // pid -> the /btw that holds its terminal (settles when its overlay is closed)
-function screenBtw(screen, q) {
-  const ls = String(screen ?? '').replace(/\s+$/, '').split('\n');
+// the overlay's footer, maybe over two lines: "Esc to close" while it answers; then "c to copy · f to fork · Esc to
+// close", in newer versions with "↑/↓ to scroll · ⇧←/→ to browse · … · x to clear history ·" before it
+const BTW_FOOT = /Esc to close|to scroll|to browse|to copy|to fork|clear history/;
+function btwFoot(ls) {
   const foot = ls.findLastIndex((l) => /Esc to close/.test(l));
   if (foot < 0) return null;
+  // the overlay is the bottom of the screen, or (while the session works) right above its input box, with the box
+  // and the status lines below it
+  const below = ls.slice(foot + 1).filter((l) => l.trim());
+  if (below.length && !/^\s*─{10,}\s*$/.test(below[0])) return null;
+  let top = foot; while (top > 0 && BTW_FOOT.test(ls[top - 1]) && ls[top - 1].trim()) top--;
+  const t = ls.slice(top, foot + 1).join(' ');
+  return { foot, top, done: /copy|fork/i.test(t), scroll: /to scroll/.test(t) }; // "to scroll": longer than the screen
+}
+// the whole answer of a /btw overlay that scrolls (the screen shows only its start): "c" copies it (the Return that
+// follows closes the overlay), read from the clipboard, whose text is put back right after. Not when the clipboard
+// holds more than text (an image, files), which could not be put back: then null
+async function btwCopy(tty) {
+  if (process.platform !== 'darwin') return null;
+  const info = (await runCmd('osascript', ['-e', 'clipboard info'])).out;
+  if (/PNGf|TIFF|JPEG|GIFf|PDF|furl|«class (?!utf8|ut16|TEXT|RTF|rtf)/i.test(info)) return null;
+  const saved = (await runCmd('pbpaste', [])).out;
+  const r = await termScript(tty, 'type', 'c');
+  if (r.err) return null;
+  await new Promise((res) => setTimeout(res, 900));
+  const got = (await runCmd('pbpaste', [])).out;
+  await new Promise((res) => { const p = execFile('pbcopy', [], () => res()); p.stdin.end(saved); });
+  return got.trim() && got !== saved ? got.trim() : null;
+}
+function screenBtw(screen, q) {
+  const ls = String(screen ?? '').replace(/\s+$/, '').split('\n');
+  const f = btwFoot(ls);
+  if (!f) return null;
+  const foot = f.top;
   const head = ls.slice(0, foot).findLastIndex((l) => /^\s*\/btw\b/.test(l));
-  if (head < 0) return null;
+  if (head < 0) { // taller than the window: the question is above the screen. Its footer still tells ("f to fork" only there)
+    const t = ls.slice(f.top, f.foot + 1).join(' ');
+    if (f.done && /to fork/.test(t)) return { done: true, scroll: true, partial: true, answer: dedent(ls.slice(0, foot)) }; // scroll: take it whole by copy
+    if (!f.done && ls.slice(0, foot).some((l) => /Answering…/.test(l))) return { done: false };
+    return null;
+  }
   // the question's lines (wrapped, or cut with …), then the answer
   const want = squash(`/btw ${q}`);
   let i = head + 1, got = squash(ls[head]);
@@ -1460,12 +1502,38 @@ function screenBtw(screen, q) {
     if (!want.startsWith(next.replace(/…$/, ''))) break;
     got = next; i++;
   }
-  const body = ls.slice(i, foot).map((l) => l.replace(/\s+$/, ''));
+  if (!f.done) return { done: false }; // still answering
+  return { done: true, scroll: f.scroll, answer: dedent(ls.slice(i, foot)) };
+}
+// lines of the overlay as text: trailing spaces and empty lines at both ends off, the common indent removed
+function dedent(lines) {
+  const body = lines.map((l) => l.replace(/\s+$/, ''));
   while (body.length && !body[0].trim()) body.shift();
   while (body.length && !body.at(-1).trim()) body.pop();
-  if (!/copy|fork/i.test(ls[foot])) return { done: false }; // still answering
   const ind = Math.min(...body.filter((l) => l.trim()).map((l) => l.match(/^\s*/)[0].length), 99);
-  return { done: true, answer: body.map((l) => l.slice(ind)).join('\n').trim() };
+  return body.map((l) => l.slice(ind)).join('\n').trim();
+}
+// a /btw overlay open in the terminal (also one asked there, not from the page): the last "/btw …" line above the
+// footer is the question (maybe cut with …), the rest the answer
+function screenBtwOpen(screen) {
+  const ls = String(screen ?? '').replace(/\s+$/, '').split('\n');
+  const f = btwFoot(ls);
+  if (!f) return null;
+  const head = ls.slice(0, f.top).findLastIndex((l) => /^\s*\/btw\b/.test(l));
+  const q = head >= 0 ? squash(ls[head]).replace(/^\/btw\s*/, '') : '';
+  const r = screenBtw(screen, q);
+  if (!r || (!r.done && head >= 0 && !ls.slice(head, f.top).some((l) => /Answering…/.test(l)))) return null; // another overlay with "Esc to close"
+  return { kind: 'btw', question: q, done: !!r?.done, scroll: !!r?.scroll, answer: r?.done ? r.answer.slice(0, 20000) : '', title: '', detail: '', multi: false, tabs: [], options: [], chat: null };
+}
+// closes a /btw overlay open in a terminal (ov: screenBtwOpen of its screen); a finished answer is kept in the
+// session's btw list (whole, by copy, when it scrolls), so closing it loses nothing. True when it is gone
+async function btwClose(sessionId, tty, ov) {
+  const full = ov.done && ov.scroll ? await btwCopy(tty).catch(() => null) : null; // copying closes it too
+  if (ov.done && sessionId) btwLog.set(sessionId, [...(btwLog.get(sessionId) ?? []), { id: randomBytes(4).toString('hex'), q: ov.question || '(asked in its terminal; the question was above its screen)', t: Date.now(), state: 'done', answer: (full ?? ov.answer).slice(0, 20000), error: '', terminal: true }].slice(-30));
+  if (!full) await termScript(tty, 'enter', '');
+  await new Promise((res) => setTimeout(res, 600));
+  const sc = await termScript(tty, 'check', '').catch(() => null);
+  return !(sc && !sc.err && screenBtwOpen(sc.out));
 }
 async function btwAsk(x, q) {
   await termLocks.get(x.pid)?.catch(() => {}); // one at a time per terminal
@@ -1486,7 +1554,14 @@ async function btwAsk(x, q) {
         const sc = await termScript(tty, 'check', '').catch(() => null);
         const r = sc && !sc.err ? screenBtw(sc.out, q) : null;
         if (r) seen = true;
-        if (r?.done) { Object.assign(e, { state: 'done', answer: r.answer.slice(0, 20000) }); await termScript(tty, 'enter', '').catch(() => {}); }
+        if (r?.done) {
+          const full = r.scroll ? await btwCopy(tty).catch(() => null) : null; // longer than the screen: the whole answer
+          Object.assign(e, { state: 'done', answer: (full ?? r.answer).slice(0, 20000) });
+          if (!full) await termScript(tty, 'enter', '').catch(() => {});
+          await new Promise((res) => setTimeout(res, 600)); // closed? (Return closes it)
+          const after = await termScript(tty, 'check', '').catch(() => null);
+          if (after && !after.err && screenBtwOpen(after.out)) e.closeHint = 'It still shows in its terminal: Esc closes it there.';
+        }
         else if (!r && (seen || i >= 8)) Object.assign(e, { state: 'failed', error: seen ? 'The overlay was closed in its terminal before the answer could be read.' : 'The question did not show in its terminal.' });
       }
       if (e.state === 'answering') Object.assign(e, { state: 'failed', error: 'No answer within 2 minutes: it may still show in its terminal (Esc closes it there).' });
@@ -1509,6 +1584,7 @@ const askQuestions = (input) => (Array.isArray(input?.questions) ? input.questio
 // what it wants to do (between the last horizontal rule and the question)
 function screenPermission(ls) {
   const qi = ls.findLastIndex((l, i) => /\S.*\?\s*$/.test(l) && /^\s*(?:❯\s*)?1\.\s/.test(ls.slice(i + 1).find((x) => x.trim()) ?? ''));
+  if (qi < 0) return screenMenu(ls);
   if (qi < 0 || ls.slice(qi).some((l) => /Enter to select/.test(l))) return null;
   const optRe = /^\s*(?:❯\s*)?(\d+)\.\s+(.*?)\s*$/, options = [];
   for (let i = qi + 1; i < ls.length; i++) {
@@ -1525,6 +1601,30 @@ function screenPermission(ls) {
   const nos = options.filter((o) => /^No\b/i.test(o.label)); // to decline with own words: a "No" that changes no setting ("No, and ask again next time", not "…block … from now on")
   const no = nos.find((o) => !/from now on|block|don't ask|never|always/i.test(o.label)) ?? nos[0];
   return { kind: 'permission', question: ls[qi].trim(), title, detail, multi: false, tabs: [], options: options.map(({ label }) => ({ label, description: '' })), chat: no ? no.n : null };
+}
+// a confirmation without numbers (e.g. "Permanently delete "…"?" with "❯ No" and "Yes"): the question, then only short
+// option lines (❯ marks the selected one), then the footer "Esc to cancel"; answered with arrow keys and Return
+function screenMenu(ls) {
+  const foot = ls.findLastIndex((l) => /Esc to cancel|Enter to confirm/.test(l));
+  if (foot < 0 || ls.slice(foot + 1).some((l) => l.trim())) return null;
+  const qi = ls.slice(0, foot).findLastIndex((l) => /\S.*\?\s*$/.test(l));
+  if (qi < 0) return null;
+  const lines = ls.slice(qi + 1, foot).filter((l) => l.trim());
+  if (lines.length < 2 || lines.length > 6 || lines.some((l) => !/^\s+\S/.test(l) || l.trim().length > 80 || /^\s*(?:❯\s*)?\d+\.\s/.test(l))) return null;
+  const cursor = lines.findIndex((l) => /^\s*❯/.test(l));
+  if (cursor < 0) return null;
+  const options = lines.map((l) => ({ label: l.replace(/^\s*❯?\s*/, '').trim(), description: '' }));
+  const top = ls.slice(0, qi).findLastIndex((l) => /^\s*─{10,}\s*$/.test(l));
+  const body = ls.slice(top + 1, qi).map((l) => l.replace(/\s+$/, '')).filter((l) => l.trim() && !/^\s*[╌─]{10,}$/.test(l));
+  const no = options.findIndex((o) => /^No\b/i.test(o.label));
+  return { kind: 'permission', menu: 'arrows', cursor, question: ls[qi].trim(), title: (body.shift() ?? '').trim(), detail: body.map((l) => l.trim()).join('\n').slice(0, 2000), multi: false, tabs: [], options, chat: no >= 0 ? no + 1 : null };
+}
+// picks option k (from 0) of a menu on the screen: its digit, or for a menu without numbers arrow keys from the
+// selected one (do script sends Return after them)
+async function pickOption(q, k) {
+  if (q.menu !== 'arrows') return termScript(q.tty, 'type', String(k + 1));
+  const moves = k - q.cursor;
+  return moves ? termScript(q.tty, 'type', (moves > 0 ? '\x1b[B' : '\x1b[A').repeat(Math.abs(moves))) : termScript(q.tty, 'enter', '');
 }
 function screenAsk(screen) {
   const ls = String(screen ?? '').replace(/\s+$/, '').split('\n').slice(-60);
@@ -1564,21 +1664,32 @@ const screenAskCache = new Map(); // pid -> { t, ask }
 // a compaction on the screen of a session in macOS Terminal: Claude Code shows "Compacting conversation…" while it
 // compacts, automatically or after /compact typed there; read at most every 3 s (only while the session works)
 const compactCache = new Map(); // pid -> { t, on }
+// The same screen read finds a /btw overlay opened while it works (not the page's own, which holds the lock)
 async function screenCompacting(pid) {
   const c = compactCache.get(pid);
-  if (c && Date.now() - c.t < 3000) return c.on;
+  if (c && Date.now() - c.t < 3000) return c;
   const ps = (await runCmd('ps', ['-o', 'tty=', '-p', String(pid)])).out.trim();
-  let on = false;
-  if (ps && ps !== '??') { const sc = await termScript(`/dev/${ps}`, 'check', '').catch(() => null); on = !!sc && /Compacting conversation/i.test(String(sc.out).replace(/\s+$/, '').split('\n').slice(-15).join('\n')); }
-  compactCache.set(pid, { t: Date.now(), on });
-  return on;
+  let on = false, btw = null;
+  if (ps && ps !== '??') {
+    const sc = await termScript(`/dev/${ps}`, 'check', '').catch(() => null);
+    on = !!sc && /Compacting conversation/i.test(String(sc.out).replace(/\s+$/, '').split('\n').slice(-15).join('\n'));
+    btw = sc && !sc.err && !termLocks.has(pid) ? screenBtwOpen(sc.out) : null;
+    if (btw) Object.assign(btw, { id: askIdOf(btw), tty: `/dev/${ps}` });
+  }
+  const r = { t: Date.now(), on, btw };
+  compactCache.set(pid, r);
+  return r;
 }
 async function screenAskOf(pid, fresh) {
   const c = screenAskCache.get(pid);
   if (!fresh && c && Date.now() - c.t < 1500) return c.ask;
   const ps = (await runCmd('ps', ['-o', 'tty=', '-p', String(pid)])).out.trim();
   let ask = null;
-  if (ps && ps !== '??') { const sc = await termScript(`/dev/${ps}`, 'check', '').catch(() => null); ask = sc ? screenAsk(sc.out) : null; if (ask) Object.assign(ask, { id: askIdOf(ask), tty: `/dev/${ps}` }); }
+  if (ps && ps !== '??') {
+    const sc = await termScript(`/dev/${ps}`, 'check', '').catch(() => null);
+    ask = sc ? screenAsk(sc.out) ?? (termLocks.has(pid) ? null : screenBtwOpen(sc.out)) : null;
+    if (ask) Object.assign(ask, { id: askIdOf(ask), tty: `/dev/${ps}` });
+  }
   screenAskCache.set(pid, { t: Date.now(), ask });
   return ask;
 }
@@ -2162,6 +2273,12 @@ function createAgent(project) {
     // the same menu has to be on its screen right now (never a digit into another prompt)
     const q = await screenAskOf(x.pid, true);
     if (!q || q.id !== id) throw httpError(409, 'That question is not on the screen of its terminal any more (answered already?).');
+    if (q.kind === 'btw') { // a /btw overlay: closed; its answer stays in the thread as a btw card
+      const gone = await btwClose(x.sessionId, q.tty, q);
+      screenAskCache.delete(x.pid); compactCache.delete(x.pid);
+      if (!gone) throw httpError(502, 'It still shows in its terminal: press Esc there.');
+      return { answered: 'closed' };
+    }
     const others = q.tabs.length > 1 ? q.tabs.slice(1) : [];
     // 👍: the recommended option(s) ("(Recommended)" in the label); with further questions, its recommendation for each
     const REC = /\(recommended\)/i, rec = q.options.map((o, k) => (REC.test(o.label) ? k : -1)).filter((k) => k >= 0);
@@ -2174,9 +2291,16 @@ function createAgent(project) {
     const said = typeof a.text === 'string' && a.text.trim() ? a.text.trim().slice(0, 1000) : picks.map((k) => q.options[k].label.replace(REC, '').trim()).join(', ');
     if (!said) throw httpError(400, 'Pick an option or write an answer.');
     if (others.length && !String(rest ?? '').trim()) throw httpError(400, `It asks more: ${others.join(', ')}. Add those answers too.`);
-    if (!others.length && !q.multi && !(a.text?.trim()) && picks.length === 1) { await termScript(q.tty, 'type', String(picks[0] + 1)); screenAskCache.delete(x.pid); return { answered: 'direct' }; }
+    if (!others.length && !q.multi && !(a.text?.trim()) && picks.length === 1) {
+      await pickOption(q, picks[0]); screenAskCache.delete(x.pid);
+      if (q.menu === 'arrows') { // arrow keys: make sure the menu took them (it closes), else say so
+        await new Promise((r) => setTimeout(r, 900));
+        if ((await screenAskOf(x.pid, true))?.id === q.id) throw httpError(502, 'The menu did not take the answer: pick it in its terminal (arrow keys and Return).');
+      }
+      return { answered: 'direct' };
+    }
     if (q.kind === 'permission' && !q.chat) throw httpError(400, 'This prompt has no "No" option to answer with your own words: pick one of its options.');
-    await termScript(q.tty, 'type', String(q.chat)); // "Chat about this": the menu closes
+    await pickOption(q, q.chat - 1); // "Chat about this" (or the "No" of a permission): the menu closes
     screenAskCache.delete(x.pid);
     // then the answers as a message, once the session waits for one again
     const msg = q.kind === 'permission' ? `[Declined: ${q.title || q.question}] ${said}` : `[Answers to your question${others.length ? 's' : ''}] ${q.question} → ${said}${others.length ? ` · ${others.join(', ')}: ${String(rest).trim().slice(0, 1000)}` : ''}`;
@@ -2386,10 +2510,11 @@ function createAgent(project) {
     const r = runningSessions().find((y) => y.sessionId === x.sessionId);
     const state = x.listening ? 'listening' : r ? (r.asking ? 'asking' : r.waiting ? 'waiting' : 'working') : x.ended || x.elsewhere || x.hookless ? 'ended' : x.waiting ? 'waiting' : 'working';
     // a question of Claude's that waits in its terminal (a menu): read from the screen
-    const ask = r?.asking && r.typeable ? await screenAskOf(r.pid) : null;
-    const compacting = state === 'working' && r?.typeable ? await screenCompacting(r.pid) : false;
+    const scr = state === 'working' && r?.typeable ? await screenCompacting(r.pid) : null;
+    const ask = r?.asking && r.typeable ? await screenAskOf(r.pid) : scr?.btw ?? null; // working: a /btw overlay open there
+    const compacting = !!scr?.on;
     const background = r?.shell && r.pid ? await backgroundOf(r.pid).catch(() => []) : [];
-    return { entries, next: start + Math.max(end, from0), cut, size, state, shell: !!r?.shell, background, agents: agentsOf(file), compacting, ...(btwLog.has(x.sessionId) ? { btw: btwLog.get(x.sessionId) } : {}), ...(withGit ? { git: await gitHint(x.cwd) } : {}), ask: ask && { id: ask.id, kind: ask.kind, title: ask.title, detail: ask.detail, chat: !!ask.chat, question: ask.question, multi: ask.multi, tabs: ask.tabs, options: ask.options }, context: transcriptInfo(file)?.ctx ?? null };
+    return { entries, next: start + Math.max(end, from0), cut, size, state, shell: !!r?.shell, background, agents: agentsOf(file), compacting, ...(btwLog.has(x.sessionId) ? { btw: btwLog.get(x.sessionId) } : {}), ...(withGit ? { git: await gitHint(x.cwd) } : {}), ask: ask && { id: ask.id, kind: ask.kind, title: ask.title, detail: ask.detail, chat: !!ask.chat, question: ask.question, multi: ask.multi, tabs: ask.tabs, options: ask.options, ...(ask.kind === 'btw' ? { done: ask.done, answer: ask.answer, scroll: ask.scroll } : {}) }, context: transcriptInfo(file)?.ctx ?? null };
   }
 
   function control({ job: jobId, action }) {
